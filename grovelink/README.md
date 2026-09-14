@@ -1,22 +1,20 @@
 # GroveLink Phone
 
-In-game phone that sends photos to your real phone on the same Wi-Fi.
+CJ pulls the **real San Andreas cellphone** (model 330) and a handset HUD draws on the right of the screen.
+
+Photos still go to your real phone on the same Wi-Fi.
 
 ## In GTA
 
-- **K** open / close
+- **K** pull out / put away the phone
 - **Up / Down** menu
 - **Enter** select
 - Camera + **Enter** or **Space** snap
 
-## On the PC
+## Install (copy single files — do not copy the whole folder onto a dirty drive)
 
-1. Compile `GroveLinkPhone.txt` into `[GTA SA]\CLEO\GroveLinkPhone.cs`
-2. Copy `GroveLink/link.ini` to `[GTA SA]\CLEO\GroveLink\link.ini`
-3. Edit `bridge/config.ini` if needed
-4. Run `bridge/START_GROVELINK.bat`
-5. Open the printed `http://YOUR-LAN-IP:8088` on the phone
-
-Needs CLEO 4 + `IniFiles.cleo` and Python 2.7 or 3.8 on Windows 7.
-
-This is a same-Wi-Fi browser link, not carrier SMS.
+1. Compile `GroveLinkPhone.txt` → `[GTA SA]\CLEO\GroveLinkPhone.cs`
+2. Copy `GroveLink.fxt` → `[GTA SA]\CLEO\GroveLink.fxt`
+3. Copy `GroveLink/link.ini` → `[GTA SA]\CLEO\GroveLink\link.ini`
+4. Run `bridge/START_GROVELINK.bat` from Downloads
+5. Open the printed URL on the real phone
