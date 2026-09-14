@@ -1,0 +1,9 @@
+bridge/photos/
+__pycache__/
+*.pyc
+*.pyo
+*.cs
+Thumbs.db
+desktop.ini
+.DS_Store
+*.zip
