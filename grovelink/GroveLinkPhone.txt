@@ -1,7 +1,6 @@
 {$CLEO .cs}
-// GroveLink Phone v2
-// K open/close | UP/DOWN menu | ENTER select | BACKSPACE back
-// CAMERA + ENTER/SPACE takes a photo for the real-phone page
+// GroveLink Phone v3 — real SA cellphone in hand + on-screen handset
+// K open/close | UP/DOWN | ENTER | BACKSPACE
 0000: NOP
 03A4: name_thread 'GROVELNK'
 
@@ -11,8 +10,6 @@
 23@ = 0
 24@ = 0
 25@ = 0
-28@ = 0
-29@ = 0
 
 :MAIN
 0001: wait 0
@@ -34,29 +31,19 @@
 0006: 23@ = 1
 00D6: if
 0039:   20@ == 0
-004D: jf @CLOSE_PHONE
-0006: 20@ = 1
-0006: 21@ = 0
-0006: 22@ = 0
-0006: 29@ = 0
-01B4: set_player $PLAYER_CHAR can_move 0
-0AD1: show_formatted_text_highpriority "GROVELINK  K close   ENTER select" time 1800
+004D: jf @PUT_AWAY
+0050: gosub @PULL_OUT
 0002: jump @AFTER_TOGGLE
 
-:CLOSE_PHONE
-0006: 20@ = 0
-0006: 21@ = 0
-01B4: set_player $PLAYER_CHAR can_move 1
-015A: restore_camera
+:PUT_AWAY
+0050: gosub @HANG_UP
 0002: jump @AFTER_TOGGLE
 
 :FORCE_CLOSE
 00D6: if
 0039:   20@ == 1
 004D: jf @MAIN
-0006: 20@ = 0
-01B4: set_player $PLAYER_CHAR can_move 1
-015A: restore_camera
+0050: gosub @HANG_UP
 0002: jump @MAIN
 
 :AFTER_TOGGLE
@@ -72,157 +59,240 @@
 00D6: if
 0039:   20@ == 1
 004D: jf @MAIN
-00D6: if
-0019:   28@ > 0
-004D: jf @CAN_DRAW
-000E: 28@ -= 1
-0002: jump @AFTER_DRAW
-:CAN_DRAW
-00D6: if
-0019:   29@ > 0
-004D: jf @DO_DRAW
-000E: 29@ -= 1
-0002: jump @AFTER_DRAW
-:DO_DRAW
-0006: 29@ = 25
-0050: gosub @DRAW_PHONE
-:AFTER_DRAW
+03F0: enable_text_draw 1
+0050: gosub @DRAW_HANDSET
 0050: gosub @HANDLE_KEYS
+00D6: if
+0019:   25@ > 0
+004D: jf @MAIN
+000E: 25@ -= 1
 0002: jump @MAIN
+
+:PULL_OUT
+0006: 20@ = 1
+0006: 21@ = 0
+0006: 22@ = 0
+01B4: set_player $PLAYER_CHAR can_move 0
+0247: load_model #CELLPHONE
+038B: load_requested_models
+:WAIT_PH
+0001: wait 0
+00D6: if
+0248:   model #CELLPHONE available
+004D: jf @WAIT_PH
+0729: AS_actor $PLAYER_ACTOR hold_cellphone 1
+018C: play_sound 1138 at 0.0 0.0 0.0
+0051: return
+
+:HANG_UP
+0006: 20@ = 0
+0006: 21@ = 0
+0729: AS_actor $PLAYER_ACTOR hold_cellphone 0
+01B4: set_player $PLAYER_CHAR can_move 1
+015A: restore_camera
+0249: release_model #CELLPHONE
+018C: play_sound 1139 at 0.0 0.0 0.0
+0051: return
 
 :POLL_INBOX
 00D6: if
 0AAB:   file_exists "cleo\GroveLink\link.ini"
-004D: jf @POLL_END
+004D: jf @POLL_RET
 0AF0: 26@ = read_int_from_ini_file "cleo\GroveLink\link.ini" section "INBOX" key "new"
 00D6: if
 0039:   26@ == 1
-004D: jf @POLL_END
+004D: jf @POLL_ZERO
 00D6: if
 8039:   not 24@ == 1
-004D: jf @POLL_END
-0006: 24@ = 1
-0006: 28@ = 180
-0AF1: write_int 0 to_ini_file "cleo\GroveLink\link.ini" section "INBOX" key "new"
-0AD1: show_formatted_text_highpriority "~g~SMS from REAL PHONE" time 5000
-018C: play_sound 1138 at 0.0 0.0 0.0
-
-:POLL_END
-00D6: if
-0039:   26@ == 0
 004D: jf @POLL_RET
+0006: 24@ = 1
+0AF1: write_int 0 to_ini_file "cleo\GroveLink\link.ini" section "INBOX" key "new"
+0AD1: show_formatted_text_highpriority "~g~SMS from REAL PHONE" time 4500
+018C: play_sound 1138 at 0.0 0.0 0.0
+0002: jump @POLL_RET
+:POLL_ZERO
 0006: 24@ = 0
 :POLL_RET
 0051: return
 
-:DRAW_PHONE
+:DRAW_HANDSET
+038E: draw_rect 548.0 248.0 size 132.0 292.0 colour 28 28 32 255
+038E: draw_rect 548.0 248.0 size 118.0 276.0 colour 12 12 14 255
+038E: draw_rect 548.0 122.0 size 36.0 6.0 colour 40 40 44 255
+038E: draw_rect 548.0 232.0 size 102.0 196.0 colour 8 28 16 255
+038E: draw_rect 548.0 372.0 size 16.0 16.0 colour 50 50 54 255
+038E: draw_rect 548.0 372.0 size 8.0 8.0 colour 20 20 22 255
+038E: draw_rect 548.0 140.0 size 102.0 14.0 colour 6 18 10 255
+0342: set_text_draw_centered 1
+0348: set_text_draw_proportional 1
+0349: set_text_font 1
+081C: set_text_draw_outline 1 RGBA 0 0 0 220
+033F: set_text_draw_letter_size 0.28 1.15
+0340: set_text_draw_RGBA 80 255 120 255
+033E: draw_text 548.0 134.0 GXT 'GLTITL'
 00D6: if
 0039:   21@ == 0
-004D: jf @DRAW_CAM
-00D6: if
-0039:   22@ == 0
-004D: jf @H1
-0AD1: show_formatted_text_highpriority "GROVELINK  >CAMERA   INBOX   STATUS   CLOSE" time 800
-0002: jump @DRAW_DONE
-:H1
-00D6: if
-0039:   22@ == 1
-004D: jf @H2
-0AD1: show_formatted_text_highpriority "GROVELINK   CAMERA  >INBOX   STATUS   CLOSE" time 800
-0002: jump @DRAW_DONE
-:H2
-00D6: if
-0039:   22@ == 2
-004D: jf @H3
-0AD1: show_formatted_text_highpriority "GROVELINK   CAMERA   INBOX  >STATUS   CLOSE" time 800
-0002: jump @DRAW_DONE
-:H3
-0AD1: show_formatted_text_highpriority "GROVELINK   CAMERA   INBOX   STATUS  >CLOSE" time 800
-0002: jump @DRAW_DONE
-
-:DRAW_CAM
+004D: jf @SCR_CAM
+0050: gosub @DRAW_HOME
+0002: jump @DRAW_END
+:SCR_CAM
 00D6: if
 0039:   21@ == 1
-004D: jf @DRAW_INBOX
-0AD1: show_formatted_text_highpriority "CAMERA  ENTER snap   BACKSPACE back" time 800
-0002: jump @DRAW_DONE
-
-:DRAW_INBOX
+004D: jf @SCR_INB
+0050: gosub @DRAW_CAMERA
+0002: jump @DRAW_END
+:SCR_INB
 00D6: if
 0039:   21@ == 2
-004D: jf @DRAW_STAT
-0AD1: show_formatted_text_highpriority "INBOX  new texts pop up as SMS banners" time 800
-0002: jump @DRAW_DONE
+004D: jf @SCR_STAT
+0050: gosub @DRAW_INBOX
+0002: jump @DRAW_END
+:SCR_STAT
+0050: gosub @DRAW_STATUS
+:DRAW_END
+0051: return
 
-:DRAW_STAT
-0AD1: show_formatted_text_highpriority "STATUS  run START_GROVELINK.bat  open the URL on your phone" time 800
-:DRAW_DONE
+:DRAW_HOME
+0342: set_text_draw_centered 0
+033F: set_text_draw_letter_size 0.26 1.05
+00D6: if
+0039:   22@ == 0
+004D: jf @M1
+0340: set_text_draw_RGBA 180 255 80 255
+033E: draw_text 504.0 168.0 GXT 'GLCAM1'
+0002: jump @M1B
+:M1
+0340: set_text_draw_RGBA 70 160 90 255
+033E: draw_text 504.0 168.0 GXT 'GLCAM0'
+:M1B
+00D6: if
+0039:   22@ == 1
+004D: jf @M2
+0340: set_text_draw_RGBA 180 255 80 255
+033E: draw_text 504.0 196.0 GXT 'GLINB1'
+0002: jump @M2B
+:M2
+0340: set_text_draw_RGBA 70 160 90 255
+033E: draw_text 504.0 196.0 GXT 'GLINB0'
+:M2B
+00D6: if
+0039:   22@ == 2
+004D: jf @M3
+0340: set_text_draw_RGBA 180 255 80 255
+033E: draw_text 504.0 224.0 GXT 'GLSTA1'
+0002: jump @M3B
+:M3
+0340: set_text_draw_RGBA 70 160 90 255
+033E: draw_text 504.0 224.0 GXT 'GLSTA0'
+:M3B
+00D6: if
+0039:   22@ == 3
+004D: jf @M4
+0340: set_text_draw_RGBA 180 255 80 255
+033E: draw_text 504.0 252.0 GXT 'GLCLO1'
+0002: jump @M4B
+:M4
+0340: set_text_draw_RGBA 70 160 90 255
+033E: draw_text 504.0 252.0 GXT 'GLCLO0'
+:M4B
+0342: set_text_draw_centered 1
+033F: set_text_draw_letter_size 0.18 0.78
+0340: set_text_draw_RGBA 90 180 110 255
+033E: draw_text 548.0 300.0 GXT 'GLHINT'
+0051: return
+
+:DRAW_CAMERA
+038E: draw_rect 548.0 236.0 size 92.0 8.0 colour 200 220 80 180
+038E: draw_rect 548.0 236.0 size 8.0 92.0 colour 200 220 80 180
+0342: set_text_draw_centered 1
+033F: set_text_draw_letter_size 0.24 1.0
+0340: set_text_draw_RGBA 200 255 80 255
+033E: draw_text 548.0 164.0 GXT 'GLCAMT'
+033F: set_text_draw_letter_size 0.20 0.85
+0340: set_text_draw_RGBA 80 255 120 255
+033E: draw_text 548.0 292.0 GXT 'GLSNAP'
+033E: draw_text 548.0 314.0 GXT 'GLBACK'
+0051: return
+
+:DRAW_INBOX
+0342: set_text_draw_centered 1
+033F: set_text_draw_letter_size 0.24 1.0
+0340: set_text_draw_RGBA 200 255 80 255
+033E: draw_text 548.0 168.0 GXT 'GLINBT'
+033F: set_text_draw_letter_size 0.20 0.85
+0340: set_text_draw_RGBA 80 200 110 255
+033E: draw_text 548.0 210.0 GXT 'GLINST'
+033E: draw_text 548.0 314.0 GXT 'GLBACK'
+0051: return
+
+:DRAW_STATUS
+0342: set_text_draw_centered 1
+033F: set_text_draw_letter_size 0.24 1.0
+0340: set_text_draw_RGBA 200 255 80 255
+033E: draw_text 548.0 168.0 GXT 'GLSTAT'
+033F: set_text_draw_letter_size 0.18 0.80
+0340: set_text_draw_RGBA 80 200 110 255
+033E: draw_text 548.0 204.0 GXT 'GLRUN'
+033E: draw_text 548.0 228.0 GXT 'GLURL'
+033E: draw_text 548.0 252.0 GXT 'GLCARR'
+033E: draw_text 548.0 314.0 GXT 'GLBACK'
 0051: return
 
 :HANDLE_KEYS
 00D6: if
 0039:   21@ == 0
 004D: jf @KEYS_CAM
-
 00D6: if
 0AB0:   key_pressed 0x28
 004D: jf @KEY_UP
-0001: wait 150
+0001: wait 140
 000A: 22@ += 1
 00D6: if
 0019:   22@ > 3
 004D: jf @KEYS_HOME_SEL
 0006: 22@ = 0
 0002: jump @KEYS_HOME_SEL
-
 :KEY_UP
 00D6: if
 0AB0:   key_pressed 0x26
 004D: jf @KEYS_HOME_SEL
-0001: wait 150
+0001: wait 140
 000E: 22@ -= 1
 00D6: if
 001B:   0 > 22@
 004D: jf @KEYS_HOME_SEL
 0006: 22@ = 3
-
 :KEYS_HOME_SEL
 00D6: if
 0AB0:   key_pressed 0x0D
 004D: jf @KEYS_HOME_BACK
-0001: wait 180
+0001: wait 160
 00D6: if
 0039:   22@ == 0
 004D: jf @SEL_INBOX
 0006: 21@ = 1
-0002: jump @KEYS_END
+0002: jump @KEYS_RET
 :SEL_INBOX
 00D6: if
 0039:   22@ == 1
 004D: jf @SEL_STAT
 0006: 21@ = 2
-0002: jump @KEYS_END
+0002: jump @KEYS_RET
 :SEL_STAT
 00D6: if
 0039:   22@ == 2
 004D: jf @SEL_CLOSE
 0006: 21@ = 3
-0002: jump @KEYS_END
+0002: jump @KEYS_RET
 :SEL_CLOSE
-0006: 20@ = 0
-01B4: set_player $PLAYER_CHAR can_move 1
-015A: restore_camera
-0002: jump @KEYS_END
-
+0050: gosub @HANG_UP
+0002: jump @KEYS_RET
 :KEYS_HOME_BACK
 00D6: if
 0AB0:   key_pressed 0x08
-004D: jf @KEYS_END
-0006: 20@ = 0
-01B4: set_player $PLAYER_CHAR can_move 1
-015A: restore_camera
-0002: jump @KEYS_END
-
+004D: jf @KEYS_RET
+0050: gosub @HANG_UP
+0002: jump @KEYS_RET
 :KEYS_CAM
 00D6: if
 0039:   21@ == 1
@@ -234,30 +304,22 @@
 00D6: if
 0039:   25@ == 0
 004D: jf @KEYS_CAM_BACK
-0006: 25@ = 50
+0006: 25@ = 45
 0050: gosub @TAKE_SHOT
-0002: jump @KEYS_END
-
+0002: jump @KEYS_RET
 :KEYS_CAM_BACK
 00D6: if
 0AB0:   key_pressed 0x08
-004D: jf @KEYS_END
+004D: jf @KEYS_RET
 0006: 21@ = 0
-0001: wait 150
-0002: jump @KEYS_END
-
+0001: wait 140
+0002: jump @KEYS_RET
 :KEYS_OTHER_BACK
 00D6: if
 0AB0:   key_pressed 0x08
-004D: jf @KEYS_END
-0006: 21@ = 0
-0001: wait 150
-
-:KEYS_END
-00D6: if
-0019:   25@ > 0
 004D: jf @KEYS_RET
-000E: 25@ -= 1
+0006: 21@ = 0
+0001: wait 140
 :KEYS_RET
 0051: return
 
@@ -265,13 +327,12 @@
 0A2F: set_photo_camera_effect 1
 0001: wait 80
 0A1E: take_photo 1
-0001: wait 280
+0001: wait 260
 0A2F: set_photo_camera_effect 0
 018C: play_sound 1132 at 0.0 0.0 0.0
 0AF1: write_int 1 to_ini_file "cleo\GroveLink\link.ini" section "PHOTO" key "take"
 0AF0: 27@ = read_int_from_ini_file "cleo\GroveLink\link.ini" section "PHOTO" key "count"
 000A: 27@ += 1
 0AF1: write_int 27@ to_ini_file "cleo\GroveLink\link.ini" section "PHOTO" key "count"
-0006: 28@ = 90
 0AD1: show_formatted_text_highpriority "~y~PHOTO SENT TO REAL PHONE" time 2200
 0051: return
