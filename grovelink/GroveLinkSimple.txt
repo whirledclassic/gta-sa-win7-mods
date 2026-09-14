@@ -1,0 +1,14 @@
+{$CLEO .cs}
+03A4: name_thread 'GROVELNK'
+
+:MAIN
+0001: wait 0
+00D6: if
+0256:   player $PLAYER_CHAR defined
+004D: jf @MAIN
+00D6: if
+0AB0:   key_pressed 75
+004D: jf @MAIN
+0ACD: show_text_highpriority "GROVELINK" time 2000
+0001: wait 400
+0002: jump @MAIN
