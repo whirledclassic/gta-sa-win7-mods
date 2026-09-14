@@ -1,5 +1,7 @@
+{$USE ini}
+{$USE CLEO}
 {$CLEO .cs}
-// GroveLink Phone v3 — real SA cellphone in hand + on-screen handset
+// GroveLink Phone v3 — add {$USE ini} for Sanny 3
 // K open/close | UP/DOWN | ENTER | BACKSPACE
 0000: NOP
 03A4: name_thread 'GROVELNK'
