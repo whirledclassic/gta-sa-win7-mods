@@ -1,0 +1,277 @@
+{$CLEO .cs}
+// GroveLink Phone v2
+// K open/close | UP/DOWN menu | ENTER select | BACKSPACE back
+// CAMERA + ENTER/SPACE takes a photo for the real-phone page
+0000: NOP
+03A4: name_thread 'GROVELNK'
+
+20@ = 0
+21@ = 0
+22@ = 0
+23@ = 0
+24@ = 0
+25@ = 0
+28@ = 0
+29@ = 0
+
+:MAIN
+0001: wait 0
+00D6: if
+0256:   player $PLAYER_CHAR defined
+004D: jf @MAIN
+00D6: if
+8118:   not actor $PLAYER_ACTOR dead
+004D: jf @FORCE_CLOSE
+
+0050: gosub @POLL_INBOX
+
+00D6: if
+0AB0:   key_pressed 0x4B
+004D: jf @AFTER_TOGGLE
+00D6: if
+0039:   23@ == 0
+004D: jf @AFTER_TOGGLE
+0006: 23@ = 1
+00D6: if
+0039:   20@ == 0
+004D: jf @CLOSE_PHONE
+0006: 20@ = 1
+0006: 21@ = 0
+0006: 22@ = 0
+0006: 29@ = 0
+01B4: set_player $PLAYER_CHAR can_move 0
+0AD1: show_formatted_text_highpriority "GROVELINK  K close   ENTER select" time 1800
+0002: jump @AFTER_TOGGLE
+
+:CLOSE_PHONE
+0006: 20@ = 0
+0006: 21@ = 0
+01B4: set_player $PLAYER_CHAR can_move 1
+015A: restore_camera
+0002: jump @AFTER_TOGGLE
+
+:FORCE_CLOSE
+00D6: if
+0039:   20@ == 1
+004D: jf @MAIN
+0006: 20@ = 0
+01B4: set_player $PLAYER_CHAR can_move 1
+015A: restore_camera
+0002: jump @MAIN
+
+:AFTER_TOGGLE
+00D6: if
+8039:   not 23@ == 0
+004D: jf @PHONE_LOGIC
+00D6: if
+8AB0:   not key_pressed 0x4B
+004D: jf @PHONE_LOGIC
+0006: 23@ = 0
+
+:PHONE_LOGIC
+00D6: if
+0039:   20@ == 1
+004D: jf @MAIN
+00D6: if
+0019:   28@ > 0
+004D: jf @CAN_DRAW
+000E: 28@ -= 1
+0002: jump @AFTER_DRAW
+:CAN_DRAW
+00D6: if
+0019:   29@ > 0
+004D: jf @DO_DRAW
+000E: 29@ -= 1
+0002: jump @AFTER_DRAW
+:DO_DRAW
+0006: 29@ = 25
+0050: gosub @DRAW_PHONE
+:AFTER_DRAW
+0050: gosub @HANDLE_KEYS
+0002: jump @MAIN
+
+:POLL_INBOX
+00D6: if
+0AAB:   file_exists "cleo\GroveLink\link.ini"
+004D: jf @POLL_END
+0AF0: 26@ = read_int_from_ini_file "cleo\GroveLink\link.ini" section "INBOX" key "new"
+00D6: if
+0039:   26@ == 1
+004D: jf @POLL_END
+00D6: if
+8039:   not 24@ == 1
+004D: jf @POLL_END
+0006: 24@ = 1
+0006: 28@ = 180
+0AF1: write_int 0 to_ini_file "cleo\GroveLink\link.ini" section "INBOX" key "new"
+0AD1: show_formatted_text_highpriority "~g~SMS from REAL PHONE" time 5000
+018C: play_sound 1138 at 0.0 0.0 0.0
+
+:POLL_END
+00D6: if
+0039:   26@ == 0
+004D: jf @POLL_RET
+0006: 24@ = 0
+:POLL_RET
+0051: return
+
+:DRAW_PHONE
+00D6: if
+0039:   21@ == 0
+004D: jf @DRAW_CAM
+00D6: if
+0039:   22@ == 0
+004D: jf @H1
+0AD1: show_formatted_text_highpriority "GROVELINK  >CAMERA   INBOX   STATUS   CLOSE" time 800
+0002: jump @DRAW_DONE
+:H1
+00D6: if
+0039:   22@ == 1
+004D: jf @H2
+0AD1: show_formatted_text_highpriority "GROVELINK   CAMERA  >INBOX   STATUS   CLOSE" time 800
+0002: jump @DRAW_DONE
+:H2
+00D6: if
+0039:   22@ == 2
+004D: jf @H3
+0AD1: show_formatted_text_highpriority "GROVELINK   CAMERA   INBOX  >STATUS   CLOSE" time 800
+0002: jump @DRAW_DONE
+:H3
+0AD1: show_formatted_text_highpriority "GROVELINK   CAMERA   INBOX   STATUS  >CLOSE" time 800
+0002: jump @DRAW_DONE
+
+:DRAW_CAM
+00D6: if
+0039:   21@ == 1
+004D: jf @DRAW_INBOX
+0AD1: show_formatted_text_highpriority "CAMERA  ENTER snap   BACKSPACE back" time 800
+0002: jump @DRAW_DONE
+
+:DRAW_INBOX
+00D6: if
+0039:   21@ == 2
+004D: jf @DRAW_STAT
+0AD1: show_formatted_text_highpriority "INBOX  new texts pop up as SMS banners" time 800
+0002: jump @DRAW_DONE
+
+:DRAW_STAT
+0AD1: show_formatted_text_highpriority "STATUS  run START_GROVELINK.bat  open the URL on your phone" time 800
+:DRAW_DONE
+0051: return
+
+:HANDLE_KEYS
+00D6: if
+0039:   21@ == 0
+004D: jf @KEYS_CAM
+
+00D6: if
+0AB0:   key_pressed 0x28
+004D: jf @KEY_UP
+0001: wait 150
+000A: 22@ += 1
+00D6: if
+0019:   22@ > 3
+004D: jf @KEYS_HOME_SEL
+0006: 22@ = 0
+0002: jump @KEYS_HOME_SEL
+
+:KEY_UP
+00D6: if
+0AB0:   key_pressed 0x26
+004D: jf @KEYS_HOME_SEL
+0001: wait 150
+000E: 22@ -= 1
+00D6: if
+001B:   0 > 22@
+004D: jf @KEYS_HOME_SEL
+0006: 22@ = 3
+
+:KEYS_HOME_SEL
+00D6: if
+0AB0:   key_pressed 0x0D
+004D: jf @KEYS_HOME_BACK
+0001: wait 180
+00D6: if
+0039:   22@ == 0
+004D: jf @SEL_INBOX
+0006: 21@ = 1
+0002: jump @KEYS_END
+:SEL_INBOX
+00D6: if
+0039:   22@ == 1
+004D: jf @SEL_STAT
+0006: 21@ = 2
+0002: jump @KEYS_END
+:SEL_STAT
+00D6: if
+0039:   22@ == 2
+004D: jf @SEL_CLOSE
+0006: 21@ = 3
+0002: jump @KEYS_END
+:SEL_CLOSE
+0006: 20@ = 0
+01B4: set_player $PLAYER_CHAR can_move 1
+015A: restore_camera
+0002: jump @KEYS_END
+
+:KEYS_HOME_BACK
+00D6: if
+0AB0:   key_pressed 0x08
+004D: jf @KEYS_END
+0006: 20@ = 0
+01B4: set_player $PLAYER_CHAR can_move 1
+015A: restore_camera
+0002: jump @KEYS_END
+
+:KEYS_CAM
+00D6: if
+0039:   21@ == 1
+004D: jf @KEYS_OTHER_BACK
+00D6: if or
+0AB0:   key_pressed 0x0D
+0AB0:   key_pressed 0x20
+004D: jf @KEYS_CAM_BACK
+00D6: if
+0039:   25@ == 0
+004D: jf @KEYS_CAM_BACK
+0006: 25@ = 50
+0050: gosub @TAKE_SHOT
+0002: jump @KEYS_END
+
+:KEYS_CAM_BACK
+00D6: if
+0AB0:   key_pressed 0x08
+004D: jf @KEYS_END
+0006: 21@ = 0
+0001: wait 150
+0002: jump @KEYS_END
+
+:KEYS_OTHER_BACK
+00D6: if
+0AB0:   key_pressed 0x08
+004D: jf @KEYS_END
+0006: 21@ = 0
+0001: wait 150
+
+:KEYS_END
+00D6: if
+0019:   25@ > 0
+004D: jf @KEYS_RET
+000E: 25@ -= 1
+:KEYS_RET
+0051: return
+
+:TAKE_SHOT
+0A2F: set_photo_camera_effect 1
+0001: wait 80
+0A1E: take_photo 1
+0001: wait 280
+0A2F: set_photo_camera_effect 0
+018C: play_sound 1132 at 0.0 0.0 0.0
+0AF1: write_int 1 to_ini_file "cleo\GroveLink\link.ini" section "PHOTO" key "take"
+0AF0: 27@ = read_int_from_ini_file "cleo\GroveLink\link.ini" section "PHOTO" key "count"
+000A: 27@ += 1
+0AF1: write_int 27@ to_ini_file "cleo\GroveLink\link.ini" section "PHOTO" key "count"
+0006: 28@ = 90
+0AD1: show_formatted_text_highpriority "~y~PHOTO SENT TO REAL PHONE" time 2200
+0051: return
