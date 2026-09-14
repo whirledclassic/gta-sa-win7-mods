@@ -1,7 +1,7 @@
 {$USE ini}
 {$USE CLEO}
 {$CLEO .cs}
-// GroveLink Phone v3 — add {$USE ini} for Sanny 3
+// GroveLink Phone v3 — Sanny 3 CLEO: use model 330 not #CELLPHONE
 // K open/close | UP/DOWN | ENTER | BACKSPACE
 0000: NOP
 03A4: name_thread 'GROVELNK'
@@ -75,12 +75,12 @@
 0006: 21@ = 0
 0006: 22@ = 0
 01B4: set_player $PLAYER_CHAR can_move 0
-0247: load_model #CELLPHONE
+0247: load_model 330
 038B: load_requested_models
 :WAIT_PH
 0001: wait 0
 00D6: if
-0248:   model #CELLPHONE available
+0248:   model 330 available
 004D: jf @WAIT_PH
 0729: AS_actor $PLAYER_ACTOR hold_cellphone 1
 018C: play_sound 1138 at 0.0 0.0 0.0
@@ -92,7 +92,7 @@
 0729: AS_actor $PLAYER_ACTOR hold_cellphone 0
 01B4: set_player $PLAYER_CHAR can_move 1
 015A: restore_camera
-0249: release_model #CELLPHONE
+0249: release_model 330
 018C: play_sound 1139 at 0.0 0.0 0.0
 0051: return
 
