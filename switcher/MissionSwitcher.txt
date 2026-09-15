@@ -1,4 +1,45 @@
 {$CLEO .cs}
-// Mission Companion Switcher v8.0 — compile this file (includes sw_v8a + sw_v8b)
-{$INCLUDE sw_v8a.txt}
-{$INCLUDE sw_v8b.txt}
+// Mission Companion Switcher v8.2
+// Play as them. CJ stays as a bot: foot, shotgun, or his own BMX.
+// First-mission bikes work. Switch while riding. Driving homies are valid targets.
+// H/F6 become | G next | J you are CJ | U reset | N CJ leave | B hold
+// T Sweet | I bike | P pull CJ | L status
+// Numeric model IDs only. FAM1 = 105. BMX = 481.
+0000: NOP
+03A4: name_thread 'MSWITCH'
+
+var
+    7@: Int
+    22@: Int
+    27@: Int
+end
+
+20@ = 0
+21@ = -1
+22@ = 0
+23@ = -1
+24@ = 0
+25@ = 0
+26@ = -1
+27@ = 0
+28@ = 0
+17@ = -1
+18@ = 0
+19@ = 1
+29@ = 0
+30@ = 0
+31@ = 0
+
+:MAIN
+0001: wait 0
+00D6: if
+0256:   player $PLAYER_CHAR defined
+004D: jf @MAIN
+00D6: if
+8118:   not actor $PLAYER_ACTOR dead
+004D: jf @DIED
+00D6: if
+0039:   25@ == 0
+004D: jf @KEYS
+0006: 25@ = 1
+0ACD: show_text_highpriority "SWITCHER V8.2  H BECOME  I BIKE  P PULL CJ" time 3600
