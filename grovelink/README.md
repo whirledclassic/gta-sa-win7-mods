@@ -30,16 +30,17 @@ Until PR #1 merges, `update.ini` defaults to branch `fix/grovelink-camera-snapsh
 - **CAMERA** — snap; shutter sound (`018C`); shows **PHOTO TAKEN #N** (count from `link.ini`)
 - **INBOX** — shows last SMS from the real-phone page (`INBOX.msg`); clears `INBOX.new`; plays a short sound (`018C`) when `new=1`
 - **CONTACTS** — flavor only: cycles Sweet / Smoke / Ryder / Cesar lines via `0ACD` (static text, no ped models)
-- **STATUS** — bridge up/down + photo count from `link.ini` when readable
-- **HELP** — short tips: K opens phone, Camera Enter/Space, and **OPEN START GROVELINK ON PC** (real phone URL reminder)
+- **STATUS** — **BRIDGE LIVE** / **NO BRIDGE** + shot count from `link.ini` when readable
+- **HELP** — K / Camera tips, **OPEN START GROVELINK ON PC**, and **Outdated? UPDATE_GROVELINK**
 - **CLOSE** — put the phone away
 - If the bridge is not running (`STATUS.bridge=0`), opening the phone reminds you once: **START GROVELINK BRIDGE**
 
 ## Bridge page (phone / PC browser)
 
-- Header shows **LAN URL** + **localhost URL**, pack **version**, bridge online, last refresh time, unread count
+- Header shows prominent **VERSION** + **PHOTOS** stats, **LIVE** pulse badge, **LAN** + **localhost** URLs, last poll time, unread count
+- If `/api` fails: red banner **Bridge offline — run START_GROVELINK** (reconnects automatically when the bridge is back)
 - **Copy** buttons for URLs; large **tap-to-copy IP:port** block + `sms:` note (no QR library); **`GET /qr`** share page with the same
-- **Download latest** opens newest `/photo/…`; **Mark all read** clears NEW badges
+- **Download latest** opens newest `/photo/…`; **Export zip** downloads `GET /export.zip` (bridge/photos only); **Mark all read** clears NEW badges
 - **All / Today** album tabs (pure JS filter by photo `mtime`)
 - Quick-reply chips: **Where you at?**, **Nice shot**, **Come to Grove** → fill + `POST /send`
 - Meta line shows timestamp, **file size**, and filename
@@ -50,11 +51,12 @@ Until PR #1 merges, `update.ini` defaults to branch `fix/grovelink-camera-snapsh
 - Empty state checklist if no photos yet
 - Tap a shot to enlarge (lightbox) or open **/photo/…** full size
 - Newest first with human-readable timestamps
-- Auto-refresh about every 2 seconds (indicator in header)
+- Auto-refresh interval from `server.poll_ms` (default **2000** ms), exposed in `/api` as `poll_ms`
 - SMS box still posts to `/send` → `link.ini` INBOX for the in-game phone
 - First load of `/` logs **Phone page opened** in the bridge window
-- **`GET /api`** → JSON with `photos` (incl. `size` / `size_h`), `latest`, `count` / `photo_count`, `bridge_ok`, URLs, `max_photos`, `version`, refresh time
-- **`GET /health`** → JSON `{ok, bridge_ok, photo_count, count, latest, galleries, ip, port, gta_dir, version}`
+- **`GET /api`** → JSON with `photos` (incl. `size` / `size_h`), `latest`, `count` / `photo_count`, `bridge_ok`, URLs, `max_photos`, `poll_ms`, `version`, refresh time
+- **`GET /health`** → JSON `{ok, bridge_ok, photo_count, count, latest, galleries, ip, port, gta_dir, version, poll_ms, max_photos}`
+- **`GET /export.zip`** → zip of current `bridge/photos` (stdlib `zipfile`; Gallery untouched)
 - **`POST /delete`** (or careful `GET /delete?file=…`) → remove from bridge cache only
 - On start: writes `bridge/OPEN_ON_PHONE.txt`, sets `STATUS.bridge=1`, optional browser open (`server.open_browser=1` default)
 - After shutter (`PHOTO.take=1`), gallery is polled aggressively for a few seconds
@@ -65,7 +67,7 @@ Until PR #1 merges, `update.ini` defaults to branch `fix/grovelink-camera-snapsh
 2. Copy `GroveLink.fxt` → `[GTA SA]\CLEO\GroveLink.fxt`
 3. Copy `GroveLink/link.ini` → `[GTA SA]\CLEO\GroveLink\link.ini`
 4. Ensure Gallery exists under Documents `GTA San Andreas User Files\Gallery`
-5. Edit `bridge/config.ini` (`gta_dir`, gallery paths, `port=8088`, `open_browser=1`, `max_photos=40`)
+5. Edit `bridge/config.ini` (`gta_dir`, gallery paths, `port=8088`, `open_browser=1`, `max_photos=40`, `poll_ms=2000`)
 6. Run `bridge/START_GROVELINK.bat` (needs Python 2.7 / 3.4–3.8 stdlib)
 7. Open the printed URL on the real phone (same Wi-Fi); allow firewall TCP 8088
 8. Optional: copy repo-root `VERIFY_GROVELINK.bat` to Desktop for one-click checks
@@ -73,6 +75,10 @@ Until PR #1 merges, `update.ini` defaults to branch `fix/grovelink-camera-snapsh
 ## Note on prebuilt `.cs`
 
 `prebuilt/GroveLinkPhone.cs.b64` is an **OLD** minimal test stub (not the camera phone). Prefer compiling `GroveLinkPhone.txt` (INSTALL or Sanny F7). A full `.cs` is not produced on Linux CI.
+
+## Feature checklist
+
+See [FEATURES.md](FEATURES.md) for the full install / camera / inbox / phone-page list.
 
 ## Troubleshooting
 

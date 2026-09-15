@@ -219,9 +219,10 @@ if not exist "%GAL2%" mkdir "%GAL2%" >nul 2>&1
   echo port = 8088
   echo open_browser = 1
   echo max_photos = 40
+  echo poll_ms = 2000
 ) > "%~dp0grovelink\bridge\config.ini"
 echo    Gallery: %GAL1%
-echo    config.ini written ^(port 8088, open_browser=1, max_photos=40^).
+echo    config.ini written ^(port 8088, open_browser=1, max_photos=40, poll_ms=2000^).
 
 echo.
 echo [6/8] Opening firewall for TCP 8088...

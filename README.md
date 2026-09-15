@@ -60,11 +60,11 @@ Offline / no network? See [grovelink/TROUBLESHOOTING.md](grovelink/TROUBLESHOOTI
 2. On the PC: **http://127.0.0.1:8088** (often opens automatically).
 3. On your phone (same Wi-Fi): **http://LAN-IP:8088** (printed by the bridge / `OPEN_ON_PHONE.txt`).
 4. Health check: **http://127.0.0.1:8088/health** (includes pack `version`) or Desktop **VERIFY_GROVELINK.bat**.
-5. In GTA: **K** → Camera → **Enter** or **Space** — shot appears within a couple of seconds. Menu includes **HELP** (reminds you to open START GROVELINK on the PC).
+5. In GTA: **K** → Camera → **Enter** or **Space** — shot appears within a couple of seconds. Menu includes **HELP** (START GROVELINK + UPDATE_GROVELINK tips). **STATUS** shows **BRIDGE LIVE** / **NO BRIDGE** + shot count.
 
-Phone page extras: **All / Today** album tabs, quick-reply chips, file size in the meta line, large tap-to-copy **IP:port** (and `/qr` share page — no QR library), Delete (bridge cache only), auto-prune when `server.max_photos` (default **40**) is exceeded.
+Phone page extras: **LIVE** pulse + reconnect banner, prominent **version / photo count**, **Export zip** (`/export.zip`), **All / Today** tabs, quick-reply chips, file size, tap-to-copy **IP:port** + `/qr`, Delete (bridge cache only), `server.max_photos` (default **40**), `server.poll_ms` (default **2000**).
 
-Stuck? See [grovelink/TROUBLESHOOTING.md](grovelink/TROUBLESHOOTING.md).
+Feature list: [grovelink/FEATURES.md](grovelink/FEATURES.md). Stuck? See [grovelink/TROUBLESHOOTING.md](grovelink/TROUBLESHOOTING.md).
 
 ## Advanced / manual
 

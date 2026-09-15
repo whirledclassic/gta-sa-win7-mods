@@ -40,6 +40,8 @@ if not defined REPO (
 )
 if defined REPO (
   if "!REPO:~-1!"==" " set "REPO=!REPO:~0,-1!"
+  REM Strip trailing CR from set /p (common on Win7)
+  for /f "delims=" %%A in ("!REPO!") do set "REPO=%%A"
 )
 if not defined REPO goto :err_no_repo
 if not exist "!REPO!\INSTALL.bat" goto :err_no_repo
@@ -164,6 +166,7 @@ if exist "!REPO!\VERSION" (
   set /p NEWVER=<"!REPO!\VERSION"
 )
 for /f "tokens=* delims= " %%T in ("!NEWVER!") do set "NEWVER=%%T"
+for /f "delims=" %%A in ("!NEWVER!") do set "NEWVER=%%A"
 
 echo Fetched as: !FETCHED_AS!
 echo Version   : !NEWVER!

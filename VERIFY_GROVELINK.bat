@@ -239,11 +239,14 @@ echo.
 echo --- URLs to try ---
 echo   On this PC:     http://127.0.0.1:8088
 echo   Health JSON:    http://127.0.0.1:8088/health
+echo   Export zip:     http://127.0.0.1:8088/export.zip
+echo   Share page:     http://127.0.0.1:8088/qr
 echo   On your phone:  http://YOUR-PC-LAN-IP:8088
 echo                   ^(LAN IP is printed when you start the bridge^)
 echo.
 echo   Start bridge:   Desktop "GroveLink Phone" or START_GROVELINK.bat
-echo   In GTA:         K → Camera / Help → Enter or Space
+echo   Update pack:    Desktop UPDATE_GROVELINK.bat
+echo   In GTA:         K → Camera / STATUS / HELP → Enter or Space
 echo.
 
 echo ================================================

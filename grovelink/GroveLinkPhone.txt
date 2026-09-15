@@ -1,11 +1,12 @@
 {$USE ini}
 {$USE CLEO}
 {$CLEO .cs}
-// GroveLink Phone v7 — crash-safer. No #model names, no 033E GXT, no hold_cellphone.
+// GroveLink Phone v8 — crash-safer. No #model names, no 033E GXT, no hold_cellphone.
 // K toggle | UP/DOWN wrap | ENTER or SPACE select | BACKSPACE close
 // Menu: CAMERA / INBOX / CONTACTS / STATUS / HELP / CLOSE — labels via 0ACD only.
 // INBOX plays 018C when new=1. CONTACTS cycles static flavor lines (no models).
-// STATUS reads STATUS.bridge + PHOTO.count from link.ini.
+// STATUS shows BRIDGE LIVE / NO BRIDGE + shot count from link.ini.
+// HELP mentions UPDATE_GROVELINK for outdated installs.
 0000: NOP
 03A4: name_thread 'GROVELNK'
 
@@ -241,10 +242,10 @@
 00D6: if
 0039:   24@ == 1
 004D: jf @STATUS_DOWN
-0ACE: show_formatted_text_highpriority "BRIDGE UP  photos %d" time 2800 25@
+0ACE: show_formatted_text_highpriority "BRIDGE LIVE  %d shots" time 2800 25@
 0002: jump @KEY_BACK
 :STATUS_DOWN
-0ACE: show_formatted_text_highpriority "BRIDGE DOWN  photos %d" time 2800 25@
+0ACE: show_formatted_text_highpriority "NO BRIDGE  %d shots" time 2800 25@
 0002: jump @KEY_BACK
 :STATUS_NOINI
 0ACD: show_text_highpriority "NO link.ini  run INSTALL" time 2200
@@ -254,12 +255,14 @@
 00D6: if
 0039:   22@ == 4
 004D: jf @SEL_CLOSE
-// HELP: short 0ACD tips — K, Camera, remind real phone URL / start bridge
+// HELP: short 0ACD tips — K, Camera, START bridge, UPDATE if outdated
 0ACD: show_text_highpriority "HELP: K opens phone" time 1800
 0001: wait 1900
 0ACD: show_text_highpriority "Camera: Enter or Space" time 1800
 0001: wait 1900
-0ACD: show_text_highpriority "OPEN START GROVELINK ON PC" time 2500
+0ACD: show_text_highpriority "OPEN START GROVELINK ON PC" time 2200
+0001: wait 2300
+0ACD: show_text_highpriority "Outdated? UPDATE_GROVELINK" time 2500
 0002: jump @KEY_BACK
 
 :SEL_CLOSE

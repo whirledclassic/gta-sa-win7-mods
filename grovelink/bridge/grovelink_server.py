@@ -8,6 +8,12 @@ import socket
 import sys
 import threading
 import time
+import zipfile
+
+try:
+    from io import BytesIO
+except ImportError:
+    from StringIO import StringIO as BytesIO
 
 try:
     from configparser import ConfigParser
@@ -92,6 +98,7 @@ STATE = {
     "last_refresh_human": "",
     "shutter_burst_until": 0,
     "max_photos": 40,
+    "poll_ms": 2000,
     "phone_page_logged": False,
     "version": "unknown",
 }
@@ -176,8 +183,27 @@ def link_ini_path(gta_dir):
     return os.path.join(gta_dir, "CLEO", "GroveLink", "link.ini")
 
 
+def _is_windows():
+    return os.name == "nt"
+
+
+def _looks_like_win_abs(path):
+    """True for paths like C:\\... — skip creating those on non-Windows."""
+    if not path:
+        return False
+    # Drive-letter absolute (C:\...) or UNC (\\server\...)
+    if len(path) >= 2 and path[1] == ":" and path[0].isalpha():
+        return True
+    if path.startswith("\\\\") or path.startswith("//"):
+        return True
+    return False
+
+
 def _mkdir(path):
     if not path or os.path.isdir(path):
+        return
+    # Do not mkdir Windows-style absolute paths when running on Linux/mac
+    if (not _is_windows()) and _looks_like_win_abs(path):
         return
     try:
         os.makedirs(path)
@@ -189,23 +215,30 @@ def ensure_gallery_dirs(cfg, gta_dir):
     """Create expected Gallery folders so detect_gallery can find them later."""
     home = os.path.expanduser("~")
     user = os.environ.get("USERPROFILE", home)
-    public = os.environ.get("PUBLIC", r"C:\Users\Public")
+    # Only use Public default on real Windows; elsewhere omit to avoid C:\\ litter
+    if _is_windows():
+        public = os.environ.get("PUBLIC", r"C:\Users\Public")
+    else:
+        public = os.environ.get("PUBLIC", "")
     candidates = [
         cfg_get(cfg, "paths", "gallery_dir"),
         cfg_get(cfg, "paths", "gallery_dir_alt"),
         os.path.join(user, "Documents", "GTA San Andreas User Files", "Gallery"),
         os.path.join(user, "My Documents", "GTA San Andreas User Files", "Gallery"),
         os.path.join(home, "Documents", "GTA San Andreas User Files", "Gallery"),
-        os.path.join(public, "Documents", "GTA San Andreas User Files", "Gallery"),
+        os.path.join(public, "Documents", "GTA San Andreas User Files", "Gallery") if public else "",
         os.path.join(gta_dir or "", "Gallery") if gta_dir else "",
         os.path.join(gta_dir or "", "User Files", "Gallery") if gta_dir else "",
     ]
     for path in candidates:
-        if path:
-            parent = os.path.dirname(path)
-            if parent:
-                _mkdir(parent)
-            _mkdir(path)
+        if not path:
+            continue
+        if (not _is_windows()) and _looks_like_win_abs(path):
+            continue
+        parent = os.path.dirname(path)
+        if parent:
+            _mkdir(parent)
+        _mkdir(path)
 
 
 def ensure_dirs(cfg, gta_dir):
@@ -616,8 +649,36 @@ HTML_TEMPLATE = """<!DOCTYPE html>
   .status { margin-top:8px; font-size:11px; color:#7aaa7a; }
   .status .ok { color:#2cff6a; }
   .status .bad { color:#ff6a6a; }
-  .pulse { display:inline-block; width:8px; height:8px; border-radius:50%; background:#2cff6a; margin-right:6px; }
-  .pulse.dim { background:#445; }
+  .pulse { display:inline-block; width:10px; height:10px; border-radius:50%; background:#445; margin-right:6px; vertical-align:middle; }
+  .pulse.live {
+    background:#2cff6a;
+    box-shadow:0 0 0 0 rgba(44,255,106,0.55);
+    animation: glPulse 1.4s ease-out infinite;
+  }
+  .pulse.dim { background:#445; box-shadow:none; animation:none; }
+  @keyframes glPulse {
+    0% { box-shadow:0 0 0 0 rgba(44,255,106,0.55); }
+    70% { box-shadow:0 0 0 10px rgba(44,255,106,0); }
+    100% { box-shadow:0 0 0 0 rgba(44,255,106,0); }
+  }
+  .livebadge {
+    display:inline-block; margin-left:8px; padding:2px 8px; border:1px solid #2cff6a;
+    color:#2cff6a; font-size:10px; letter-spacing:2px; font-weight:bold; vertical-align:middle;
+  }
+  .livebadge.off { border-color:#a44; color:#ff6a6a; }
+  .stats {
+    margin-top:10px; display:flex; gap:10px; flex-wrap:wrap;
+  }
+  .stat {
+    flex:1; min-width:110px; background:#0b1a0e; border:1px solid #1a4; padding:10px 12px;
+  }
+  .stat .k { font-size:10px; color:#7aaa7a; letter-spacing:1px; }
+  .stat .v { font-size:20px; font-weight:bold; color:#2cff6a; margin-top:4px; }
+  .offline {
+    display:none; margin:0; padding:14px 16px; background:#3a1212; border-bottom:2px solid #ff6a6a;
+    color:#ffb0b0; font-size:14px; font-weight:bold; line-height:1.4; text-align:center;
+  }
+  .offline.show { display:block; }
   form { display:flex; gap:8px; padding:12px; position:sticky; top:0; background:#10180f; z-index:2; }
   input[type=text] {
     flex:1; padding:14px; border:1px solid #2cff6a; background:#0b0f0c; color:#d7ffd0;
@@ -660,9 +721,14 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 </head>
 <body>
 <div class=\"shell\">
+  <div class=\"offline\" id=\"offline_banner\">Bridge offline — run START_GROVELINK</div>
   <header>
-    <h1>GROVELINK</h1>
-    <div class=\"sub\">Live from GTA San Andreas &nbsp;·&nbsp; v<span id=\"ver\">?</span> &nbsp;·&nbsp; <span id=\"count\">0</span> shots</div>
+    <h1>GROVELINK <span class=\"livebadge\" id=\"livebadge\">LIVE</span></h1>
+    <div class=\"sub\">Photos from GTA San Andreas on this PC → your real phone</div>
+    <div class=\"stats\">
+      <div class=\"stat\"><div class=\"k\">VERSION</div><div class=\"v\" id=\"ver\">__VERSION__</div></div>
+      <div class=\"stat\"><div class=\"k\">PHOTOS</div><div class=\"v\" id=\"count\">0</div></div>
+    </div>
     <div class=\"urls\">
       <div class=\"urlrow\">
         <span><strong>Phone (LAN):</strong> <span id=\"lan_url\">__LAN_URL__</span></span>
@@ -675,6 +741,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     </div>
     <div class=\"actions\">
       <a class=\"actionbtn\" id=\"dl_latest\" href=\"#\" target=\"_blank\" rel=\"noopener\">Download latest</a>
+      <a class=\"actionbtn\" id=\"export_zip\" href=\"/export.zip\">Export zip</a>
       <button type=\"button\" class=\"actionbtn\" id=\"mark_read\">Mark all read</button>
     </div>
     <div class=\"bigcopy\" id=\"big_copy\" title=\"Tap to copy IP:port\">
@@ -685,9 +752,9 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     <div class=\"smsnote\">No QR lib needed — open <code>http://</code> + the address above on your phone (same Wi-Fi). Or text yourself: <a id=\"sms_link\" href=\"#\">sms: note with URL</a>.</div>
     <div class=\"tip\"><strong>Tip:</strong> On your phone, use the browser menu → <b>Add to Home Screen</b> for a one-tap GroveLink icon. Theme color matches this green HUD.</div>
     <div class=\"status\">
-      <span class=\"pulse\" id=\"pulse\"></span>
+      <span class=\"pulse live\" id=\"pulse\"></span>
       Bridge: <span id=\"bridge_status\" class=\"ok\">online</span>
-      &nbsp;·&nbsp; Last refresh: <span id=\"last_refresh\">—</span>
+      &nbsp;·&nbsp; Last poll: <span id=\"last_refresh\">—</span>
       &nbsp;·&nbsp; <span id=\"refresh_hint\">auto every 2s</span>
       &nbsp;·&nbsp; Unread: <span id=\"unread_count\">0</span>
     </div>
@@ -899,15 +966,24 @@ function paint(data) {
   }
   var st = document.getElementById('bridge_status');
   var pulse = document.getElementById('pulse');
+  var badge = document.getElementById('livebadge');
+  var ban = document.getElementById('offline_banner');
   var bridgeOk = (data.bridge_ok !== false) && (data.ok !== false);
   if (!bridgeOk) {
-    st.textContent = 'offline?';
+    st.textContent = 'offline';
     st.className = 'bad';
     pulse.className = 'pulse dim';
+    if (badge) { badge.textContent = 'OFF'; badge.className = 'livebadge off'; }
+    if (ban) ban.className = 'offline show';
   } else {
     st.textContent = 'online';
     st.className = 'ok';
-    pulse.className = 'pulse';
+    pulse.className = 'pulse live';
+    if (badge) { badge.textContent = 'LIVE'; badge.className = 'livebadge'; }
+    if (ban) ban.className = 'offline';
+  }
+  if (typeof data.poll_ms === 'number' && data.poll_ms >= 500) {
+    POLL_MS = data.poll_ms;
   }
   if (data.lan_url) document.getElementById('lan_url').textContent = data.lan_url;
   if (data.local_url) document.getElementById('local_url').textContent = data.local_url;
@@ -936,20 +1012,46 @@ function paint(data) {
   }
   renderFeed(photos);
 }
+var POLL_MS = 2000;
+var POLL_TIMER = null;
+function setOfflineUI(reason) {
+  var st = document.getElementById('bridge_status');
+  var pulse = document.getElementById('pulse');
+  var badge = document.getElementById('livebadge');
+  var ban = document.getElementById('offline_banner');
+  if (st) { st.textContent = 'offline'; st.className = 'bad'; }
+  if (pulse) pulse.className = 'pulse dim';
+  if (badge) { badge.textContent = 'OFF'; badge.className = 'livebadge off'; }
+  if (ban) ban.className = 'offline show';
+  var hint = document.getElementById('refresh_hint');
+  if (hint) hint.textContent = reason || 'reconnect...';
+}
 function poll() {
   var x = new XMLHttpRequest();
   x.open('GET', '/api', true);
+  x.timeout = Math.max(3000, POLL_MS + 1000);
   x.onreadystatechange = function() {
-    if (x.readyState === 4 && x.status === 200) {
-      try { paint(JSON.parse(x.responseText)); } catch (e) {}
+    if (x.readyState !== 4) return;
+    if (x.status === 200) {
+      try { paint(JSON.parse(x.responseText)); } catch (e) { setOfflineUI('bad JSON'); return; }
       var hint = document.getElementById('refresh_hint');
       if (hint) {
+        var secs = Math.round(POLL_MS / 1000);
+        if (secs < 1) secs = 1;
         hint.textContent = 'updated';
-        setTimeout(function(){ hint.textContent = 'auto every 2s'; }, 800);
+        setTimeout(function(){ hint.textContent = 'auto every ' + secs + 's'; }, 800);
       }
+    } else {
+      setOfflineUI('Bridge offline — run START_GROVELINK');
     }
   };
-  x.send();
+  x.ontimeout = function() { setOfflineUI('Bridge offline — run START_GROVELINK'); };
+  x.onerror = function() { setOfflineUI('Bridge offline — run START_GROVELINK'); };
+  try { x.send(); } catch (e) { setOfflineUI('Bridge offline — run START_GROVELINK'); }
+}
+function schedulePoll() {
+  if (POLL_TIMER) clearTimeout(POLL_TIMER);
+  POLL_TIMER = setTimeout(function(){ poll(); schedulePoll(); }, POLL_MS);
 }
 document.getElementById('copy_lan').onclick = function() {
   copyText(document.getElementById('lan_url').textContent, this);
@@ -993,7 +1095,7 @@ if (!getLastVisit()) {
 }
 document.getElementById('feed').innerHTML = EMPTY_HTML;
 poll();
-setInterval(poll, 2000);
+schedulePoll();
 </script>
 </body>
 </html>
@@ -1007,11 +1109,13 @@ def render_html():
     lan = "http://%s:%s" % (ip, port)
     local = "http://127.0.0.1:%s" % port
     ip_port = "%s:%s" % (ip, port)
+    ver = STATE.get("version", "unknown") or "unknown"
     return (
         HTML_TEMPLATE
         .replace("__LAN_URL__", lan)
         .replace("__LOCAL_URL__", local)
         .replace("__IP_PORT__", ip_port)
+        .replace("__VERSION__", ver)
     )
 
 
@@ -1078,6 +1182,7 @@ def api_payload():
         "ip": ip,
         "port": port,
         "max_photos": int(STATE.get("max_photos") or 40),
+        "poll_ms": int(STATE.get("poll_ms") or 2000),
         "version": STATE.get("version", "unknown") or "unknown",
     }
 
@@ -1098,6 +1203,8 @@ def health_payload():
         "port": STATE.get("port", 8088),
         "gta_dir": STATE.get("gta_dir", "") or "",
         "version": STATE.get("version", "unknown") or "unknown",
+        "poll_ms": int(STATE.get("poll_ms") or 2000),
+        "max_photos": int(STATE.get("max_photos") or 40),
     }
 
 
@@ -1131,6 +1238,59 @@ def delete_bridge_photo(name):
     STATE["photos"] = [p for p in STATE.get("photos", []) if p.get("file") != name]
     stamp_now()
     return True, "deleted"
+
+
+def build_export_zip():
+    """Zip contents of bridge/photos (stdlib zipfile). Always valid zip."""
+    buf = BytesIO()
+    try:
+        zf = zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED)
+    except RuntimeError:
+        zf = zipfile.ZipFile(buf, "w", zipfile.ZIP_STORED)
+    try:
+        count = 0
+        if os.path.isdir(WEB_PHOTOS):
+            try:
+                names = os.listdir(WEB_PHOTOS)
+            except Exception:
+                names = []
+            for name in sorted(names):
+                low = name.lower()
+                if not (
+                    low.endswith(".jpg")
+                    or low.endswith(".jpeg")
+                    or low.endswith(".png")
+                    or low.endswith(".bmp")
+                ):
+                    continue
+                if name in DELETED:
+                    continue
+                full = os.path.join(WEB_PHOTOS, name)
+                if not os.path.isfile(full):
+                    continue
+                try:
+                    zf.write(full, arcname=name)
+                    count += 1
+                except Exception:
+                    continue
+        lines = [
+            "GroveLink photo export",
+            "Copies from bridge/photos only (GTA Gallery untouched).",
+            "Pack version: %s" % (STATE.get("version", "unknown") or "unknown"),
+            "Files: %d" % count,
+        ]
+        zf.writestr("README_GROVELINK.txt", "\n".join(lines) + "\n")
+    finally:
+        try:
+            zf.close()
+        except Exception:
+            pass
+    data = buf.getvalue()
+    try:
+        buf.close()
+    except Exception:
+        pass
+    return data
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -1181,6 +1341,20 @@ class Handler(BaseHTTPRequestHandler):
             return
         if path == "/health":
             self._json(health_payload())
+            return
+        if path == "/export.zip":
+            try:
+                data = build_export_zip()
+            except Exception as exc:
+                self._json({"ok": False, "detail": str(exc)}, code=500)
+                return
+            self.send_response(200)
+            self.send_header("Content-Type", "application/zip")
+            self.send_header("Content-Disposition", 'attachment; filename="grovelink-photos.zip"')
+            self.send_header("Content-Length", str(len(data)))
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            self.wfile.write(data)
             return
         # Careful GET delete: /delete?file=NAME  (also supports POST)
         if path == "/delete":
@@ -1338,11 +1512,17 @@ def main():
     max_photos = cfg_int(cfg, "server", "max_photos", 40)
     if max_photos < 1:
         max_photos = 40
+    poll_ms = cfg_int(cfg, "server", "poll_ms", 2000)
+    if poll_ms < 500:
+        poll_ms = 500
+    if poll_ms > 60000:
+        poll_ms = 60000
 
     ip = lan_ip()
     STATE["ip"] = ip
     STATE["port"] = port
     STATE["max_photos"] = max_photos
+    STATE["poll_ms"] = poll_ms
     STATE["gta_dir"] = gta_dir or ""
     STATE["galleries"] = list(galleries)
     STATE["bridge_ok"] = True
@@ -1372,6 +1552,9 @@ def main():
     print("  Share URL page (tap-to-copy, no QR lib):")
     print("      http://127.0.0.1:%s/qr" % port)
     print("  Max bridge photos (prune oldest):", max_photos)
+    print("  Phone page poll_ms             :", poll_ms)
+    print("  Export zip:")
+    print("      http://127.0.0.1:%s/export.zip" % port)
     print("")
     print("  Keep this window open while you play.")
     print("================================================")
