@@ -1,0 +1,65 @@
+SWITCHER v8.2 UPGRADE (apply on complete v7)
+============================================
+Do NOT compile the short MissionSwitcher.txt currently on main
+if it is only a few lines. Restore v7 first:
+
+  git fetch origin
+  git checkout ce080795 -- switcher/MissionSwitcher.txt
+
+Then in Sanny, make these edits to that v7 file.
+
+1) Change the header toast to:
+   SWITCHER V8.2  H BECOME  I BIKE  P PULL CJ
+
+2) After KEY_I, before KEY_L, add:
+
+:KEY_P
+00D6: if
+0AB0:   key_pressed 80
+004D: jf @KEY_L
+0006: 24@ = 14
+0002: jump @PULL_CJ
+
+And change KEY_I's jf @KEY_L to jf @KEY_P
+
+3) After :FORCE_BIKE / :FB_NO, add:
+
+:PULL_CJ
+00D6: if
+0039:   20@ == 1
+004D: jf @MAIN
+00D6: if
+056D:   actor 23@ defined
+004D: jf @MAIN
+00A0: store_actor $PLAYER_ACTOR position_to 1@ 2@ 3@
+0172: 16@ = actor $PLAYER_ACTOR z_angle
+0087: 13@ = 1@
+000B: 13@ += 1.2
+0087: 14@ = 2@
+000B: 14@ += 0.6
+00A1: put_actor 23@ at 13@ 14@ 3@
+0173: set_actor 23@ z_angle_to 16@
+0633: AS_actor 23@ follow_actor $PLAYER_ACTOR
+0006: 29@ = 0
+0ACD: show_text_highpriority "CJ ON ME" time 1200
+0002: jump @MAIN
+
+4) In :WATCH, after the hold check (not 29@ == 1), add heal:
+
+0226: 8@ = actor 23@ health
+00D6: if
+001B:   8@ > 45
+004D: jf @W_HP
+0223: set_actor 23@ health_to 220
+:W_HP
+
+5) Tighter follow / faster bike (replace numbers):
+   foot warp  18.0 -> 14.0
+   stick      4.0  -> 3.2
+   bike snap  28.0 -> 20.0
+   watch tick 40   -> 28
+   bike speed 22.0 -> 26.0
+   max speed  28.0 -> 32.0
+   hint tick  100  -> 150
+
+F7. Toast must say SWITCHER V8.2.

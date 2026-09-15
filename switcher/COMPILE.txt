@@ -1,3 +1,4 @@
-Compile switcher/MissionSwitcher.txt in Sanny (GTA San Andreas, F7).
-Needs sw_v8a.txt and sw_v8b.txt in the same folder.
-Header toast in-game should say SWITCHER V8.1
+If MissionSwitcher.txt is under 2KB, it is broken.
+Restore v7:
+  git checkout ce080795 -- switcher/MissionSwitcher.txt
+Then apply switcher/UPGRADE_V82.txt and F7.
