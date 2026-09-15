@@ -1,0 +1,3 @@
+Compile switcher/MissionSwitcher.txt in Sanny.
+It includes sw_v8a.txt and sw_v8b.txt from this folder.
+If either include is missing, F7 will fail.

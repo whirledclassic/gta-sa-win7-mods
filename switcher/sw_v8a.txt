@@ -1,0 +1,23 @@
+// Mission Companion Switcher v8.0 core
+0000: NOP
+03A4: name_thread 'MSWITCH'
+var
+    7@: Int
+    22@: Int
+    27@: Int
+end
+20@ = 0
+21@ = -1
+22@ = 0
+23@ = -1
+24@ = 0
+25@ = 0
+26@ = -1
+27@ = 0
+28@ = 0
+17@ = -1
+18@ = 0
+19@ = 1
+29@ = 0
+30@ = 0
+31@ = 0
