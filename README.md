@@ -154,6 +154,26 @@ If the bridge says **port 8088 busy**, close the other GroveLink window (or free
 
 Feature list: [grovelink/FEATURES.md](grovelink/FEATURES.md). Stuck? See [grovelink/TROUBLESHOOTING.md](grovelink/TROUBLESHOOTING.md).
 
+
+## Hosting for viewers (2.4.0)
+
+You (the **host**) run GTA + the GroveLink bridge on your PC. Friends (**viewers**) open the phone page on the same Wi-Fi (or via port forward) and interact with the game — they do **not** need GTA installed.
+
+### How J hosts
+1. Run **START_GROVELINK** / Desktop **GroveLink Phone** (bridge on TCP **8088**).
+2. Launch GTA → **K** for the in-game phone (Camera / REPLY / REQUESTS / SPECTATE / …).
+3. On the phone page, toggle **Host** (saved in this browser). Use **Broadcast**, create/close **polls**, and clear **viewer requests**.
+4. Share **http://LAN-IP:8088** (printed by the bridge / empty-state copy block). Same Wi-Fi is easiest; see TROUBLESHOOTING for port forward.
+
+### How viewers interact
+1. Open the shared URL → page defaults to **Viewer** mode.
+2. Set a **Nickname** → **Text CJ** (sticky composer) — CJ gets SMS in-game; he **REPLY**s from the CLEO menu.
+3. Tap **Ask CJ** requests: Camera pic, NEWS snap, Say hi, Spectate on (queued for the host — no taxi spawns).
+4. Vote on live **polls**; react 👍😂🔥 on chat; open **Watch party** (`/live`) for spectate + chat.
+5. Rate limit: **1 text / 3 seconds** per device IP (clear error if too fast).
+
+Feature detail: [grovelink/FEATURES.md](grovelink/FEATURES.md). Stuck on LAN? [grovelink/TROUBLESHOOTING.md](grovelink/TROUBLESHOOTING.md).
+
 ## Advanced / manual
 
 - GroveLink details: [grovelink/README.md](grovelink/README.md)

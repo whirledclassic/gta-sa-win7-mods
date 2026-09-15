@@ -210,3 +210,23 @@ Captions live in `bridge/photos_captions.json` and optional `bridge/photos/<file
 4. Remember: this is a **snapshot slideshow**, not smooth video — FPS is low by design (Win7 stdlib bridge).
 5. Spectate never files Herald articles; use **NEWS** if you want Breaking News.
 
+
+
+## Same Wi-Fi / port forward (viewers)
+
+### Same Wi-Fi (recommended)
+1. Host PC and viewer phones/PCs on the **same Wi-Fi** (not guest/client-isolation SSIDs).
+2. Bridge must listen on `0.0.0.0:8088` (default `config.ini`).
+3. Viewers open **http://HOST-LAN-IP:8088** (bridge prints LAN IP; phone page tap-to-copy).
+4. Windows Firewall: INSTALL opens TCP **8088**; if blocked, allow Python/`grovelink_server.py` inbound.
+
+### Port forward (advanced — expose beyond LAN)
+1. On the router, forward **TCP 8088** → host PC LAN IP.
+2. Viewers use **http://YOUR-PUBLIC-IP:8088** (or Dynamic DNS name).
+3. Security: this is a **local party toy**, not hardened for the open internet — prefer VPN/Tailscale/same Wi-Fi. Do not forward if you are unsure.
+4. CGNAT / carrier Wi-Fi may block inbound; same Wi-Fi still works.
+
+### Viewers cannot send / see LIVE
+- Bridge window must stay open; `/health` → `ok: true`.
+- Rate limit: wait **3 seconds** between texts (HTTP 429).
+- Host toggle is per-browser (`localStorage`) — only the person running GTA needs Host mode.

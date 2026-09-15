@@ -1,6 +1,20 @@
 # GroveLink changelog
 
-Human-readable highlights from pack **1.0 → 2.3.0**. Full detail also lives in root `README.md` round notes and [grovelink/FEATURES.md](grovelink/FEATURES.md).
+Human-readable highlights from pack **1.0 → 2.4.0**. Full detail also lives in root `README.md` round notes and [grovelink/FEATURES.md](grovelink/FEATURES.md).
+
+## 2.4.0 — Host/viewer interactive watch party
+
+- **Host / Viewer modes** on the phone page (toggle, `localStorage`). Viewer (default): chat, react, poll vote, request buttons, spectate. Host: broadcast, create/close poll, pending request queue.
+- **CJ broadcast:** `POST /broadcast` or CLEO `OUTBOX` with `to=ALL` → system/CJ message to all viewers via chat + `/api`.
+- **Viewer list:** nicknames recently active (send / spectate / react) last **2 min**.
+- **Rate limit:** 1 text / **3s** per IP on `POST /send` (HTTP **429** + clear error).
+- **Request queue:** viewers `POST /request` (camera / news / say_hi / spectate_on) → `bridge/requests.json` + `REQUEST.*` in `link.ini`; CLEO toast + **REQUESTS** menu; host marks done / clear.
+- **Live polls:** host `POST /poll` (2–4 options) or CLEO `POLL` section; viewers `POST /vote`; results on page + `/api`; close → INBOX summary for CJ.
+- **Interaction toasts:** REQUEST / POLL flags → one-shot `0ACD` (throttle by clearing flag).
+- **Watch party:** `GET /live` — spectate iframe on top, sticky chat below; Quick Actions link.
+- Polish: empty “waiting for viewers”, host tips, ES5-ish JS, SA green; sanitize lengths + escape HTML.
+- Docs: FEATURES / CHANGELOG / README **Hosting for viewers** / TROUBLESHOOTING (port forward / same Wi-Fi) / RESEARCH. Smoke: `/request` `/poll` `/vote` `/broadcast` rate limit — PASS.
+- Camera gallery-only; NEWS separate; no `news.auto`; Win7 stdlib; crash-safer CLEO. VERSION **2.4.0**.
 
 ## 2.3.0 — Comments, mute, spectate download, density, streak · Herald depth · UI polish
 

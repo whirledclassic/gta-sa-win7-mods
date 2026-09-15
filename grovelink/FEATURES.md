@@ -1,6 +1,6 @@
 # GroveLink — current features
 
-Pack version: see root **`VERSION`** (`2.3.0`; includes **2.2.0** reactions/recap + **2.1.0** nicknames/watching/Moments). Crash-safer CLEO (no `hold_cellphone`, no custom GXT `033E`). Bridge is **stdlib-only** (Win7 Python 2.7 / 3.4–3.8).
+Pack version: see root **`VERSION`** (`2.4.0`; includes **2.3.0** comments/streak + **2.2.0** reactions/recap + **2.1.0** nicknames/watching/Moments + host/viewer interactive). Crash-safer CLEO (no `hold_cellphone`, no custom GXT `033E`). Bridge is **stdlib-only** (Win7 Python 2.7 / 3.4–3.8).
 
 ## Install / update / verify / test
 
@@ -11,7 +11,7 @@ Pack version: see root **`VERSION`** (`2.3.0`; includes **2.2.0** reactions/reca
 | **One-click update** | Desktop / repo `UPDATE_GROVELINK.bat` — GitHub zip (no Git), overlays files, re-runs INSTALL |
 | **Health check** | Desktop / repo `VERIFY_GROVELINK.bat` — OK/MISSING for game, CLEO, `.cs`, `link.ini`, Python, config, photos dir, **VERSION** (prints pack version), URLs |
 | **Human changelog** | Root `CHANGELOG.md` — pack 1.0→current highlights |
-| **Smoke test** | `tests/smoke_bridge.py` (Linux/Win7, stdlib) or `grovelink/bridge/TEST_BRIDGE.bat` — asserts `/health` (+ uptime), `/api` (+ `hud`, `watching`, `places`, `pinned`, uptime), `/recap`, `/react`, `/pin`, `/comment`, `/news`, `/send` (+ nickname), `/favorite`, `/manifest.webmanifest`, `/export.zip`, HTML gallery, CLEO static |
+| **Smoke test** | `tests/smoke_bridge.py` (+ `/request` `/poll` `/vote` `/broadcast` rate limit) (Linux/Win7, stdlib) or `grovelink/bridge/TEST_BRIDGE.bat` — asserts `/health` (+ uptime), `/api` (+ `hud`, `watching`, `places`, `pinned`, uptime), `/recap`, `/react`, `/pin`, `/comment`, `/news`, `/send` (+ nickname), `/favorite`, `/manifest.webmanifest`, `/export.zip`, HTML gallery, CLEO static |
 | **Desktop starters** | **GroveLink Phone**, `START_GROVELINK`, `VERIFY_GROVELINK`, `UPDATE_GROVELINK`, `GroveLink_README.txt`, `GroveLink_PHONE_URL.txt`, `GroveLink_REPO.txt` (not INSTALL itself) |
 | **START bat** | Prints pack **VERSION** (CR-stripped); if Python missing, clear Win7 3.8.10 instructions + opens python.org download page |
 | **Port in use** | Bridge prints plain English **port N busy** if TCP bind fails (close other GroveLink / free the port) |
@@ -27,11 +27,14 @@ Pack version: see root **`VERSION`** (`2.3.0`; includes **2.2.0** reactions/reca
 | **SPECTATE** | Toggle `SPECTATE.on`; while on (phone open/closed) ~2.5s snap + `SPECTATE.frame=1` for `/spectate` (never NEWS) |
 | **Closed-phone SMS** | If `INBOX.new=1`, once: **SMS FROM REAL PHONE** (0ACD + sound) so you open **K** |
 | **NEWS toast** | If `NEWS.new=1` (after NEWS menu or web Breaking News): **NEWS FILED** once, then clears flag |
+| **REQUEST toast** | If `REQUEST.new=1`: shows `REQUEST.text` once (viewer ask), clears flag |
+| **POLL toast** | If `POLL.new=1`: **LIVE POLL STARTED** once, clears flag |
 | **CONTACTS** | Cycles Sweet / Smoke / Ryder / Cesar / **Catalina** flavor lines (static text; advances each select) |
 | **STATUS** | **LIVE N  PHONE PAGE ON PC** / **NO BRIDGE** + shot count; while `bridge=1` CLEO also writes safe **HUD** ints/strings (`wanted`, `money`, `zone`, `hour`, `spectate`) for the phone page |
 | **HELP** | Camera / REPLY / NEWS / SPECTATE; Moments+Spectate phone URL; START GROVELINK; **UPDATE_GROVELINK** if outdated |
 | **CLOSE** | Put phone away |
-| Keys | **K** toggle · Up/Down wrap (0–8: CAMERA/INBOX/REPLY/NEWS/SPECTATE/CONTACTS/STATUS/HELP/CLOSE) · Enter/Space select · Backspace close |
+| **REQUESTS** | Shows latest viewer request (`REQUEST.text` / kind+from); clears `REQUEST.new` |
+| Keys | **K** toggle · Up/Down wrap (0–9: CAMERA/INBOX/REPLY/NEWS/SPECTATE/REQUESTS/CONTACTS/STATUS/HELP/CLOSE) · Enter/Space select · Backspace close |
 | Bridge-down | Once per open: **START GROVELINK BRIDGE** if `STATUS.bridge=0` |
 
 ## Bridge / phone page tools
@@ -90,8 +93,23 @@ Pack version: see root **`VERSION`** (`2.3.0`; includes **2.2.0** reactions/reca
 | **Herald depth** | Multi-graf articles: subhead, pull quote, related, dateline, desk byline, weather, photo credit; richer index cards |
 | **UI polish** | Section headers, clearer stats/empty states, modernized `/recap` (still ES5-ish / Win7-friendly) |
 | **Web app manifest** | `GET /manifest.webmanifest` + apple meta for Add to Home Screen |
-| **Endpoints** | `/`, `/api`, `/api/chat`, `/api/spectate`, `/spectate`, `/recap`, `/health`, `/send`, `/react`, `/pin`, `/caption`, `/comment`, `/favorite`, `/news`, `/news/<id>`, `/delete`, `/clear`, `/photo/…`, `/qr`, `/export.zip`, `/manifest.webmanifest` |
+| **Endpoints** | `/`, `/api`, `/api/chat`, `/api/spectate`, `/api/poll`, `/api/requests`, `/api/viewers`, `/spectate`, `/live`, `/recap`, `/health`, `/send`, `/broadcast`, `/request`, `/poll`, `/vote`, `/react`, `/pin`, `/caption`, `/comment`, `/favorite`, `/news`, `/news/<id>`, `/delete`, `/clear`, `/photo/…`, `/qr`, `/export.zip`, `/manifest.webmanifest` |
 | **Out of scope** | Full taxi/homie spawn/call systems (see [RESEARCH.md](RESEARCH.md)) — conflicts with other CLEO packs |
+
+
+## Host / viewer interactive (2.4.0)
+
+| Feature | Detail |
+|--------|--------|
+| **Modes** | Soft **Viewer** (default) / **Host** toggle on main page (`localStorage`). Host: broadcast, poll create/close, pending requests. Viewer: chat, react, vote, request buttons, spectate |
+| **CJ broadcast** | Host `POST /broadcast` or CLEO `OUTBOX` with `to=ALL` → chat log + `/api` as CJ/system |
+| **Viewer list** | Names recently active (send / spectate / react) last **2 min** on page + `/api` `viewers` |
+| **Rate limit** | `POST /send`: **1 msg / 3s per IP** → HTTP **429** + clear error text |
+| **Request queue** | Viewer taps Camera pic / NEWS snap / Say hi / Spectate on → `POST /request` → `bridge/requests.json` + `REQUEST.new/kind/from/text` in link.ini |
+| **Host requests** | Host panel lists pending; mark done / clear all |
+| **Live polls** | Host `POST /poll` (question + 2–4 options) or CLEO `POLL.create`; viewers `POST /vote`; results on page + `/api`; close writes INBOX summary for CJ |
+| **Watch party** | `GET /live` — spectate iframe + sticky chat; Quick Actions **Watch party** |
+| **Endpoints** | `/live`, `/broadcast`, `/request`, `/poll`, `/vote`, `/api/poll`, `/api/requests`, `/api/viewers` (plus prior `/`, `/api`, `/send`, …) |
 
 ## Config (`grovelink/bridge/config.ini`)
 

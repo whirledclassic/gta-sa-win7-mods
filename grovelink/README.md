@@ -26,7 +26,7 @@ Until PR #1 merges, `update.ini` defaults to branch `fix/grovelink-camera-snapsh
 ## In GTA
 
 - **K** — open / close the phone
-- **Up / Down** — menu wraps: **CAMERA / INBOX / REPLY / NEWS / SPECTATE / CONTACTS / STATUS / HELP / CLOSE**
+- **Up / Down** — menu wraps: **CAMERA / INBOX / REPLY / NEWS / SPECTATE / REQUESTS / CONTACTS / STATUS / HELP / CLOSE**
 - **Enter** or **Space** — select / snap (Camera or NEWS), read INBOX, enter REPLY picker, toggle SPECTATE, cycle contacts, show status, show HELP
 - **Backspace** — close (or cancel REPLY picker)
 - **CAMERA** — snap to phone/PC gallery only; shutter sound (`018C`); **PHOTO TAKEN #N**; **never** files news
@@ -49,6 +49,7 @@ Until PR #1 merges, `update.ini` defaults to branch `fix/grovelink-camera-snapsh
 - Sticky **composer** with **Nickname** (localStorage; default REAL PHONE); chat thread shows your name + **Delivered to CJ** / **CJ replied**
 - **Moments** Today reel + **By place** tab (Herald location / caption tags); **WANTED ★ increased** toast when HUD wanted rises
 - Spectate **N watching** (recent polls, ~30s) on `/spectate` + Quick Actions
+- **2.4.0:** Host/Viewer modes, broadcast, request queue, live polls, `/live` watch party, rate limit, viewer list
 - **2.3.0:** photo comments, mute alerts, spectate download, density themes, streak, Herald depth, UI polish
 - **2.2.0:** chat reactions + pin, spectate cinema (H), `/recap`, bridge uptime; CLEO sixth REPLY
 - **LIVE SPECTATE** link → `GET /spectate` (full-viewport latest frame, auto-refresh; snapshot slideshow only — not H.264/WebRTC)
@@ -135,3 +136,8 @@ Or double-click `grovelink/bridge/TEST_BRIDGE.bat` on Windows. Asserts `/health`
 ## Troubleshooting
 
 See [TROUBLESHOOTING.md](TROUBLESHOOTING.md).
+
+
+## Hosting for viewers
+
+Run the bridge on the PC playing GTA (**Host** mode on the phone page). Friends open `http://LAN-IP:8088` in **Viewer** mode: text CJ, react, vote, send requests, watch party at `/live`. Same Wi-Fi recommended; port-forward TCP **8088** only if you know your router. See root README **Hosting for viewers** and [TROUBLESHOOTING.md](TROUBLESHOOTING.md).

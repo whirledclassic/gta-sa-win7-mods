@@ -1,11 +1,11 @@
 {$USE ini}
 {$USE CLEO}
 {$CLEO .cs}
-// GroveLink Phone v13 — crash-safer. No #model names, no 033E GXT, no hold_cellphone.
+// GroveLink Phone v14 — crash-safer. No #model names, no 033E GXT, no hold_cellphone.
 // STATUS HUD: when bridge=1, periodically writes wanted/money/zone/hour/spectate to STATUS.*
 //   (safe opcodes only: 01C0 wanted, 010B money, 00BF hour, 0843 zone). Phone page /api hud.
 // K toggle | UP/DOWN wrap | ENTER or SPACE select | BACKSPACE close
-// Menu: CAMERA / INBOX / REPLY / NEWS / SPECTATE / CONTACTS / STATUS / HELP / CLOSE
+// Menu: CAMERA / INBOX / REPLY / NEWS / SPECTATE / REQUESTS / CONTACTS / STATUS / HELP / CLOSE
 // CAMERA = pics to phone/PC gallery ONLY (never writes NEWS keys / never triggers Herald).
 // NEWS = snap + NEWS.make=1 + NEWS.zone location tag so bridge files Herald (separate feature).
 // REPLY = Up/Down canned lines (6) + Enter → OUTBOX (CJ replies on web chat).
@@ -13,14 +13,14 @@
 //   take_photo + SPECTATE.frame=1 (bridge copies; never NEWS).
 // INBOX plays 018C when new=1. CONTACTS cycles static flavor lines (no models).
 // STATUS LIVE flashes photo count + PHONE PAGE ON PC; INBOX shows NO NEW TEXTS when empty.
-// Closed-phone: SMS FROM REAL PHONE notify (once per new) + NEWS FILED toast after bridge files.
+// Closed-phone: SMS notify + NEWS FILED + VIEWER REQUEST + LIVE POLL toasts (flags cleared once).
 // HELP: Camera = pics; REPLY = text back; NEWS = Herald; SPECTATE = web live view.
 0000: NOP
 03A4: name_thread 'GROVELNK'
 
 20@ = 0 // phone open
 21@ = 0 // UI mode 0=menu 1=reply picker
-22@ = 0 // menu index 0=CAMERA 1=INBOX 2=REPLY 3=NEWS 4=SPECTATE 5=CONTACTS 6=STATUS 7=HELP 8=CLOSE
+22@ = 0 // menu index 0=CAMERA 1=INBOX 2=REPLY 3=NEWS 4=SPECTATE 5=REQUESTS 6=CONTACTS 7=STATUS 8=HELP 9=CLOSE
 23@ = 0 // K debounce
 24@ = 0 // temp int (INBOX.new / STATUS.bridge / NEWS.new / timer)
 25@ = 0 // PHOTO.count
@@ -55,7 +55,7 @@
 0006: 22@ = 0
 0006: 27@ = 1
 0006: 31@ = 0
-0ACD: show_text_highpriority "CAM INBOX REPLY NEWS SPEC MORE" time 1800
+0ACD: show_text_highpriority "CAM INBOX REPLY NEWS SPEC REQ" time 1800
 018C: play_sound 1138 at 0.0 0.0 0.0
 0002: jump @AFTER_TOGGLE
 
@@ -112,9 +112,31 @@
 0AF0: 24@ = read_int_from_ini_file "cleo\GroveLink\link.ini" section "NEWS" key "new"
 00D6: if
 0039:   24@ == 1
-004D: jf @SPECTATE_TICK
+004D: jf @REQUEST_CHECK
 0AF1: write_int 0 to_ini_file "cleo\GroveLink\link.ini" section "NEWS" key "new"
 0ACD: show_text_highpriority "NEWS FILED" time 2000
+018C: play_sound 1052 at 0.0 0.0 0.0
+
+:REQUEST_CHECK
+// Viewer request toast (bridge sets REQUEST.new=1)
+0AF0: 24@ = read_int_from_ini_file "cleo\GroveLink\link.ini" section "REQUEST" key "new"
+00D6: if
+0039:   24@ == 1
+004D: jf @POLL_CHECK
+0AF1: write_int 0 to_ini_file "cleo\GroveLink\link.ini" section "REQUEST" key "new"
+0AF4: 0@s = read_string_from_ini_file "cleo\GroveLink\link.ini" section "REQUEST" key "text"
+0ACD: show_text_highpriority 0@s time 2800
+018C: play_sound 1052 at 0.0 0.0 0.0
+0002: jump @SPECTATE_TICK
+
+:POLL_CHECK
+// Live poll started toast
+0AF0: 24@ = read_int_from_ini_file "cleo\GroveLink\link.ini" section "POLL" key "new"
+00D6: if
+0039:   24@ == 1
+004D: jf @SPECTATE_TICK
+0AF1: write_int 0 to_ini_file "cleo\GroveLink\link.ini" section "POLL" key "new"
+0ACD: show_text_highpriority "LIVE POLL STARTED" time 2200
 018C: play_sound 1052 at 0.0 0.0 0.0
 
 :SPECTATE_TICK
@@ -222,7 +244,7 @@
 0001: wait 160
 000A: 22@ += 1
 00D6: if
-0019:   22@ > 8
+0019:   22@ > 9
 004D: jf @SHOW_SEL
 0006: 22@ = 0
 0002: jump @SHOW_SEL
@@ -235,7 +257,7 @@
 00D6: if
 001B:   0 > 22@
 004D: jf @SHOW_SEL
-0006: 22@ = 8
+0006: 22@ = 9
 
 :SHOW_SEL
 00D6: if
@@ -271,21 +293,27 @@
 00D6: if
 0039:   22@ == 5
 004D: jf @SHOW_SEL7
-0ACD: show_text_highpriority "CONTACTS" time 1200
+0ACD: show_text_highpriority "REQUESTS  viewer asks" time 1200
 0002: jump @PHONE_LOGIC2
 :SHOW_SEL7
 00D6: if
 0039:   22@ == 6
 004D: jf @SHOW_SEL8
-0ACD: show_text_highpriority "STATUS" time 1200
+0ACD: show_text_highpriority "CONTACTS" time 1200
 0002: jump @PHONE_LOGIC2
 :SHOW_SEL8
 00D6: if
 0039:   22@ == 7
 004D: jf @SHOW_SEL9
-0ACD: show_text_highpriority "HELP" time 1200
+0ACD: show_text_highpriority "STATUS" time 1200
 0002: jump @PHONE_LOGIC2
 :SHOW_SEL9
+00D6: if
+0039:   22@ == 8
+004D: jf @SHOW_SEL10
+0ACD: show_text_highpriority "HELP" time 1200
+0002: jump @PHONE_LOGIC2
+:SHOW_SEL10
 0ACD: show_text_highpriority "CLOSE" time 1200
 
 :PHONE_LOGIC2
@@ -462,7 +490,7 @@
 :SEL_SPECTATE
 00D6: if
 0039:   22@ == 4
-004D: jf @SEL_CONTACTS
+004D: jf @SEL_REQUESTS
 // Toggle SPECTATE.on — bridge /spectate page uses latest frames
 00D6: if
 0AAB:   file_exists "cleo\GroveLink\link.ini"
@@ -486,9 +514,30 @@
 0ACD: show_text_highpriority "NO link.ini  run INSTALL" time 2200
 0002: jump @KEY_BACK
 
-:SEL_CONTACTS
+:SEL_REQUESTS
 00D6: if
 0039:   22@ == 5
+004D: jf @SEL_CONTACTS
+// Show latest viewer request (kind/from text); clear flag if still set
+00D6: if
+0AAB:   file_exists "cleo\GroveLink\link.ini"
+004D: jf @REQ_EMPTY
+0AF1: write_int 0 to_ini_file "cleo\GroveLink\link.ini" section "REQUEST" key "new"
+0AF4: 0@s = read_string_from_ini_file "cleo\GroveLink\link.ini" section "REQUEST" key "text"
+00D6: if
+0AAB:   file_exists "cleo\GroveLink\link.ini"
+004D: jf @REQ_EMPTY
+// Empty text → no requests
+0ACD: show_text_highpriority 0@s time 3200
+018C: play_sound 1052 at 0.0 0.0 0.0
+0002: jump @KEY_BACK
+:REQ_EMPTY
+0ACD: show_text_highpriority "NO REQUESTS" time 2000
+0002: jump @KEY_BACK
+
+:SEL_CONTACTS
+00D6: if
+0039:   22@ == 6
 004D: jf @SEL_STATUS
 // Flavor contacts — static 0ACD lines only, no ped models
 00D6: if
@@ -525,7 +574,7 @@
 
 :SEL_STATUS
 00D6: if
-0039:   22@ == 6
+0039:   22@ == 7
 004D: jf @SEL_HELP
 00D6: if
 0AAB:   file_exists "cleo\GroveLink\link.ini"
@@ -546,7 +595,7 @@
 
 :SEL_HELP
 00D6: if
-0039:   22@ == 7
+0039:   22@ == 8
 004D: jf @SEL_CLOSE
 // HELP: Camera / REPLY / NEWS / SPECTATE
 0ACD: show_text_highpriority "HELP: K opens phone" time 1800
@@ -558,6 +607,8 @@
 0ACD: show_text_highpriority "NEWS: snap + Herald article" time 2000
 0001: wait 2100
 0ACD: show_text_highpriority "SPECTATE: web /spectate live" time 2200
+0001: wait 2300
+0ACD: show_text_highpriority "REQUESTS: viewer asks on phone" time 2200
 0001: wait 2300
 0ACD: show_text_highpriority "Moments+Spectate on phone URL" time 2200
 0001: wait 2300

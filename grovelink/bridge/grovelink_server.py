@@ -51,6 +51,8 @@ CHAT_LOG_PATH = os.path.join(HERE, "chat_delivered.json")
 FAVORITES_PATH = os.path.join(HERE, "photos_favorites.json")
 COMMENTS_PATH = os.path.join(HERE, "photos_comments.json")
 STREAK_PATH = os.path.join(HERE, "photos_streak.json")
+REQUESTS_PATH = os.path.join(HERE, "requests.json")
+POLL_PATH = os.path.join(HERE, "poll.json")
 
 
 def read_pack_version():
@@ -115,9 +117,412 @@ STATE = {
     "spectate_viewers": {},
     "started_at": 0,  # unix - set in main(); bridge uptime
     "pinned_chat_id": "",  # one pinned chat message id (empty = none)
+    # 2.4.0 interactive
+    "active_viewers": {},  # nick -> {nick, ip, last_seen}
+    "rate_limit_send": {},  # ip -> last send unix
+    "poll": None,  # mirror of poll.json when loaded
 }
 
 SPECTATE_VIEWER_WINDOW = 30
+
+
+# --- 2.4.0 interactive: viewers, rate limit, requests, polls, broadcast ---
+
+
+VIEWER_ACTIVE_WINDOW = 120  # names recently active (send/spectate/react) last 2 min
+SEND_RATE_LIMIT_SEC = 3.0
+ALLOWED_REQUEST_KINDS = ("camera", "news", "say_hi", "spectate_on")
+REQUEST_KIND_LABELS = {
+    "camera": "Take a Camera pic",
+    "news": "Do a NEWS snap",
+    "say_hi": "Say hi",
+    "spectate_on": "Spectate on",
+}
+
+
+def _client_ip_from_handler(handler):
+    try:
+        return (handler.client_address[0] if handler.client_address else "") or ""
+    except Exception:
+        return ""
+
+
+def note_active_viewer(nick, ip=""):
+    """Track nickname activity for viewer list (last 2 min). Empty nick = prune only."""
+    now = time.time()
+    viewers = STATE.get("active_viewers")
+    if not isinstance(viewers, dict):
+        viewers = {}
+    nick = (nick or "").strip()[:40]
+    ip = (ip or "").strip()
+    if nick:
+        viewers[nick] = {"nick": nick, "ip": ip, "last_seen": now}
+    cutoff = now - VIEWER_ACTIVE_WINDOW
+    pruned = {}
+    for k, v in viewers.items():
+        try:
+            if isinstance(v, dict) and float(v.get("last_seen") or 0) >= cutoff:
+                pruned[k] = v
+            elif not isinstance(v, dict) and float(v or 0) >= cutoff:
+                pruned[k] = {"nick": k, "ip": "", "last_seen": float(v)}
+        except Exception:
+            pass
+    STATE["active_viewers"] = pruned
+    return pruned
+
+
+def list_active_viewers():
+    note_active_viewer("", "")
+    viewers = STATE.get("active_viewers") or {}
+    now = time.time()
+    out = []
+    for k, v in viewers.items():
+        if not isinstance(v, dict):
+            continue
+        ts = float(v.get("last_seen") or 0)
+        out.append({
+            "nick": (v.get("nick") or k)[:40],
+            "last_seen": int(ts),
+            "ago_sec": int(max(0, now - ts)),
+        })
+    out.sort(key=lambda r: -r.get("last_seen", 0))
+    return out[:40]
+
+
+def check_send_rate_limit(ip):
+    """Return (ok, wait_sec). 1 msg / SEND_RATE_LIMIT_SEC per IP."""
+    ip = (ip or "").strip() or "unknown"
+    now = time.time()
+    bucket = STATE.get("rate_limit_send")
+    if not isinstance(bucket, dict):
+        bucket = {}
+    # prune old
+    cutoff = now - 60
+    bucket = dict((k, v) for k, v in bucket.items() if float(v or 0) >= cutoff)
+    last = float(bucket.get(ip) or 0)
+    wait = SEND_RATE_LIMIT_SEC - (now - last)
+    if last > 0 and wait > 0:
+        STATE["rate_limit_send"] = bucket
+        return False, max(0.1, round(wait, 1))
+    bucket[ip] = now
+    STATE["rate_limit_send"] = bucket
+    return True, 0
+
+
+def load_requests():
+    data = _load_json_file(REQUESTS_PATH, [])
+    if not isinstance(data, list):
+        return []
+    out = []
+    for row in data[:80]:
+        if isinstance(row, dict):
+            out.append(row)
+    return out
+
+
+def save_requests(rows):
+    _save_json_file(REQUESTS_PATH, (rows or [])[:80])
+
+
+def _new_request_id():
+    try:
+        t = int(time.time() * 1000)
+    except Exception:
+        t = int(time.time())
+    return "r%d" % t
+
+
+def enqueue_request(kind, frm, ip=""):
+    """Viewer request → requests.json + REQUEST.* in link.ini for CLEO toast."""
+    kind = (kind or "").strip().lower().replace(" ", "_").replace("-", "_")
+    aliases = {
+        "cam": "camera", "photo": "camera", "pic": "camera", "camera_pic": "camera",
+        "take_a_camera_pic": "camera",
+        "herald": "news", "news_snap": "news", "do_a_news_snap": "news",
+        "hi": "say_hi", "hello": "say_hi", "sayhi": "say_hi",
+        "spectate": "spectate_on", "spec": "spectate_on", "spectateon": "spectate_on",
+    }
+    if kind in aliases:
+        kind = aliases[kind]
+    if kind not in ALLOWED_REQUEST_KINDS:
+        return False, None, "bad kind (camera/news/say_hi/spectate_on)"
+    frm = (frm or "Viewer").strip().replace("\r", " ").replace("\n", " ")[:40] or "Viewer"
+    entry = {
+        "id": _new_request_id(),
+        "kind": kind,
+        "label": REQUEST_KIND_LABELS.get(kind, kind),
+        "from": frm,
+        "ts": int(time.time()),
+        "when": human_time(time.time()),
+        "status": "pending",
+        "ip": (ip or "")[:40],
+    }
+    rows = load_requests()
+    rows.insert(0, entry)
+    save_requests(rows[:80])
+    note_active_viewer(frm, ip)
+    # Write CLEO toast flag
+    ini = STATE.get("link_ini") or ""
+    if ini:
+        try:
+            label = REQUEST_KIND_LABELS.get(kind, kind)
+            text = ("%s from %s" % (label, frm)).replace("=", "-")[:60]
+            write_ini_kv(ini, "REQUEST", {
+                "new": "1",
+                "kind": kind.replace("=", "-")[:40],
+                "from": frm.replace("=", "-")[:40],
+                "text": text,
+            })
+        except Exception as exc:
+            print("REQUEST ini error:", exc)
+    return True, entry, "queued"
+
+
+def mark_request_done(req_id, clear_all=False):
+    rows = load_requests()
+    if clear_all:
+        for r in rows:
+            if isinstance(r, dict) and r.get("status") == "pending":
+                r["status"] = "done"
+        save_requests(rows)
+        return True, "cleared"
+    req_id = (req_id or "").strip()
+    if not req_id:
+        return False, "missing id"
+    hit = False
+    for r in rows:
+        if isinstance(r, dict) and str(r.get("id") or "") == req_id:
+            r["status"] = "done"
+            hit = True
+            break
+    if not hit:
+        return False, "not found"
+    save_requests(rows)
+    return True, "done"
+
+
+def pending_requests():
+    return [r for r in load_requests() if isinstance(r, dict) and r.get("status") == "pending"]
+
+
+def load_poll():
+    data = _load_json_file(POLL_PATH, None)
+    if isinstance(data, dict) and data.get("id"):
+        return data
+    return None
+
+
+def save_poll(poll):
+    if poll is None:
+        try:
+            if os.path.isfile(POLL_PATH):
+                os.remove(POLL_PATH)
+        except Exception:
+            pass
+        return
+    _save_json_file(POLL_PATH, poll)
+
+
+def _new_poll_id():
+    try:
+        t = int(time.time() * 1000)
+    except Exception:
+        t = int(time.time())
+    return "p%d" % t
+
+
+def create_poll(question, options, frm="Host"):
+    question = (question or "").strip().replace("\r", " ").replace("\n", " ")[:120]
+    if not question:
+        return False, None, "missing question"
+    opts = []
+    if isinstance(options, (list, tuple)):
+        raw_opts = options
+    else:
+        raw_opts = str(options or "").split("|")
+    for o in raw_opts:
+        o = (o or "").strip().replace("\r", " ").replace("\n", " ")[:40]
+        if o:
+            opts.append(o)
+    opts = opts[:4]
+    if len(opts) < 2:
+        return False, None, "need 2-4 options"
+    poll = {
+        "id": _new_poll_id(),
+        "question": question,
+        "options": opts,
+        "votes": dict((str(i), 0) for i in range(len(opts))),
+        "voters": {},
+        "open": True,
+        "ts": int(time.time()),
+        "when": human_time(time.time()),
+        "from": (frm or "Host")[:40],
+    }
+    save_poll(poll)
+    STATE["poll"] = poll
+    # CLEO toast
+    ini = STATE.get("link_ini") or ""
+    if ini:
+        try:
+            write_ini_kv(ini, "POLL", {
+                "new": "1",
+                "question": question.replace("=", "-")[:60],
+                "summary": "",
+            })
+        except Exception as exc:
+            print("POLL ini error:", exc)
+    return True, poll, "created"
+
+
+def vote_poll(option_idx, ip="", nick=""):
+    poll = load_poll()
+    if not poll or not poll.get("open"):
+        return False, None, "no open poll"
+    try:
+        idx = int(option_idx)
+    except Exception:
+        return False, None, "bad option"
+    opts = poll.get("options") or []
+    if idx < 0 or idx >= len(opts):
+        return False, None, "bad option"
+    ip = (ip or "").strip() or "anon"
+    voters = poll.get("voters")
+    if not isinstance(voters, dict):
+        voters = {}
+    if ip in voters:
+        return False, poll, "already voted"
+    votes = poll.get("votes")
+    if not isinstance(votes, dict):
+        votes = dict((str(i), 0) for i in range(len(opts)))
+    key = str(idx)
+    votes[key] = int(votes.get(key) or 0) + 1
+    voters[ip] = idx
+    poll["votes"] = votes
+    poll["voters"] = voters
+    save_poll(poll)
+    STATE["poll"] = poll
+    if nick:
+        note_active_viewer(nick, ip)
+    return True, poll, "voted"
+
+
+def close_poll(write_inbox=True):
+    poll = load_poll()
+    if not poll:
+        return False, None, "no poll"
+    poll["open"] = False
+    opts = poll.get("options") or []
+    votes = poll.get("votes") or {}
+    parts = []
+    for i, o in enumerate(opts):
+        n = int(votes.get(str(i)) or 0)
+        parts.append("%s %d" % ((o or ("#%d" % i))[:20], n))
+    summary = "Poll done: " + " ".join(parts)
+    summary = summary[:80]
+    poll["summary"] = summary
+    save_poll(poll)
+    STATE["poll"] = poll
+    ini = STATE.get("link_ini") or ""
+    if ini:
+        try:
+            write_ini_kv(ini, "POLL", {
+                "new": "0",
+                "summary": summary.replace("=", "-")[:80],
+            })
+            if write_inbox:
+                write_ini_kv(ini, "INBOX", {
+                    "new": "1",
+                    "from": "POLL",
+                    "msg": summary.replace("=", "-")[:80],
+                })
+        except Exception as exc:
+            print("close poll ini error:", exc)
+    return True, poll, summary
+
+
+def poll_payload(poll=None):
+    poll = poll if poll is not None else load_poll()
+    if not poll:
+        return None
+    opts = poll.get("options") or []
+    votes = poll.get("votes") or {}
+    tallies = []
+    total = 0
+    for i, o in enumerate(opts):
+        n = int(votes.get(str(i)) or 0)
+        total += n
+        tallies.append({"index": i, "label": o, "votes": n})
+    return {
+        "id": poll.get("id"),
+        "question": poll.get("question"),
+        "options": opts,
+        "tallies": tallies,
+        "total": total,
+        "open": bool(poll.get("open")),
+        "summary": poll.get("summary") or "",
+        "when": poll.get("when") or "",
+        "from": poll.get("from") or "",
+        "voter_count": len(poll.get("voters") or {}),
+    }
+
+
+def append_chat_broadcast(frm, msg):
+    """System/CJ broadcast to all viewers (chat log + /api)."""
+    log = load_chat_log()
+    entry = _ensure_chat_entry_shape({
+        "id": _new_chat_id(),
+        "from": (frm or "CJ")[:40],
+        "msg": (msg or "")[:80],
+        "ts": int(time.time()),
+        "when": human_time(time.time()),
+        "delivered": False,
+        "role": "cj",
+        "side": "cj",
+        "broadcast": True,
+        "system": True,
+        "reactions": dict((k, 0) for k in ALLOWED_REACTIONS),
+    })
+    log.insert(0, entry)
+    log = log[:40]
+    _save_json_file(CHAT_LOG_PATH, log)
+    STATE["inbox"] = log
+    return entry
+
+
+def do_broadcast(msg, frm="CJ"):
+    msg = (msg or "").strip().replace("\r", " ").replace("\n", " ")[:80]
+    frm = (frm or "CJ").strip().replace("\r", " ").replace("\n", " ")[:40] or "CJ"
+    if not msg:
+        return False, None, "empty message"
+    entry = append_chat_broadcast(frm, msg)
+    return True, entry, "broadcast"
+
+
+def process_poll_section(ini):
+    """If CLEO writes POLL.create=1 with question/options, create poll."""
+    if not ini or not os.path.isfile(ini):
+        return False
+    create = read_ini_key(ini, "POLL", "create", "0")
+    if create != "1":
+        return False
+    q = read_ini_key(ini, "POLL", "question", "")
+    opts_raw = read_ini_key(ini, "POLL", "options", "")
+    write_ini_kv(ini, "POLL", {"create": "0"})
+    opts = [o.strip() for o in (opts_raw or "").split("|") if o.strip()]
+    ok, poll, detail = create_poll(q, opts, frm="CJ")
+    if ok:
+        print("CLEO poll created:", (poll.get("question") or "")[:50])
+    else:
+        print("CLEO poll failed:", detail)
+    return ok
+
+
+def process_outbox_broadcast(ini):
+    """OUTBOX with to=ALL → broadcast without duplicating normal CJ reply path.
+    Called from process_outbox_flag when to=ALL."""
+    pass  # handled inside process_outbox_flag
+
+
 
 
 def read_cfg():
@@ -1253,7 +1658,7 @@ def session_recap_data():
 
 
 def process_outbox_flag(ini):
-    """When OUTBOX.new=1, clear flag and append CJ reply to chat log."""
+    """When OUTBOX.new=1, clear flag and append CJ reply (or broadcast if to=ALL)."""
     if not ini or not os.path.isfile(ini):
         return False
     new = read_ini_key(ini, "OUTBOX", "new", "0")
@@ -1261,10 +1666,15 @@ def process_outbox_flag(ini):
         return False
     msg = read_ini_key(ini, "OUTBOX", "msg", "")
     frm = read_ini_key(ini, "OUTBOX", "from", "CJ") or "CJ"
-    write_ini_kv(ini, "OUTBOX", {"new": "0"})
+    to = (read_ini_key(ini, "OUTBOX", "to", "") or "").strip().upper()
+    write_ini_kv(ini, "OUTBOX", {"new": "0", "to": ""})
     try:
-        entry = append_chat_cj_reply(frm, msg)
-        print("CJ reply → chat:", (entry.get("msg") or "")[:60])
+        if to in ("ALL", "*", "BROADCAST"):
+            entry = append_chat_broadcast(frm, msg)
+            print("CJ broadcast → chat:", (entry.get("msg") or "")[:60])
+        else:
+            entry = append_chat_cj_reply(frm, msg)
+            print("CJ reply → chat:", (entry.get("msg") or "")[:60])
     except Exception as exc:
         print("OUTBOX error:", exc)
     return True
@@ -2389,6 +2799,44 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     display:none; margin:6px 12px 0; font-size:12px; color:#9cf; font-weight:bold; letter-spacing:0.5px;
   }
   .watching.show { display:block; }
+
+  .modebar { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin:8px 0 4px; }
+  .modebar button {
+    background:#123012; color:#9fdf9f; border:1px solid #2a5a2a; border-radius:999px;
+    padding:6px 12px; font-size:12px; cursor:pointer;
+  }
+  .modebar button.on { background:#1a4a1a; border-color:#2ecc71; color:#7CFF7C; font-weight:700; }
+  .modebar .tip { font-size:11px; color:#7aaa7a; }
+  .viewers { margin:6px 0 10px; padding:8px 10px; background:#0d1f0d; border:1px solid #1a3a1a; border-radius:10px; font-size:12px; }
+  .viewers .vl { color:#7CFF7C; font-weight:700; margin-bottom:4px; }
+  .viewers .chips { display:flex; flex-wrap:wrap; gap:6px; }
+  .viewers .vchip { background:#143214; border:1px solid #2a5a2a; color:#c8f0c8; padding:3px 8px; border-radius:999px; font-size:11px; }
+  .viewers .emptyv { color:#6a9a6a; font-style:italic; }
+  .reqbar, .pollbox, .hostpanel {
+    margin:8px 0 12px; padding:10px 12px; background:#0d1f0d; border:1px solid #1a4a1a; border-radius:12px;
+  }
+  .reqbar h4, .pollbox h4, .hostpanel h4 { margin:0 0 8px; font-size:13px; color:#7CFF7C; letter-spacing:0.04em; }
+  .reqbar .reqbtns { display:flex; flex-wrap:wrap; gap:8px; }
+  .reqbar button, .hostpanel button, .pollbox button {
+    background:#123012; color:#c8f0c8; border:1px solid #2ecc71; border-radius:8px; padding:8px 10px; font-size:12px; cursor:pointer;
+  }
+  .reqbar button:active { background:#1a4a1a; }
+  .pollopt { display:block; width:100%; text-align:left; margin:4px 0; }
+  .pollopt .cnt { float:right; color:#7CFF7C; }
+  .pollq { font-size:14px; margin-bottom:8px; }
+  .host-only { display:none; }
+  body.mode-host .host-only { display:block; }
+  body.mode-host .viewer-only { display:none; }
+  .hostpanel textarea, .hostpanel input[type=text] {
+    width:100%; box-sizing:border-box; margin:4px 0 8px; padding:8px; border-radius:8px;
+    border:1px solid #2a5a2a; background:#061206; color:#c8f0c8; font-size:13px;
+  }
+  .reqlist { list-style:none; margin:0; padding:0; }
+  .reqlist li { display:flex; justify-content:space-between; gap:8px; align-items:center;
+    padding:6px 0; border-bottom:1px solid #1a3a1a; font-size:12px; }
+  .reqlist .donebtn { padding:4px 8px; font-size:11px; }
+  .empty-host { color:#6a9a6a; font-size:12px; font-style:italic; }
+
   .quickbar .qa-watch {
     flex:0 0 auto; min-width:90px; border-color:#4af; color:#9cf; background:#1a2a40; pointer-events:none;
   }
@@ -2510,9 +2958,50 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     <a class="qa-herald" href="/news">Herald</a>
     <a class="qa-recap" href="/recap">Recap</a>
     <button type="button" id="qa_text">Text CJ</button>
+    <a class="qa-recap" href="/live" title="Spectate + chat">Watch party</a>
     <span class="qa-watch" id="qa_watching" title="Spectate viewers (last ~30s)">0 watching</span>
   </div>
   <div class="watching" id="watching_note"></div>
+
+  <div class="modebar" id="modebar">
+    <button type="button" id="mode_viewer" class="on">Viewer</button>
+    <button type="button" id="mode_host">Host</button>
+    <span class="tip" id="mode_tip">Viewers chat, react, vote &amp; request. Host: moderate + broadcast + polls.</span>
+  </div>
+  <div class="viewers" id="viewers_box">
+    <div class="vl">VIEWERS <span id="viewer_count">0</span></div>
+    <div class="chips" id="viewer_chips"><span class="emptyv" id="viewers_empty">Waiting for viewers… share your LAN URL</span></div>
+  </div>
+  <div class="reqbar viewer-only" id="reqbar">
+    <h4>ASK CJ</h4>
+    <div class="reqbtns">
+      <button type="button" data-kind="camera">Take a Camera pic</button>
+      <button type="button" data-kind="news">Do a NEWS snap</button>
+      <button type="button" data-kind="say_hi">Say hi</button>
+      <button type="button" data-kind="spectate_on">Spectate on</button>
+    </div>
+  </div>
+  <div class="pollbox" id="pollbox" style="display:none">
+    <h4>LIVE POLL</h4>
+    <div class="pollq" id="poll_q"></div>
+    <div id="poll_opts"></div>
+    <div class="empty-host" id="poll_closed" style="display:none"></div>
+  </div>
+  <div class="hostpanel host-only" id="hostpanel">
+    <h4>HOST CONTROLS</h4>
+    <div class="tip" style="margin-bottom:8px;font-size:11px;color:#7aaa7a">You are hosting — viewers on the same Wi-Fi use Viewer mode. Broadcast pushes a CJ message to everyone.</div>
+    <label>Broadcast to all viewers</label>
+    <input type="text" id="bcast_msg" maxlength="80" placeholder="CJ says…">
+    <button type="button" id="bcast_btn">Broadcast</button>
+    <label style="display:block;margin-top:10px">Create poll (2–4 options, | separated)</label>
+    <input type="text" id="poll_question" maxlength="120" placeholder="Question…">
+    <input type="text" id="poll_options" maxlength="160" placeholder="Grove|Ballas|Neutral">
+    <button type="button" id="poll_create">Create poll</button>
+    <button type="button" id="poll_close">Close poll → CJ inbox</button>
+    <h4 style="margin-top:12px">Pending requests</h4>
+    <ul class="reqlist" id="req_list"><li class="empty-host">No pending requests</li></ul>
+    <button type="button" id="req_clear" style="margin-top:6px">Clear all pending</button>
+  </div>
   <div class="prefs" id="prefs_bar">
     <button type="button" id="theme_dark" class="on" title="Dark street green">Dark street</button>
     <button type="button" id="theme_bright" title="Bright grove green">Bright</button>
@@ -2629,6 +3118,172 @@ var LS_KEY = 'grovelink_last_visit';
 var LS_FAV = 'grovelink_favorites';
 var LS_CHAT_READ = 'grovelink_chat_read_ts';
 var LS_NICK = 'grovelink_nickname';
+
+var LS_MODE = 'grovelink_mode'; // viewer | host
+function getMode() {
+  try { return localStorage.getItem(LS_MODE) || 'viewer'; } catch (e) { return 'viewer'; }
+}
+function setMode(m) {
+  m = (m === 'host') ? 'host' : 'viewer';
+  try { localStorage.setItem(LS_MODE, m); } catch (e) {}
+  var cls = (document.body.className || '');
+  var parts = cls.split(' ');
+  var out = [];
+  for (var i = 0; i < parts.length; i++) {
+    if (parts[i] && parts[i].indexOf('mode-') !== 0) out.push(parts[i]);
+  }
+  document.body.className = (out.join(' ').trim() + ' mode-' + m).trim();
+  var bv = document.getElementById('mode_viewer');
+  var bh = document.getElementById('mode_host');
+  if (bv) bv.className = (m === 'viewer') ? 'on' : '';
+  if (bh) bh.className = (m === 'host') ? 'on' : '';
+  var tip = document.getElementById('mode_tip');
+  if (tip) tip.textContent = (m === 'host')
+    ? 'Host: moderation, broadcast, poll, request queue.'
+    : 'Viewer: chat, react, vote, request. Toggle Host if you run the game.';
+}
+function paintViewers(list) {
+  list = list || [];
+  var nEl = document.getElementById('viewer_count');
+  if (nEl) nEl.textContent = String(list.length);
+  var chips = document.getElementById('viewer_chips');
+  if (!chips) return;
+  if (!list.length) {
+    chips.innerHTML = '<span class="emptyv" id="viewers_empty">Waiting for viewers… share your LAN URL</span>';
+    return;
+  }
+  var h = '';
+  for (var i = 0; i < list.length; i++) {
+    var v = list[i] || {};
+    h += '<span class="vchip">' + escapeHtml(v.nick || 'Viewer') + '</span>';
+  }
+  chips.innerHTML = h;
+}
+function paintPoll(poll) {
+  var box = document.getElementById('pollbox');
+  if (!box) return;
+  if (!poll || !poll.question) { box.style.display = 'none'; return; }
+  box.style.display = '';
+  var q = document.getElementById('poll_q');
+  if (q) q.textContent = poll.question;
+  var opts = document.getElementById('poll_opts');
+  var closed = document.getElementById('poll_closed');
+  if (!opts) return;
+  var tallies = poll.tallies || [];
+  var h = '';
+  for (var i = 0; i < tallies.length; i++) {
+    var t = tallies[i] || {};
+    if (poll.open) {
+      h += '<button type="button" class="pollopt" data-idx="' + i + '">' + escapeHtml(t.label || ('#' + i)) +
+           ' <span class="cnt">' + (t.votes || 0) + '</span></button>';
+    } else {
+      h += '<div class="pollopt">' + escapeHtml(t.label || ('#' + i)) +
+           ' <span class="cnt">' + (t.votes || 0) + '</span></div>';
+    }
+  }
+  opts.innerHTML = h;
+  if (closed) {
+    if (!poll.open) {
+      closed.style.display = '';
+      closed.textContent = poll.summary || 'Poll closed';
+    } else {
+      closed.style.display = 'none';
+      closed.textContent = '';
+    }
+  }
+  var buttons = opts.querySelectorAll('button.pollopt');
+  for (var j = 0; j < buttons.length; j++) {
+    buttons[j].onclick = (function(btn) {
+      return function() { votePoll(btn.getAttribute('data-idx')); };
+    })(buttons[j]);
+  }
+}
+function paintRequests(pending) {
+  var ul = document.getElementById('req_list');
+  if (!ul) return;
+  pending = pending || [];
+  if (!pending.length) {
+    ul.innerHTML = '<li class="empty-host">No pending requests</li>';
+    return;
+  }
+  var h = '';
+  for (var i = 0; i < pending.length; i++) {
+    var r = pending[i] || {};
+    h += '<li><span>' + escapeHtml(r.label || r.kind || '?') + ' · from ' + escapeHtml(r.from || '?') +
+         '</span><button type="button" class="donebtn" data-id="' + escapeHtml(r.id || '') + '">Done</button></li>';
+  }
+  ul.innerHTML = h;
+  var btns = ul.querySelectorAll('.donebtn');
+  for (var k = 0; k < btns.length; k++) {
+    btns[k].onclick = (function(b) {
+      return function() { markRequestDone(b.getAttribute('data-id')); };
+    })(btns[k]);
+  }
+}
+function postForm(url, body, cb) {
+  var x = new XMLHttpRequest();
+  x.open('POST', url, true);
+  x.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+  x.onreadystatechange = function() {
+    if (x.readyState === 4) {
+      var j = null;
+      try { j = JSON.parse(x.responseText); } catch (e) { j = null; }
+      if (cb) cb(x.status, j);
+    }
+  };
+  x.send(body);
+}
+function sendRequest(kind) {
+  saveNick();
+  var frm = (document.getElementById('from_name').value || 'Viewer').trim() || 'Viewer';
+  postForm('/request', 'kind=' + encodeURIComponent(kind) + '&from=' + encodeURIComponent(frm), function(st, j) {
+    if (st === 200 && j && j.ok) flashOk('Request sent: ' + (j.request && j.request.label || kind));
+    else flashOk((j && j.detail) || 'Request failed');
+    poll();
+  });
+}
+function votePoll(idx) {
+  saveNick();
+  var frm = (document.getElementById('from_name').value || '').trim();
+  postForm('/vote', 'option=' + encodeURIComponent(idx) + '&from=' + encodeURIComponent(frm), function(st, j) {
+    if (st === 200 && j && j.ok) flashOk('Vote recorded');
+    else flashOk((j && j.detail) || 'Vote failed');
+    poll();
+  });
+}
+function markRequestDone(id) {
+  postForm('/request', 'action=done&id=' + encodeURIComponent(id || ''), function(st, j) {
+    flashOk((j && j.detail) || (st === 200 ? 'Done' : 'Failed'));
+    poll();
+  });
+}
+function doBroadcast() {
+  var inp = document.getElementById('bcast_msg');
+  var msg = (inp && inp.value || '').trim();
+  if (!msg) { flashOk('Type a broadcast message'); return; }
+  postForm('/broadcast', 'msg=' + encodeURIComponent(msg) + '&from=CJ', function(st, j) {
+    if (st === 200 && j && j.ok) { flashOk('Broadcast sent'); if (inp) inp.value = ''; }
+    else flashOk((j && j.detail) || 'Broadcast failed');
+    poll();
+  });
+}
+function doCreatePoll() {
+  var q = (document.getElementById('poll_question').value || '').trim();
+  var o = (document.getElementById('poll_options').value || '').trim();
+  if (!q || !o) { flashOk('Need question + options (A|B|…)'); return; }
+  postForm('/poll', 'question=' + encodeURIComponent(q) + '&options=' + encodeURIComponent(o), function(st, j) {
+    if (st === 200 && j && j.ok) flashOk('Poll created');
+    else flashOk((j && j.detail) || 'Poll failed');
+    poll();
+  });
+}
+function doClosePoll() {
+  postForm('/poll', 'action=close', function(st, j) {
+    flashOk((j && j.detail) || (st === 200 ? 'Poll closed' : 'No open poll'));
+    poll();
+  });
+}
+
 var LS_MUTE = 'grovelink_mute_chat';
 var LS_DENSITY = 'grovelink_density';
 var FILTER = 'all';
@@ -3067,6 +3722,10 @@ function sendMsg(msg) {
         okEl.textContent = 'Delivered to CJ - open INBOX (or watch on-screen SMS notify).';
         document.getElementById('msg').value = '';
         poll();
+      } else if (x.status === 429) {
+        var detail = 'Slow down — 1 text every 3 seconds.';
+        try { var jr = JSON.parse(x.responseText); if (jr && jr.detail) detail = jr.detail; } catch (e429) {}
+        okEl.textContent = detail;
       } else {
         okEl.textContent = 'Send failed.';
       }
@@ -3542,6 +4201,9 @@ function paint(data) {
   paintHud(data.hud || null);
   maybeWantedToast(data.hud || null);
   paintWatching(data.watching);
+  paintViewers(data.viewers || []);
+  paintPoll(data.poll || null);
+  paintRequests(data.requests || []);
   LAST_PLACES = data.places || [];
   renderChat(data.inbox || [], data.pinned || null);
   updateChatBadge(data.inbox || []);
@@ -3757,6 +4419,37 @@ document.getElementById('mark_read').onclick = function() {
     applyDensity(dens === 'bright' ? 'bright' : 'dark');
   } catch (e3) { applyDensity('dark'); }
 })();
+
+(function(){
+  setMode(getMode());
+  var mv = document.getElementById('mode_viewer');
+  var mh = document.getElementById('mode_host');
+  if (mv) mv.onclick = function(){ setMode('viewer'); flashOk('Viewer mode'); };
+  if (mh) mh.onclick = function(){ setMode('host'); flashOk('Host mode — local only (localStorage)'); };
+  var reqbar = document.getElementById('reqbar');
+  if (reqbar) {
+    var rbtns = reqbar.querySelectorAll('button[data-kind]');
+    for (var i = 0; i < rbtns.length; i++) {
+      rbtns[i].onclick = (function(b){
+        return function(){ sendRequest(b.getAttribute('data-kind')); };
+      })(rbtns[i]);
+    }
+  }
+  var bb = document.getElementById('bcast_btn');
+  if (bb) bb.onclick = doBroadcast;
+  var pc = document.getElementById('poll_create');
+  if (pc) pc.onclick = doCreatePoll;
+  var pcl = document.getElementById('poll_close');
+  if (pcl) pcl.onclick = doClosePoll;
+  var rc = document.getElementById('req_clear');
+  if (rc) rc.onclick = function(){
+    postForm('/request', 'action=clear', function(st, j){
+      flashOk((j && j.detail) || 'Cleared');
+      poll();
+    });
+  };
+})();
+
 // Light pull-to-refresh on feed
 (function(){
   var startY = 0;
@@ -4116,6 +4809,81 @@ def render_spectate_html():
     ).replace('__VER__', _esc(ver))
 
 
+
+def render_live_html():
+    """Watch party: spectate iframe on top, sticky chat below (mobile-friendly)."""
+    ver = STATE.get("version", "unknown") or "unknown"
+    ip = STATE.get("ip", "127.0.0.1")
+    port = STATE.get("port", 8088)
+    return (
+        "<!DOCTYPE html><html><head><meta charset=\"utf-8\">"
+        "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1,maximum-scale=1\">"
+        "<meta name=\"theme-color\" content=\"#0a1f0a\">"
+        "<title>GroveLink Watch Party</title>"
+        "<style>"
+        "html,body{margin:0;padding:0;background:#061206;color:#c8f0c8;font-family:Segoe UI,Arial,sans-serif;height:100%;}"
+        ".wrap{display:flex;flex-direction:column;height:100vh;max-height:100%;}"
+        ".top{flex:1 1 55%;min-height:180px;background:#000;position:relative;border-bottom:2px solid #2ecc71;}"
+        ".top iframe{width:100%;height:100%;border:0;display:block;}"
+        ".badge{position:absolute;top:8px;left:8px;background:rgba(10,40,10,0.85);border:1px solid #2ecc71;"
+        "color:#7CFF7C;padding:4px 10px;border-radius:999px;font-size:12px;z-index:2;}"
+        ".bot{flex:1 1 45%;min-height:200px;display:flex;flex-direction:column;overflow:hidden;}"
+        ".bar{padding:8px 12px;background:#0d220d;border-bottom:1px solid #1a4a1a;font-size:13px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;}"
+        ".bar a{color:#7CFF7C;}"
+        ".chat{flex:1;overflow:auto;padding:10px 12px;}"
+        ".row{margin:0 0 8px;padding:8px 10px;border-radius:10px;background:#102810;border:1px solid #1e4a1e;max-width:92%;}"
+        ".row.cj{background:#143214;border-color:#2ecc71;margin-left:auto;}"
+        ".row.sys{background:#1a2a12;border-color:#c4a35a;font-style:italic;}"
+        ".meta{font-size:10px;color:#7aaa7a;margin-bottom:3px;}"
+        ".composer{display:flex;gap:8px;padding:10px;background:#0d220d;border-top:1px solid #1a4a1a;}"
+        ".composer input{flex:1;padding:10px;border-radius:8px;border:1px solid #2ecc71;background:#061206;color:#c8f0c8;}"
+        ".composer button{padding:10px 14px;border-radius:8px;border:0;background:#2ecc71;color:#041204;font-weight:700;}"
+        ".empty{color:#6a9a6a;font-size:13px;padding:12px;}"
+        "@media(min-width:900px){.wrap{flex-direction:row;}.top{flex:1 1 60%;border-bottom:0;border-right:2px solid #2ecc71;}.bot{flex:1 1 40%;}}"
+        "</style></head><body>"
+        "<div class=\"wrap\">"
+        "<div class=\"top\"><div class=\"badge\">WATCH PARTY · v" + _esc(ver) + "</div>"
+        "<iframe src=\"/spectate\" title=\"LIVE SPECTATE\"></iframe></div>"
+        "<div class=\"bot\">"
+        "<div class=\"bar\"><b>Chat with CJ</b> · <a href=\"/\">Phone page</a> · <a href=\"/spectate\">Spectate only</a>"
+        " · <span id=\"vc\">0 viewers</span></div>"
+        "<div class=\"chat\" id=\"chat\"><div class=\"empty\">Waiting for messages… text CJ below.</div></div>"
+        "<div class=\"composer\"><input id=\"msg\" maxlength=\"80\" placeholder=\"Message to CJ…\">"
+        "<button type=\"button\" id=\"send\">SEND</button></div>"
+        "</div></div>"
+        "<script>"
+        "(function(){"
+        "function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\"/g,'&quot;').replace(/'/g,'&#39;');}"
+        "function nick(){try{return localStorage.getItem('grovelink_nickname')||'REAL PHONE';}catch(e){return 'REAL PHONE';}}"
+        "function paint(inbox, viewers){"
+        "  var el=document.getElementById('chat'); if(!el) return;"
+        "  var rows=(inbox||[]).slice().reverse();"
+        "  if(!rows.length){el.innerHTML='<div class=\"empty\">Waiting for viewers / messages…</div>';}"
+        "  else{var h=''; for(var i=0;i<rows.length;i++){var m=rows[i]||{};"
+        "    var cls='row'; if(m.role==='cj'||m.side==='cj') cls+=' cj'; if(m.broadcast||m.system) cls+=' sys';"
+        "    h+='<div class=\"'+cls+'\"><div class=\"meta\">'+esc(m.from||'?')+' · '+esc(m.when||'')+"
+        "      (m.broadcast?' · BROADCAST':'')+'</div>'+esc(m.msg||'')+'</div>';}"
+        "    el.innerHTML=h; el.scrollTop=el.scrollHeight;}"
+        "  var vc=document.getElementById('vc');"
+        "  if(vc){var n=(viewers&&viewers.length)||0; vc.textContent=n+' viewer'+(n===1?'':'s');}"
+        "}"
+        "function poll(){var x=new XMLHttpRequest(); x.open('GET','/api',true); x.onreadystatechange=function(){"
+        "  if(x.readyState===4&&x.status===200){try{var j=JSON.parse(x.responseText); paint(j.inbox,j.viewers);}catch(e){}}"
+        "}; x.send();}"
+        "function send(){var inp=document.getElementById('msg'); var msg=(inp&&inp.value||'').trim(); if(!msg)return;"
+        "  var body='msg='+encodeURIComponent(msg)+'&from='+encodeURIComponent(nick());"
+        "  var x=new XMLHttpRequest(); x.open('POST','/send',true);"
+        "  x.setRequestHeader('Content-Type','application/x-www-form-urlencoded');"
+        "  x.onreadystatechange=function(){if(x.readyState===4){if(x.status===200){if(inp)inp.value=''; poll();}"
+        "    else if(x.status===429){alert('Slow down — 1 text / 3s');}else{alert('Send failed');}}};"
+        "  x.send(body);}"
+        "document.getElementById('send').onclick=send;"
+        "document.getElementById('msg').onkeydown=function(e){if(e.keyCode===13){e.preventDefault();send();}};"
+        "poll(); setInterval(poll,2000);"
+        "})();</script></body></html>"
+    )
+
+
 def spectate_payload():
     photos = STATE.get("photos", [])
     latest = ""
@@ -4233,6 +5001,11 @@ def api_payload():
         "streak": _streak.get("streak", 0),
         "photo_days": _streak.get("photo_days", 0),
         "streak_dates": _streak.get("dates") or [],
+        "viewers": list_active_viewers(),
+        "viewer_count": len(list_active_viewers()),
+        "poll": poll_payload(),
+        "requests": pending_requests(),
+        "request_kinds": list(ALLOWED_REQUEST_KINDS),
     }
 
 
@@ -4564,6 +5337,18 @@ class Handler(BaseHTTPRequestHandler):
             # GET list of favorites
             self._json({"ok": True, "favorites": sorted(load_favorites())})
             return
+        if path == "/live" or path == "/live/":
+            self._html(render_live_html())
+            return
+        if path == "/api/poll":
+            self._json({"ok": True, "poll": poll_payload()})
+            return
+        if path == "/api/requests":
+            self._json({"ok": True, "requests": load_requests(), "pending": pending_requests()})
+            return
+        if path == "/api/viewers":
+            self._json({"ok": True, "viewers": list_active_viewers()})
+            return
         self.send_error(404)
 
     def do_POST(self):
@@ -4780,6 +5565,26 @@ class Handler(BaseHTTPRequestHandler):
             if not ok:
                 self._json({"ok": False, "detail": detail}, code=400)
                 return
+            try:
+                # Best-effort: nick from body if present
+                nick = ""
+                if text_body.lstrip().startswith("{"):
+                    try:
+                        nick = (json.loads(text_body).get("from") or json.loads(text_body).get("name") or "")
+                    except Exception:
+                        nick = ""
+                else:
+                    rf = parse_qs(text_body)
+                    if "from" in rf and rf["from"]:
+                        nick = rf["from"][0]
+                    elif "name" in rf and rf["name"]:
+                        nick = rf["name"][0]
+                if nick:
+                    note_active_viewer(nick, _client_ip_from_handler(self))
+                else:
+                    note_active_viewer("Viewer", _client_ip_from_handler(self))
+            except Exception:
+                pass
             self._json({
                 "ok": True,
                 "entry": detail,
@@ -4817,6 +5622,161 @@ class Handler(BaseHTTPRequestHandler):
             }, code=code)
             return
 
+        # --- 2.4.0 interactive POSTs ---
+        if path == "/broadcast" or path == "/api/broadcast":
+            msg = ""
+            frm = "CJ"
+            if text_body.lstrip().startswith("{"):
+                try:
+                    obj = json.loads(text_body)
+                    msg = obj.get("msg") or obj.get("message") or ""
+                    frm = obj.get("from") or frm
+                except Exception:
+                    msg = ""
+            else:
+                fields = parse_qs(text_body)
+                if "msg" in fields and fields["msg"]:
+                    msg = fields["msg"][0]
+                elif "message" in fields and fields["message"]:
+                    msg = fields["message"][0]
+                if "from" in fields and fields["from"]:
+                    frm = fields["from"][0]
+            ok, entry, detail = do_broadcast(msg, frm)
+            if not ok:
+                self._json({"ok": False, "detail": detail}, code=400)
+                return
+            self._json({"ok": True, "entry": entry, "detail": detail, "broadcast": True})
+            return
+
+        if path == "/request" or path == "/api/request":
+            kind = ""
+            frm = "Viewer"
+            action = ""
+            req_id = ""
+            if text_body.lstrip().startswith("{"):
+                try:
+                    obj = json.loads(text_body)
+                    kind = obj.get("kind") or obj.get("request") or ""
+                    frm = obj.get("from") or obj.get("name") or frm
+                    action = str(obj.get("action") or obj.get("status") or "")
+                    req_id = obj.get("id") or ""
+                    if obj.get("done") in (1, True, "1", "true", "yes"):
+                        action = "done"
+                    if obj.get("clear") in (1, True, "1", "true", "yes"):
+                        action = "clear"
+                except Exception:
+                    kind = ""
+            else:
+                fields = parse_qs(text_body)
+                if "kind" in fields and fields["kind"]:
+                    kind = fields["kind"][0]
+                elif "request" in fields and fields["request"]:
+                    kind = fields["request"][0]
+                if "from" in fields and fields["from"]:
+                    frm = fields["from"][0]
+                elif "name" in fields and fields["name"]:
+                    frm = fields["name"][0]
+                if "action" in fields and fields["action"]:
+                    action = fields["action"][0]
+                if "id" in fields and fields["id"]:
+                    req_id = fields["id"][0]
+                if "done" in fields and fields["done"] and fields["done"][0] in ("1", "true", "yes"):
+                    action = "done"
+                if "clear" in fields and fields["clear"] and fields["clear"][0] in ("1", "true", "yes"):
+                    action = "clear"
+            cip = _client_ip_from_handler(self)
+            action = (action or "").strip().lower()
+            if action in ("done", "complete", "mark_done"):
+                ok, detail = mark_request_done(req_id, clear_all=False)
+                code = 200 if ok else 404
+                self._json({"ok": ok, "detail": detail, "pending": pending_requests()}, code=code)
+                return
+            if action in ("clear", "clear_all"):
+                ok, detail = mark_request_done("", clear_all=True)
+                self._json({"ok": ok, "detail": detail, "pending": pending_requests()})
+                return
+            ok, entry, detail = enqueue_request(kind, frm, ip=cip)
+            if not ok:
+                self._json({"ok": False, "detail": detail}, code=400)
+                return
+            self._json({"ok": True, "request": entry, "detail": detail, "pending": pending_requests()})
+            return
+
+        if path == "/poll" or path == "/api/poll":
+            question = ""
+            options = []
+            action = ""
+            if text_body.lstrip().startswith("{"):
+                try:
+                    obj = json.loads(text_body)
+                    question = obj.get("question") or obj.get("q") or ""
+                    options = obj.get("options") or obj.get("opts") or []
+                    action = str(obj.get("action") or "")
+                    if obj.get("close") in (1, True, "1", "true", "yes"):
+                        action = "close"
+                except Exception:
+                    question = ""
+            else:
+                fields = parse_qs(text_body)
+                if "question" in fields and fields["question"]:
+                    question = fields["question"][0]
+                elif "q" in fields and fields["q"]:
+                    question = fields["q"][0]
+                if "options" in fields and fields["options"]:
+                    options = fields["options"][0]
+                elif "opts" in fields and fields["opts"]:
+                    options = fields["opts"][0]
+                if "option" in fields:
+                    options = fields.get("option") or options
+                if "action" in fields and fields["action"]:
+                    action = fields["action"][0]
+                if "close" in fields and fields["close"] and fields["close"][0] in ("1", "true", "yes"):
+                    action = "close"
+            action = (action or "").strip().lower()
+            if action in ("close", "end"):
+                ok, poll, detail = close_poll(write_inbox=True)
+                code = 200 if ok else 400
+                self._json({"ok": ok, "poll": poll_payload(poll), "detail": detail}, code=code)
+                return
+            ok, poll, detail = create_poll(question, options, frm="Host")
+            if not ok:
+                self._json({"ok": False, "detail": detail}, code=400)
+                return
+            self._json({"ok": True, "poll": poll_payload(poll), "detail": detail})
+            return
+
+        if path == "/vote" or path == "/api/vote":
+            option = ""
+            nick = ""
+            if text_body.lstrip().startswith("{"):
+                try:
+                    obj = json.loads(text_body)
+                    option = obj.get("option")
+                    if option is None:
+                        option = obj.get("index")
+                    if option is None:
+                        option = obj.get("vote")
+                    nick = obj.get("from") or obj.get("name") or ""
+                except Exception:
+                    option = ""
+            else:
+                fields = parse_qs(text_body)
+                if "option" in fields and fields["option"]:
+                    option = fields["option"][0]
+                elif "index" in fields and fields["index"]:
+                    option = fields["index"][0]
+                elif "vote" in fields and fields["vote"]:
+                    option = fields["vote"][0]
+                if "from" in fields and fields["from"]:
+                    nick = fields["from"][0]
+                elif "name" in fields and fields["name"]:
+                    nick = fields["name"][0]
+            cip = _client_ip_from_handler(self)
+            ok, poll, detail = vote_poll(option, ip=cip, nick=nick)
+            code = 200 if ok else 400
+            self._json({"ok": ok, "poll": poll_payload(poll), "detail": detail}, code=code)
+            return
+
         if path != "/send":
             self.send_error(404)
             return
@@ -4840,7 +5800,18 @@ class Handler(BaseHTTPRequestHandler):
         msg = (msg or "").strip().replace("\r", " ").replace("\n", " ")[:80]
         frm = (frm or "REAL PHONE").strip().replace("\r", " ").replace("\n", " ")[:40] or "REAL PHONE"
         if msg:
+            cip = _client_ip_from_handler(self)
+            ok_rl, wait = check_send_rate_limit(cip)
+            if not ok_rl:
+                self._json({
+                    "ok": False,
+                    "delivered": False,
+                    "detail": "rate limit: wait %.1fs between texts" % wait,
+                    "retry_after": wait,
+                }, code=429)
+                return
             entry = append_chat_delivered(frm, msg)
+            note_active_viewer(frm, cip)
             STATE["sent"] = STATE.get("sent", 0) + 1
             write_ini_kv(self.server.link_ini, "INBOX", {
                 "new": "1",
@@ -4965,6 +5936,10 @@ def watcher(cfg, gta_dir, ini):
                 process_outbox_flag(ini)
             except Exception as exc:
                 print("outbox watch error:", exc)
+            try:
+                process_poll_section(ini)
+            except Exception as exc:
+                print("poll watch error:", exc)
             if process_photo_and_news_flags(cfg, gta_dir, ini):
                 # Race fix: another snap/make/frame may have arrived during burst - loop now
                 if (

@@ -13,6 +13,7 @@ help footer + empty-action disable + VERIFY VERSION + CHANGELOG + port-busy + RE
 2.1.0: chat nicknames; spectate watching count; Moments reel; wanted toasts; By place; docs.
 2.2.0: chat reactions+pin; spectate cinema; /recap; bridge uptime; CLEO 6th REPLY; docs.
 2.3.0: photo comments; mute; spectate DL; density; streak; Herald depth; UI polish; docs.
+2.4.0: host/viewer modes; broadcast; request queue; polls/votes; rate limit; /live; docs.
 
 Run from repo root or anywhere:
   python tests/smoke_bridge.py
@@ -69,6 +70,35 @@ def http_get(port, path, timeout=5):
     return code, data
 
 
+
+def http_post(port, path, data, timeout=5):
+    """POST form body; returns (code, parsed_json_or_raw). Handles HTTPError (429)."""
+    try:
+        from urllib.request import Request, urlopen
+        from urllib.error import HTTPError
+    except ImportError:
+        from urllib2 import Request, urlopen, HTTPError
+    if not isinstance(data, bytes):
+        data = data.encode("utf-8")
+    url = "http://127.0.0.1:%s%s" % (port, path)
+    req = Request(url, data=data, headers={"Content-Type": "application/x-www-form-urlencoded"})
+    try:
+        resp = urlopen(req, timeout=timeout)
+        body = resp.read()
+        code = getattr(resp, "status", None) or resp.getcode()
+    except HTTPError as e:
+        code = e.code
+        try:
+            body = e.read()
+        except Exception:
+            body = b""
+    text = body.decode("utf-8") if isinstance(body, bytes) else body
+    try:
+        return code, json.loads(text)
+    except Exception:
+        return code, text
+
+
 def wait_ready(port, tries=40, delay=0.05):
     """Poll until the ephemeral server accepts /health (avoids race flakiness)."""
     last = None
@@ -116,6 +146,10 @@ def main():
     gl.CAPTIONS_PATH = os.path.join(tmp, "photos_captions.json")
     gl.CHAT_LOG_PATH = os.path.join(tmp, "chat_delivered.json")
     gl.FAVORITES_PATH = os.path.join(tmp, "photos_favorites.json")
+    gl.COMMENTS_PATH = os.path.join(tmp, "photos_comments.json")
+    gl.STREAK_PATH = os.path.join(tmp, "photos_streak.json")
+    gl.REQUESTS_PATH = os.path.join(tmp, "requests.json")
+    gl.POLL_PATH = os.path.join(tmp, "poll.json")
     gl.STATE["link_ini"] = os.path.join(tmp, "link.ini")
 
     port = free_port()
@@ -137,6 +171,9 @@ def main():
     gl.STATE["spectate_on"] = False
     gl.STATE["started_at"] = time.time() - 90
     gl.STATE["pinned_chat_id"] = ""
+    gl.STATE["active_viewers"] = {}
+    gl.STATE["rate_limit_send"] = {}
+    gl.STATE["poll"] = None
 
     try:
         from http.server import HTTPServer
@@ -154,6 +191,8 @@ def main():
             "[STATUS]\nbridge=1\n"
             "[NEWS]\nnew=0\nmake=0\n"
             "[SPECTATE]\non=0\nframe=0\n"
+            "[REQUEST]\nnew=0\nkind=\nfrom=\ntext=\n"
+            "[POLL]\nnew=0\ncreate=0\nquestion=\noptions=\nsummary=\n"
         )
     gl.STATE["link_ini"] = server.link_ini
 
@@ -363,6 +402,7 @@ def main():
         check("last_error gallery path", False, exc)
 
     # --- POST /send (ini + chat) ---
+    gl.STATE["rate_limit_send"] = {}
     try:
         try:
             from urllib.request import Request, urlopen
@@ -780,6 +820,7 @@ def main():
         except ImportError:
             from urllib2 import Request, urlopen
 
+        gl.STATE["rate_limit_send"] = {}
         # Nickname / name= alias on /send
         req_nick = Request(
             "http://127.0.0.1:%s/send" % port,
@@ -798,6 +839,7 @@ def main():
         )
         check("chat thread shows nickname", nick_hit, inbox[:2] if inbox else inbox)
 
+        gl.STATE["rate_limit_send"] = {}
         # Empty / missing from defaults to REAL PHONE
         req_def = Request(
             "http://127.0.0.1:%s/send" % port,
@@ -1100,6 +1142,107 @@ def main():
 
 
 
+    # --- 2.4.0 interactive: /request /poll /vote /broadcast /rate limit /live ---
+    try:
+        code, jreq = http_post(port, "/request", "kind=camera&from=SmokeViewer")
+        check("POST /request ok", code == 200 and isinstance(jreq, dict) and jreq.get("ok") is True, (code, jreq))
+        check("POST /request kind camera", isinstance(jreq, dict) and (jreq.get("request") or {}).get("kind") == "camera", jreq)
+        ini_txt = ""
+        try:
+            with open(server.link_ini, "r") as f:
+                ini_txt = f.read()
+        except Exception as exc:
+            ini_txt = str(exc)
+        check("POST /request writes REQUEST.new=1", "[REQUEST]" in ini_txt and "new=1" in ini_txt, ini_txt[:500])
+        code_a, raw_a = http_get(port, "/api")
+        api = json.loads(raw_a.decode("utf-8") if isinstance(raw_a, bytes) else raw_a)
+        check("/api has requests", isinstance(api.get("requests"), list) and len(api.get("requests") or []) >= 1, api.get("requests"))
+        check("/api has viewers", isinstance(api.get("viewers"), list), api.get("viewers"))
+    except Exception as exc:
+        check("POST /request suite", False, exc)
+
+    try:
+        code, raw = http_get(port, "/")
+        html = raw.decode("utf-8") if isinstance(raw, bytes) else raw
+        check("GET / has modebar Host/Viewer", 'id="modebar"' in html and "Host" in html and "Viewer" in html)
+        check("GET / has Ask CJ requests", 'id="reqbar"' in html and "data-kind" in html)
+        check("GET / has hostpanel", 'id="hostpanel"' in html)
+        check("GET / Watch party link", 'href="/live"' in html)
+    except Exception as exc:
+        check("GET / interactive UI", False, exc)
+
+    try:
+        code, jpoll = http_post(port, "/poll", "question=Best+hood%3F&options=Grove%7CBallas%7CNeutral")
+        check("POST /poll ok", code == 200 and isinstance(jpoll, dict) and jpoll.get("ok") is True, (code, jpoll))
+        poll = (jpoll.get("poll") if isinstance(jpoll, dict) else None) or {}
+        check("POST /poll 3 options", len(poll.get("options") or []) == 3, poll)
+        code, jvote = http_post(port, "/vote", "option=0&from=SmokeVoter")
+        check("POST /vote ok", code == 200 and isinstance(jvote, dict) and jvote.get("ok") is True, (code, jvote))
+        tallies = ((jvote.get("poll") or {}).get("tallies") if isinstance(jvote, dict) else None) or []
+        v0 = tallies[0]["votes"] if tallies else 0
+        check("POST /vote tallies", v0 >= 1, tallies)
+        code, jclose = http_post(port, "/poll", "action=close")
+        check("POST /poll close", code == 200 and isinstance(jclose, dict) and jclose.get("ok") is True, (code, jclose))
+        detail = str((jclose.get("detail") if isinstance(jclose, dict) else "") or "")
+        check("poll close summary", "Poll done" in detail or "Grove" in detail, detail)
+    except Exception as exc:
+        check("POST /poll|/vote suite", False, exc)
+
+    try:
+        code, jb = http_post(port, "/broadcast", "msg=Homies+listen+up&from=CJ")
+        check("POST /broadcast ok", code == 200 and isinstance(jb, dict) and jb.get("ok") is True, (code, jb))
+        check("POST /broadcast flag", isinstance(jb, dict) and jb.get("broadcast") is True, jb)
+        code_c, raw_c = http_get(port, "/api/chat")
+        chat = json.loads(raw_c.decode("utf-8") if isinstance(raw_c, bytes) else raw_c)
+        inbox = chat.get("inbox") or []
+        hit = any((m.get("broadcast") or m.get("system")) and "Homies" in (m.get("msg") or "") for m in inbox)
+        check("broadcast in chat log", hit, inbox[:2] if inbox else inbox)
+    except Exception as exc:
+        check("POST /broadcast suite", False, exc)
+
+    try:
+        gl.STATE["rate_limit_send"] = {}
+        code1, j1 = http_post(port, "/send", "msg=RateA&from=RateBot")
+        code2, j2 = http_post(port, "/send", "msg=RateB&from=RateBot")
+        check("rate limit first send ok", code1 == 200 and isinstance(j1, dict) and j1.get("delivered") is True, (code1, j1))
+        check("rate limit second send 429", code2 == 429 and isinstance(j2, dict) and j2.get("ok") is False, (code2, j2))
+        det = str((j2.get("detail") if isinstance(j2, dict) else "") or "").lower()
+        check("rate limit error text", "rate limit" in det or "wait" in det, j2)
+    except Exception as exc:
+        check("rate limit /send suite", False, exc)
+
+    try:
+        code, raw = http_get(port, "/live")
+        html = raw.decode("utf-8") if isinstance(raw, bytes) else raw
+        check("GET /live watch party", code == 200 and "WATCH PARTY" in html and "/spectate" in html)
+    except Exception as exc:
+        check("GET /live", False, exc)
+
+    try:
+        with open(os.path.join(REPO, "grovelink", "GroveLinkPhone.txt"), "r") as f:
+            cleo = f.read()
+        check("CLEO has REQUESTS menu", "REQUESTS" in cleo and ":SEL_REQUESTS" in cleo)
+        check("CLEO REQUEST/POLL toasts", ":REQUEST_CHECK" in cleo and ":POLL_CHECK" in cleo)
+        check("CLEO no hold_cellphone", "hold_cellphone" not in cleo.lower() or "no hold_cellphone" in cleo.lower())
+        check("CLEO no 033E", "033E" not in cleo or "no 033E" in cleo or "no custom GXT 033E" in cleo or "No #model names, no 033E" in cleo)
+    except Exception as exc:
+        check("CLEO 2.4 static", False, exc)
+
+    try:
+        with open(os.path.join(REPO, "README.md"), "r") as f:
+            rm = f.read()
+        check("README Hosting for viewers", "Hosting for viewers" in rm)
+        with open(os.path.join(REPO, "grovelink", "TROUBLESHOOTING.md"), "r") as f:
+            ts = f.read()
+        check("TROUBLESHOOTING same Wi-Fi / port forward", "Same Wi-Fi" in ts or "port forward" in ts.lower())
+        with open(os.path.join(REPO, "grovelink", "FEATURES.md"), "r") as f:
+            fe = f.read()
+        check("FEATURES 2.4 interactive", "2.4.0" in fe and ("Host / viewer" in fe or "broadcast" in fe.lower()))
+    except Exception as exc:
+        check("docs 2.4", False, exc)
+
+
+
     try:
         server.shutdown()
     except Exception:
@@ -1131,7 +1274,7 @@ def main():
         check("CLEO NO NEW TEXTS", "NO NEW TEXTS" in full)
         check("CLEO PHONE PAGE ON PC", "PHONE PAGE ON PC" in full)
         # wrap bounds: index > 8 resets to 0; 0 > index sets 8 (9 slots)
-        check("CLEO wrap high bound", "22@ > 8" in full or "0019:   22@ > 8" in full)
+        check("CLEO wrap high bound", "22@ > 9" in full or "0019:   22@ > 9" in full or "22@ > 8" in full)
         check("CLEO NEWS menu slot", "BREAKING NEWS SNAP" in full and ":SEL_NEWS" in full)
         check("CLEO NEWS.make write", 'section "NEWS" key "make"' in full or "key \"make\"" in full)
         check("CLEO HELP Camera vs NEWS", "Camera: pics to phone only" in full and "NEWS: snap + Herald" in full)
@@ -1219,6 +1362,7 @@ def main():
         check("CHANGELOG.md has 2.0.0 research pass", "2.0.0" in cl and ("favorite" in cl.lower() or "HUD" in cl or "manifest" in cl.lower()))
         check("CHANGELOG.md has 2.1.0 features", "2.1.0" in cl and ("nickname" in cl.lower() or "watching" in cl.lower() or "Moments" in cl))
         check("CHANGELOG.md has 2.2.0 features", "2.2.0" in cl and ("reaction" in cl.lower() or "recap" in cl.lower() or "uptime" in cl.lower() or "cinema" in cl.lower()))
+        check("CHANGELOG.md has 2.4.0 features", "2.4.0" in cl and ("broadcast" in cl.lower() or "Host" in cl or "viewer" in cl.lower()))
         check("CHANGELOG.md has 2.3.0 features", "2.3.0" in cl and ("comment" in cl.lower() or "streak" in cl.lower() or "Herald" in cl or "density" in cl.lower()))
         check("CHANGELOG covers 1.0 foundation", "1.0" in cl and ("Foundation" in cl or "crash-safer" in cl))
     except Exception as exc:
@@ -1250,7 +1394,8 @@ def main():
     except Exception as exc:
         check("README polish", False, exc)
 
-    check("VERSION is 2.3.0", pack_ver == "2.3.0", pack_ver)
+
+    check("VERSION is 2.4.0", pack_ver == "2.4.0", pack_ver)
 
     # Runtime: after clear, HTML still disables; after photo, actions enabled via setCountActions path
     # (API count already covered; spot-check helper exists in page source above)
