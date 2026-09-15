@@ -72,6 +72,14 @@ Also checked: `My Documents\...`, Public Documents, and paths in `bridge\config.
 - Edit `bridge\config.ini` `[paths] gallery_dir=` if your user files live elsewhere.  
 - Check `/health` → `galleries` array.
 
+## Bridge says “port 8088 busy”
+
+Another GroveLink window (or app) is already using that TCP port.
+
+1. Close every **GroveLink Phone** / START_GROVELINK black window.  
+2. Or edit `grovelink\bridge\config.ini` → `[server] port=` to a free port, then start again.  
+3. Re-run Desktop **GroveLink Phone**. The bridge prints plain English **port N busy** when bind fails.
+
 ## Phone can’t connect (Wi-Fi / firewall / IP)
 
 1. PC and phone on the **same Wi-Fi** (not guest/VPN isolation).  

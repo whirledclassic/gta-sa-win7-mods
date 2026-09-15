@@ -1,16 +1,22 @@
 # GTA San Andreas — Windows 7 Mods
 
-Two single-player CLEO mods for **GTA SA PC 1.0** on **Windows 7**.
+CLEO mods for **GTA SA PC 1.0** on **Windows 7** (pack version: root **`VERSION`**).
+
+**Noob path:** Extract zip → **`INSTALL.bat`** (Run as admin) → optional **`UPDATE_GROVELINK.bat`** → **`VERIFY_GROVELINK.bat`** → Desktop **GroveLink Phone** → launch GTA → **K** → Camera → Enter/Space.
 
 | Mod | What it does |
 |-----|----------------|
-| [GroveLink Phone](grovelink/) | Real in-game cellphone. Photos go to your **real phone** on the same Wi-Fi. |
-| [Mission Switcher](switcher/) | Stand next to Smoke, Sweet, Ryder, Cesar… press **H**. **J** returns to CJ. |
+| [GroveLink Phone](grovelink/) | In-game cellphone; photos → your **real phone** (same Wi-Fi). |
+| [Mission Switcher](switcher/) | Near Smoke/Sweet/Ryder/Cesar… **H** become them; **J** = CJ. |
 
-Not affiliated with Rockstar Games. Single-player only.
+Docs: [FEATURES](grovelink/FEATURES.md) · [CHANGELOG](CHANGELOG.md) · [TROUBLESHOOTING](grovelink/TROUBLESHOOTING.md). Not affiliated with Rockstar. Single-player only.
 
-Pack version is in the root **`VERSION`** file (also shown on the phone page header and `/health`).
+## Changelog — 1.7.1 (polish)
 
+- Bridge: plain English **port N busy** if TCP 8088 (or configured port) is already in use
+- Root README noob path first; `update.ini` comments; smoke hardened for **1.7.1**
+- Bug review of INSTALL / UPDATE / VERIFY / START / bridge / CLEO — fixes only, no new chrome
+- After merge PR #1, set `branch=main` in root **`update.ini`** (keep `fix/grovelink-camera-snapshots` until then)
 
 ## Changelog — 1.7.0 (Round 7)
 
@@ -19,7 +25,6 @@ Pack version is in the root **`VERSION`** file (also shown on the phone page hea
 - **Docs:** root **`CHANGELOG.md`** (1.0→1.7 highlights); FEATURES synced
 - **Smoke:** help footer, empty-action disable, VERIFY VERSION checks
 - CLEO STATUS photo count flash unchanged (Camera already shows PHOTO TAKEN #)
-- Prior 1.6.0 notes below remain relevant
 
 ## Changelog — 1.6.0 (Round 6)
 
@@ -30,7 +35,6 @@ Pack version is in the root **`VERSION`** file (also shown on the phone page hea
 - **CLEO:** CONTACTS adds **Catalina** (cycle Sweet→Smoke→Ryder→Cesar→Catalina)
 - **START:** strip trailing CR from VERSION print
 - **Smoke:** extended for sort HTML, clear confirm, last_error via bad gallery, Catalina, INSTALL warning
-- Prior 1.5.0 notes below remain relevant
 
 ## Changelog — 1.5.0 (Round 5)
 
@@ -44,7 +48,7 @@ Pack version is in the root **`VERSION`** file (also shown on the phone page hea
 Feature list: [grovelink/FEATURES.md](grovelink/FEATURES.md).
 
 
-## One-click install (beginners start here)
+## One-click install (details)
 
 1. Extract the zip to Desktop or Downloads.
 2. Right-click **`INSTALL.bat`** → **Run as administrator**.
@@ -76,7 +80,7 @@ If GroveLink is already on this PC and you just want the **latest** pack (no ful
 
 No Git required. The updater downloads a zip from GitHub (Win7-safe), copies files over your install, and re-runs **INSTALL.bat**.
 
-Branch is read from root **`update.ini`** (default while PR #1 is open: `fix/grovelink-camera-snapshots`). After that PR merges, change `branch=main` in `update.ini`. Override anytime with env `UPDATE_BRANCH`. Optional `release=latest` tries a GitHub Release zipball first.
+Branch is read from root **`update.ini`** (default while PR #1 is open: `fix/grovelink-camera-snapshots`). **After merge PR #1, set `branch=main`** in `update.ini`. Override anytime with env `UPDATE_BRANCH`. Optional `release=latest` tries a GitHub Release zipball first.
 
 Offline / no network? See [grovelink/TROUBLESHOOTING.md](grovelink/TROUBLESHOOTING.md) → **Updating / outdated version**.
 
@@ -96,6 +100,8 @@ Offline / no network? See [grovelink/TROUBLESHOOTING.md](grovelink/TROUBLESHOOTI
 5. In GTA: **K** → Camera → **Enter** or **Space** — shot appears within a couple of seconds. Menu includes **HELP** (START GROVELINK + UPDATE_GROVELINK tips). **STATUS** shows **BRIDGE LIVE** / **NO BRIDGE** + shot count.
 
 Phone page extras: **LIVE** pulse + reconnect banner, prominent **version / photo count**, **Newest/Oldest** sort, **Hidden from phone** skip note, **Export zip**, filename **search**, **Clear all phone copies** (confirm required), empty-state **large LAN IP**, pinch-friendly delete confirm, **All / Today** tabs, quick replies, `/api` `last_error` + `skipped_deleted`, `server.poll_ms` (default **2000**). Double-test: `tests/smoke_bridge.py` or `grovelink/bridge/TEST_BRIDGE.bat`.
+
+If the bridge says **port 8088 busy**, close the other GroveLink window (or free that TCP port) and start again.
 
 Feature list: [grovelink/FEATURES.md](grovelink/FEATURES.md). Stuck? See [grovelink/TROUBLESHOOTING.md](grovelink/TROUBLESHOOTING.md).
 

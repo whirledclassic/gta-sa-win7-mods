@@ -1992,7 +1992,35 @@ def main():
     t.daemon = True
     t.start()
 
-    server = HTTPServer(("0.0.0.0", port), Handler)
+    try:
+        server = HTTPServer(("0.0.0.0", port), Handler)
+    except (OSError, socket.error) as exc:
+        # Plain English for Win7 beginners (EADDRINUSE / WSAEADDRINUSE)
+        err = str(exc).lower()
+        busy = (
+            "address already in use" in err
+            or "only one usage of each socket address" in err
+            or getattr(exc, "errno", None) in (98, 10048)  # Linux EADDRINUSE / Win WSAEADDRINUSE
+            or getattr(exc, "winerror", None) == 10048
+        )
+        if busy:
+            print("")
+            print("================================================")
+            print("  Port %s busy" % port)
+            print("================================================")
+            print("  Another GroveLink (or app) is already using")
+            print("  TCP port %s on this PC." % port)
+            print("")
+            print("  Fix: close the other GroveLink bridge window,")
+            print("  or change [server] port= in config.ini, then")
+            print("  run START_GROVELINK again.")
+            print("================================================")
+            sys.stdout.flush()
+            return
+        print("Could not start bridge on port %s:" % port, exc)
+        sys.stdout.flush()
+        return
+
     server.link_ini = ini
     try:
         server.serve_forever()

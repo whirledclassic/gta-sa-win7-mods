@@ -1,6 +1,6 @@
 # GroveLink — current features
 
-Pack version: see root **`VERSION`** (`1.7.0`). Crash-safer CLEO (no `hold_cellphone`, no custom GXT `033E`). Bridge is **stdlib-only** (Win7 Python 2.7 / 3.4–3.8).
+Pack version: see root **`VERSION`** (`1.7.1`). Crash-safer CLEO (no `hold_cellphone`, no custom GXT `033E`). Bridge is **stdlib-only** (Win7 Python 2.7 / 3.4–3.8).
 
 ## Install / update / verify / test
 
@@ -14,6 +14,7 @@ Pack version: see root **`VERSION`** (`1.7.0`). Crash-safer CLEO (no `hold_cellp
 | **Smoke test** | `tests/smoke_bridge.py` (Linux/Win7, stdlib) or `grovelink/bridge/TEST_BRIDGE.bat` — asserts `/health`, `/api`, `/export.zip`, `/clear` confirm, HTML sort, CLEO static |
 | **Desktop starters** | **GroveLink Phone**, `START_GROVELINK`, `VERIFY_GROVELINK`, `UPDATE_GROVELINK`, `GroveLink_README.txt`, `GroveLink_PHONE_URL.txt`, `GroveLink_REPO.txt` (not INSTALL itself) |
 | **START bat** | Prints pack **VERSION** (CR-stripped); if Python missing, clear Win7 3.8.10 instructions + opens python.org download page |
+| **Port in use** | Bridge prints plain English **port N busy** if TCP bind fails (close other GroveLink / free the port) |
 
 ## In-game phone (CLEO)
 

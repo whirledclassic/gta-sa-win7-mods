@@ -1,6 +1,14 @@
 # GroveLink changelog
 
-Human-readable highlights from pack **1.0 → 1.7**. Full detail also lives in root `README.md` round notes and [grovelink/FEATURES.md](grovelink/FEATURES.md).
+Human-readable highlights from pack **1.0 → 1.7.1**. Full detail also lives in root `README.md` round notes and [grovelink/FEATURES.md](grovelink/FEATURES.md).
+
+## 1.7.1 — Polish / release-ready
+
+- **Stability:** if bridge TCP port is already in use, print plain English **port N busy** (close the other GroveLink window / free the port)
+- **Docs:** root README leads with noob path (INSTALL → UPDATE → VERIFY → play); `update.ini` comments + after-merge `branch=main` note
+- **Smoke:** harden server ready-wait; VERSION/CHANGELOG checks for **1.7.1**; must PASS 100%
+- Bug review of INSTALL / UPDATE / VERIFY / START / bridge / CLEO — real bugs only (no new chrome)
+- Keep `update.ini` `branch=fix/grovelink-camera-snapshots` until PR #1 merges
 
 ## 1.7.0 — Round 7
 

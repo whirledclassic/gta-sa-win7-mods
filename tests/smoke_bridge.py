@@ -5,7 +5,7 @@
 Starts the bridge HTTP server on an ephemeral port, asserts:
   GET /health, GET /api, GET /export.zip, GET /
 Optional: gallery copy + last_error + skipped_deleted + sort HTML + clear confirm +
-help footer + empty-action disable + VERIFY VERSION + CHANGELOG.
+help footer + empty-action disable + VERIFY VERSION + CHANGELOG + port-busy + README polish.
 
 Run from repo root or anywhere:
   python tests/smoke_bridge.py
@@ -60,6 +60,21 @@ def http_get(port, path, timeout=5):
     data = resp.read()
     code = getattr(resp, "status", None) or resp.getcode()
     return code, data
+
+
+def wait_ready(port, tries=40, delay=0.05):
+    """Poll until the ephemeral server accepts /health (avoids race flakiness)."""
+    last = None
+    for _ in range(tries):
+        try:
+            code, raw = http_get(port, "/health", timeout=1)
+            if code == 200:
+                return True, raw
+            last = "status %s" % code
+        except Exception as exc:
+            last = exc
+        time.sleep(delay)
+    return False, last
 
 
 def main():
@@ -120,10 +135,21 @@ def main():
     t = threading.Thread(target=server.serve_forever)
     t.daemon = True
     t.start()
-    time.sleep(0.25)
+    ready, ready_raw = wait_ready(port)
+    check("server ready (/health)", ready, ready_raw if not ready else "ok")
+    if not ready:
+        try:
+            server.shutdown()
+        except Exception:
+            pass
+        print("Server never became ready — aborting remaining HTTP checks")
+        # Still run static checks below by falling through carefully:
+        # mark HTTP suite skipped via early jump after shutdown
 
     # --- /health ---
     try:
+        if not ready:
+            raise RuntimeError("server not ready")
         code, raw = http_get(port, "/health")
         health = json.loads(raw.decode("utf-8") if isinstance(raw, bytes) else raw)
         check("GET /health status 200", code == 200, code)
@@ -411,12 +437,38 @@ def main():
     try:
         with open(os.path.join(REPO, "CHANGELOG.md"), "r") as f:
             cl = f.read()
-        check("CHANGELOG.md exists with 1.7", "1.7.0" in cl and "Round 7" in cl)
+        check("CHANGELOG.md exists with 1.7.1", "1.7.1" in cl and ("Polish" in cl or "release-ready" in cl))
         check("CHANGELOG covers 1.0 foundation", "1.0" in cl and ("Foundation" in cl or "crash-safer" in cl))
     except Exception as exc:
         check("CHANGELOG.md", False, exc)
 
-    check("VERSION is 1.7.0", pack_ver == "1.7.0", pack_ver)
+    try:
+        with open(os.path.join(BRIDGE, "grovelink_server.py"), "r") as f:
+            srv = f.read()
+        check("bridge prints port busy (plain English)", "Port %s busy" in srv or 'Port %s busy' in srv)
+        check("bridge handles bind OSError", "address already in use" in srv.lower())
+    except Exception as exc:
+        check("bridge port-busy source", False, exc)
+
+    try:
+        with open(os.path.join(REPO, "update.ini"), "r") as f:
+            ui = f.read()
+        check("update.ini keeps PR branch", "fix/grovelink-camera-snapshots" in ui)
+        check("update.ini after-merge note", "After merge PR #1" in ui or "branch=main" in ui)
+    except Exception as exc:
+        check("update.ini comments", False, exc)
+
+    try:
+        with open(os.path.join(REPO, "README.md"), "r") as f:
+            rm = f.read()
+        check("README noob path lead", "Noob path" in rm or "INSTALL.bat" in rm[:800])
+        check("README links FEATURES/CHANGELOG/TROUBLESHOOTING",
+              "FEATURES.md" in rm and "CHANGELOG.md" in rm and "TROUBLESHOOTING.md" in rm)
+        check("README after-merge branch=main note", "After merge PR #1" in rm and "branch=main" in rm)
+    except Exception as exc:
+        check("README polish", False, exc)
+
+    check("VERSION is 1.7.1", pack_ver == "1.7.1", pack_ver)
 
     # Runtime: after clear, HTML still disables; after photo, actions enabled via setCountActions path
     # (API count already covered; spot-check helper exists in page source above)
