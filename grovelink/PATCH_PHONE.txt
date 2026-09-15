@@ -1,0 +1,5 @@
+// Apply on top of GroveLinkPhone.txt if your copy is still v6:
+// 1. After 03F0: enable_text_draw 1  use:  0050: gosub @DRAW_SHELL
+// 2. Add screen 4 branch to gosub @DRAW_CALL
+// 3. {$INCLUDE hud.inc}  before :CLOSE_PHONE
+// INSTALL.bat / PATCH.bat compile GroveLinkPhone.txt — keep hud.inc beside it.
