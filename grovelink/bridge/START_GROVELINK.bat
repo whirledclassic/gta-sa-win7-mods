@@ -60,8 +60,8 @@ echo  This usually means you double-clicked START_GROVELINK on the
 echo  Desktop, but the phone bridge scripts live in the zip folder.
 echo.
 echo  Try one of these:
-echo    1. Double-click the Desktop shortcut  "GroveLink Phone"
-echo       ^(that launches the bridge from the install folder^)
+echo    1. Double-click Desktop  "GroveLink Phone.bat"
+echo       ^(plain bat — Win7-reliable; ignore missing .lnk icon^)
 echo    2. Open your extracted zip folder, then:
 echo         grovelink\bridge\START_GROVELINK.bat
 echo       ^(nested zip path may look like:

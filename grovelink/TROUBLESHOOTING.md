@@ -13,18 +13,30 @@ Fix anything marked MISSING, then run VERIFY again.
 
 
 
+## No GroveLink Phone icon on Desktop
+
+INSTALL always writes **`GroveLink Phone.bat`** on the Desktop (Win7-reliable). The PowerShell **`.lnk` shortcut is optional** and often fails on Windows 7 — ignore a missing icon.
+
+**What to do:**
+1. Double-click Desktop **`GroveLink Phone.bat`** (keep the black window open).
+2. Or run `grovelink\bridge\START_GROVELINK.bat` inside your extract folder.
+3. Nested Downloads / zip path often looks like:
+   - `…\Downloads\gta-sa-win7-mods-…\gta-sa-win7-mods-…\grovelink\bridge\START_GROVELINK.bat`
+   - or `gta-sa-win7-mods-main\gta-sa-win7-mods-main\grovelink\bridge`
+4. Re-run **INSTALL.bat** as admin from the folder that contains `INSTALL.bat` (writes `GroveLink_REPO.txt` + fresh `GroveLink Phone.bat`).
+
 ## `python can't open file 'grovelink_server.py'`
 
-Desktop **START_GROVELINK.bat** used to `cd` to the Desktop (where the `.py` is missing). **Fixed in 2.5.1** — Desktop START now reads `GroveLink_REPO.txt` and runs from `REPO\grovelink\bridge`.
+Desktop **START_GROVELINK.bat** used to `cd` to the Desktop (where the `.py` is missing). **Fixed in 2.5.1** — Desktop START now reads `GroveLink_REPO.txt` and runs from `REPO\grovelink\bridge`. **2.5.2** adds Desktop **`GroveLink Phone.bat`** so you do not need the `.lnk`.
 
 **What to do now:**
-1. Prefer the Desktop shortcut **GroveLink Phone** (or `GroveLink_Phone_LAUNCH.bat`) — it starts the bridge from the install folder.
+1. Prefer Desktop **`GroveLink Phone.bat`** — it `cd`s via `GroveLink_REPO.txt` then calls `START_GROVELINK.bat`.
 2. Or open the bridge folder and run `START_GROVELINK.bat` there:
    - Typical extract: `…\gta-sa-win7-mods-…\grovelink\bridge\`
-   - Nested zip path: `gta-sa-win7-mods-main\gta-sa-win7-mods-main\grovelink\bridge`
-3. Or re-run **INSTALL.bat** as admin from the zip folder (writes a fresh `GroveLink_REPO.txt`, then copies the fixed START).
+   - Nested zip / Downloads path: `gta-sa-win7-mods-main\gta-sa-win7-mods-main\grovelink\bridge`
+3. Or re-run **INSTALL.bat** as admin from the zip folder (writes a fresh `GroveLink_REPO.txt` + `GroveLink Phone.bat`, then copies the fixed START).
 
-If you still see the error after updating, delete the old Desktop `START_GROVELINK.bat` and re-run INSTALL / UPDATE so the new bat is copied.
+If you still see the error after updating, delete old Desktop `START_GROVELINK.bat` / `GroveLink Phone.bat` and re-run INSTALL / UPDATE.
 
 
 ## Updating / outdated version
@@ -34,7 +46,7 @@ If you still see the error after updating, delete the old Desktop `START_GROVELI
 1. Double-click Desktop **`UPDATE_GROVELINK.bat`** (or the copy next to `INSTALL.bat` in your zip/repo folder).
 2. Accept Administrator if asked.
 3. Wait for **SUCCESS — Updated to version X**.
-4. Start GroveLink → Launch GTA → **K** Camera.
+4. Desktop **GroveLink Phone.bat** → Launch GTA → **K** Camera.
 
 The updater:
 - Reads `update.ini` (`branch=…`, optional `release=latest`) or env `UPDATE_BRANCH`
@@ -91,14 +103,14 @@ Also checked: `My Documents\...`, Public Documents, and paths in `bridge\config.
 
 Another GroveLink window (or app) is already using that TCP port.
 
-1. Close every **GroveLink Phone** / START_GROVELINK black window.  
+1. Close every **GroveLink Phone.bat** / START_GROVELINK black window.  
 2. Or edit `grovelink\bridge\config.ini` → `[server] port=` to a free port, then start again.  
-3. Re-run Desktop **GroveLink Phone**. The bridge prints plain English **port N busy** when bind fails.
+3. Re-run Desktop **GroveLink Phone.bat**. The bridge prints plain English **port N busy** when bind fails.
 
 ## Phone can’t connect (Wi-Fi / firewall / IP)
 
 1. PC and phone on the **same Wi-Fi** (not guest/VPN isolation).  
-2. Bridge window must stay open; Desktop **GroveLink Phone** / START_GROVELINK.  
+2. Bridge window must stay open; Desktop **GroveLink Phone.bat** / START_GROVELINK.  
 3. On the PC try **http://127.0.0.1:8088** first.  
 4. On the phone use **http://LAN-IP:8088** printed by the bridge (also `bridge\OPEN_ON_PHONE.txt` and Desktop `GroveLink_PHONE_URL.txt`).  
 5. INSTALL adds firewall rule **GroveLink Phone** TCP **8088**. If you skipped admin install, allow Python/port 8088 manually.  

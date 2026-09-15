@@ -2,7 +2,7 @@
 
 CLEO mods for **GTA SA PC 1.0** on **Windows 7** (pack version: root **`VERSION`**).
 
-**Noob path:** Extract zip → **`INSTALL.bat`** (Run as admin) → optional **`UPDATE_GROVELINK.bat`** → **`VERIFY_GROVELINK.bat`** → Desktop **GroveLink Phone** → launch GTA → **K** → Camera → Enter/Space.
+**Noob path:** Extract zip → **`INSTALL.bat`** (Run as admin) → optional **`UPDATE_GROVELINK.bat`** → **`VERIFY_GROVELINK.bat`** → Desktop **GroveLink Phone.bat** → launch GTA → **K** → Camera → Enter/Space.
 
 | Mod | What it does |
 |-----|----------------|
@@ -11,9 +11,13 @@ CLEO mods for **GTA SA PC 1.0** on **Windows 7** (pack version: root **`VERSION`
 
 Docs: [FEATURES](grovelink/FEATURES.md) · [CHANGELOG](CHANGELOG.md) · [TROUBLESHOOTING](grovelink/TROUBLESHOOTING.md). Not affiliated with Rockstar. Single-player only.
 
+## Changelog — 2.5.2 (Desktop GroveLink Phone.bat)
+
+- **Critical:** INSTALL always writes Desktop **`GroveLink Phone.bat`** (plain bat; Win7-reliable). PowerShell `.lnk` optional only. If no Phone icon, use **GroveLink Phone.bat** or `grovelink\bridge\START_GROVELINK.bat`. VERSION **2.5.2**.
+
 ## Changelog — 2.5.1 (Desktop START bridge path)
 
-- **Critical:** Desktop `START_GROVELINK` finds bridge via `GroveLink_REPO.txt` (no more `can't open grovelink_server.py`). Prefer **GroveLink Phone**. VERSION **2.5.1**.
+- **Critical:** Desktop `START_GROVELINK` finds bridge via `GroveLink_REPO.txt` (no more `can't open grovelink_server.py`). Prefer **GroveLink Phone.bat**. VERSION **2.5.1**.
 
 ## Changelog — 2.3.0 (comments · mute · download · density · streak · Herald · UI)
 
@@ -111,10 +115,10 @@ Feature list: [grovelink/FEATURES.md](grovelink/FEATURES.md).
    - Compile **GroveLinkPhone** with Sanny Builder if `sanny.exe` is found
    - Optionally compile **MissionSwitcher_SkinOnly** (safer switcher)
    - Create Gallery folders, write bridge `config.ini`, open firewall TCP **8088**
-   - Put **GroveLink Phone** shortcut, `START_GROVELINK`, **`VERIFY_GROVELINK.bat`**, **`UPDATE_GROVELINK.bat`**, **`GroveLink_README.txt`**, and `GroveLink_PHONE_URL.txt` on the Desktop
+   - Put **`GroveLink Phone.bat`** (primary; optional `.lnk`), `START_GROVELINK`, **`VERIFY_GROVELINK.bat`**, **`UPDATE_GROVELINK.bat`**, **`GroveLink_README.txt`**, and `GroveLink_PHONE_URL.txt` on the Desktop
 4. Follow the green **SUCCESS** screen — only **3 steps**:
 
-   1. Double-click Desktop **GroveLink Phone** (keep the bridge window open)  
+   1. Double-click Desktop **GroveLink Phone.bat** (keep the bridge window open)  
    2. Launch GTA San Andreas  
    3. Press **K** → **Camera** → **Enter** (or **Space**)
 
@@ -129,7 +133,7 @@ If GroveLink is already on this PC and you just want the **latest** pack (no ful
 
 1. Double-click **`UPDATE_GROVELINK.bat`** on the Desktop (or in the repo/zip folder).
 2. Accept UAC if Windows asks.
-3. Wait for **SUCCESS — Updated to version X**, then the usual 3 steps: Start GroveLink → Launch GTA → **K** Camera.
+3. Wait for **SUCCESS — Updated to version X**, then the usual 3 steps: Desktop **GroveLink Phone.bat** → Launch GTA → **K** Camera.
 
 No Git required. The updater downloads a zip from GitHub (Win7-safe), copies files over your install, and re-runs **INSTALL.bat**.
 
@@ -146,7 +150,7 @@ Offline / no network? See [grovelink/TROUBLESHOOTING.md](grovelink/TROUBLESHOOTI
 
 ### Verify GroveLink camera → phone page
 
-1. Keep the bridge window open (**GroveLink Phone** / START_GROVELINK).
+1. Keep the bridge window open (**GroveLink Phone.bat** / START_GROVELINK).
 2. On the PC: **http://127.0.0.1:8088** (often opens automatically).
 3. On your phone (same Wi-Fi): **http://LAN-IP:8088** (printed by the bridge / `OPEN_ON_PHONE.txt`).
 4. Health check: **http://127.0.0.1:8088/health** (includes pack `version`) or Desktop **VERIFY_GROVELINK.bat**.
@@ -168,7 +172,7 @@ Feature list: [grovelink/FEATURES.md](grovelink/FEATURES.md). Stuck? See [grovel
 You (the **host**) run GTA + the GroveLink bridge on your PC. Friends (**viewers**) open the phone page on the same Wi-Fi (or via port forward) and interact with the game — they do **not** need GTA installed.
 
 ### How J hosts
-1. Run **START_GROVELINK** / Desktop **GroveLink Phone** (bridge on TCP **8088**).
+1. Run Desktop **GroveLink Phone.bat** / **START_GROVELINK** (bridge on TCP **8088**).
 2. Launch GTA → **K** for the in-game phone (Camera / REPLY / REQUESTS / SPECTATE / …).
 3. On the phone page, toggle **Host** (saved in this browser). Use **Broadcast**, create/close **polls**, and clear **viewer requests**.
 4. Share **http://LAN-IP:8088** (printed by the bridge / empty-state copy block). Same Wi-Fi is easiest; see TROUBLESHOOTING for port forward.

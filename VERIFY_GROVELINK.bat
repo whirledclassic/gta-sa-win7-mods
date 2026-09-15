@@ -282,7 +282,7 @@ echo   Smoke test:     grovelink\bridge\TEST_BRIDGE.bat  ^(or tests\smoke_bridge
 echo   On your phone:  http://YOUR-PC-LAN-IP:8088
 echo                   ^(LAN IP is printed when you start the bridge^)
 echo.
-echo   Start bridge:   Desktop "GroveLink Phone" or START_GROVELINK.bat
+echo   Start bridge:   Desktop "GroveLink Phone.bat" or bridge\START_GROVELINK.bat
 echo   Update pack:    Desktop UPDATE_GROVELINK.bat
 echo   In GTA:         K → Camera / STATUS / HELP → Enter or Space
 echo.
@@ -291,7 +291,7 @@ echo ================================================
 if %BAD%==0 (
   color 0A
   echo   RESULT: looks good  ^(%OK% checks OK, 0 missing^)
-  echo   Next: start GroveLink Phone, launch GTA, press K.
+  echo   Next: Desktop GroveLink Phone.bat, launch GTA, press K.
 ) else (
   color 0E
   echo   RESULT: %BAD% thing^(s^) missing  ^(%OK% OK^)

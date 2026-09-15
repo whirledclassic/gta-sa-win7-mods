@@ -16,6 +16,7 @@ help footer + empty-action disable + VERIFY VERSION + CHANGELOG + port-busy + RE
 2.4.0: host/viewer modes; broadcast; request queue; polls/votes; rate limit; /live; docs.
 2.5.0: scrollable contacts; dialogue calls; friend texts + auto-reply; cj_texts web; docs.
 2.5.1: Desktop START finds bridge via GroveLink_REPO.txt; INSTALL writes REPO before copy.
+2.5.2: INSTALL writes Desktop GroveLink Phone.bat (Win7-reliable); .lnk optional.
 
 Run from repo root or anywhere:
   python tests/smoke_bridge.py
@@ -1396,6 +1397,12 @@ def main():
             start_i = ib.find("START_GROVELINK.bat")
         check("INSTALL writes REPO before START copy", repo_i >= 0 and start_i >= 0 and repo_i < start_i,
               "repo_i=%s start_i=%s" % (repo_i, start_i))
+        phone_bat_i = ib.find("GroveLink Phone.bat")
+        check("INSTALL writes GroveLink Phone.bat", phone_bat_i >= 0 and "GLREPO" in ib)
+        check("INSTALL Phone.bat after REPO", phone_bat_i >= 0 and repo_i >= 0 and repo_i < phone_bat_i,
+              "repo_i=%s phone_bat_i=%s" % (repo_i, phone_bat_i))
+        check("INSTALL SUCCESS mentions Phone.bat", "GroveLink Phone.bat" in ib)
+        check("INSTALL .lnk is optional bonus", "Optional bonus" in ib or "optional bonus" in ib.lower())
     except Exception as exc:
         check("INSTALL bat static", False, exc)
 
@@ -1454,18 +1461,21 @@ def main():
         with open(os.path.join(REPO, "CHANGELOG.md"), "r") as f:
             cl251 = f.read()
         check("CHANGELOG.md has 2.5.1 Desktop START", "2.5.1" in cl251 and ("GroveLink_REPO" in cl251 or "Desktop START" in cl251 or "grovelink_server.py" in cl251))
+        check("CHANGELOG.md has 2.5.2 Phone.bat", "2.5.2" in cl251 and "GroveLink Phone.bat" in cl251)
     except Exception as exc:
-        check("CHANGELOG 2.5.1", False, exc)
+        check("CHANGELOG 2.5.1/2.5.2", False, exc)
 
     try:
         with open(os.path.join(REPO, "grovelink", "TROUBLESHOOTING.md"), "r") as f:
             tr = f.read()
         check("TROUBLESHOOTING covers missing grovelink_server.py",
               "grovelink_server.py" in tr and ("GroveLink Phone" in tr) and ("gta-sa-win7-mods-main" in tr))
+        check("TROUBLESHOOTING no Phone icon section",
+              "No GroveLink Phone icon" in tr and "GroveLink Phone.bat" in tr and ("Downloads" in tr or "nested" in tr.lower()))
     except Exception as exc:
-        check("TROUBLESHOOTING 2.5.1", False, exc)
+        check("TROUBLESHOOTING 2.5.1/2.5.2", False, exc)
 
-    check("VERSION is 2.5.1", pack_ver == "2.5.1", pack_ver)
+    check("VERSION is 2.5.2", pack_ver == "2.5.2", pack_ver)
 
     # Runtime: after clear, HTML still disables; after photo, actions enabled via setCountActions path
     # (API count already covered; spot-check helper exists in page source above)

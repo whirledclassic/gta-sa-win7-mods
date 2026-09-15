@@ -199,7 +199,7 @@ echo   Version       : !NEWVER!
 echo.
 echo   Do these 3 steps:
 echo.
-echo   1. Start GroveLink  (Desktop "GroveLink Phone")
+echo   1. Start GroveLink  (Desktop "GroveLink Phone.bat")
 echo      (keep the black bridge window open)
 echo.
 echo   2. Launch GTA San Andreas

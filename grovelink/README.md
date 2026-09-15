@@ -10,9 +10,9 @@ Research notes + out-of-scope (no full taxi/homie phone): [RESEARCH.md](RESEARCH
 
 1. From the **repo root**, right-click **`INSTALL.bat`** → **Run as administrator**.
 2. Wait for the green SUCCESS screen.
-3. Desktop → **GroveLink Phone** → launch GTA → **K** → Camera → **Enter** / **Space**.
+3. Desktop → **GroveLink Phone.bat** → launch GTA → **K** → Camera → **Enter** / **Space**.
 
-INSTALL finds GTA (big red **CLEO.asi missing** warning + cleo.li if needed), copies support files, compiles with Sanny when available, creates Gallery folders, opens firewall **8088**, and places Desktop shortcuts + **`VERIFY_GROVELINK.bat`** + **`UPDATE_GROVELINK.bat`** + **`GroveLink_README.txt`** (same 3 steps + link to TROUBLESHOOTING) + `GroveLink_PHONE_URL.txt`. If Sanny is missing it prints exact F7 steps and **keeps** any existing `.cs`.
+INSTALL finds GTA (big red **CLEO.asi missing** warning + cleo.li if needed), copies support files, compiles with Sanny when available, creates Gallery folders, opens firewall **8088**, and places Desktop **`GroveLink Phone.bat`** (+ optional `.lnk`) + **`VERIFY_GROVELINK.bat`** + **`UPDATE_GROVELINK.bat`** + **`GroveLink_README.txt`** (same 3 steps + link to TROUBLESHOOTING) + `GroveLink_PHONE_URL.txt`. If Sanny is missing it prints exact F7 steps and **keeps** any existing `.cs`.
 
 Double-click **VERIFY_GROVELINK.bat** (Desktop or repo root) anytime for an OK/MISSING checklist: `gta_sa.exe`, CLEO, `GroveLinkPhone.cs`, `link.ini`, Python, `config.ini`, `GroveLinkPhone.txt`, writable `bridge/photos`, firewall note, and the URLs to try.
 

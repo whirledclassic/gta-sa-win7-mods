@@ -1,6 +1,12 @@
 # GroveLink changelog
 
-Human-readable highlights from pack **1.0 → 2.5.1**. Full detail also lives in root `README.md` round notes and [grovelink/FEATURES.md](grovelink/FEATURES.md).
+Human-readable highlights from pack **1.0 → 2.5.2**. Full detail also lives in root `README.md` round notes and [grovelink/FEATURES.md](grovelink/FEATURES.md).
+
+## 2.5.2 — Desktop GroveLink Phone.bat (Win7-reliable)
+
+- **Critical:** INSTALL always writes Desktop **`GroveLink Phone.bat`** (USER + PUBLIC) — plain bat via `GroveLink_REPO.txt` + `bridge\START_GROVELINK.bat`. PowerShell **`.lnk`** is optional bonus only (often fails on Win7).
+- SUCCESS / Desktop README say: double-click **GroveLink Phone.bat** (not a missing icon).
+- **Docs:** TROUBLESHOOTING + README — no Phone icon → use `GroveLink Phone.bat` or `bridge\START_GROVELINK.bat`; nested Downloads path. VERSION **2.5.2**.
 
 ## 2.5.1 — Desktop START finds bridge dir
 

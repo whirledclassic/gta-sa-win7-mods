@@ -262,22 +262,42 @@ copy /Y "%~dp0VERIFY_GROVELINK.bat" "%PUBLIC%\Desktop\VERIFY_GROVELINK.bat" >nul
 copy /Y "%~dp0UPDATE_GROVELINK.bat" "%USERPROFILE%\Desktop\UPDATE_GROVELINK.bat" >nul
 copy /Y "%~dp0UPDATE_GROVELINK.bat" "%PUBLIC%\Desktop\UPDATE_GROVELINK.bat" >nul 2>&1
 
-REM Launcher that starts bridge (opens browser itself via open_browser=1)
+REM Primary Desktop launcher: plain .bat (Win7-reliable). REPO pointer already written above.
+REM Uses GroveLink_REPO.txt + bridge\START_GROVELINK.bat (START resolves paths in 2.5.1+).
 (
   echo @echo off
+  echo setlocal EnableExtensions
   echo title GroveLink Phone
-  echo start "GroveLink" "%~dp0grovelink\bridge\START_GROVELINK.bat"
-  echo echo.
-  echo echo Bridge starting... browser should open http://127.0.0.1:8088
-  echo echo Phone URL is printed in the bridge window and in GroveLink_PHONE_URL.txt
-  echo timeout /t 3 /nobreak ^>nul
-) > "%USERPROFILE%\Desktop\GroveLink_Phone_LAUNCH.bat"
+  echo set "GLREPO="
+  echo if exist "%%USERPROFILE%%\Desktop\GroveLink_REPO.txt" (
+  echo   set /p GLREPO=^<"%%USERPROFILE%%\Desktop\GroveLink_REPO.txt"
+  echo ^)
+  echo if not defined GLREPO if exist "%%PUBLIC%%\Desktop\GroveLink_REPO.txt" (
+  echo   set /p GLREPO=^<"%%PUBLIC%%\Desktop\GroveLink_REPO.txt"
+  echo ^)
+  echo if defined GLREPO set "GLREPO=%%GLREPO:"=%%"
+  echo if defined GLREPO for /f "delims=" %%%%A in ("%%GLREPO%%"^) do set "GLREPO=%%%%A"
+  echo if not defined GLREPO (
+  echo   echo Could not find GroveLink_REPO.txt. Re-run INSTALL.bat from the mod folder.
+  echo   pause
+  echo   exit /b 1
+  echo ^)
+  echo cd /d "%%GLREPO%%grovelink\bridge"
+  echo if not exist "grovelink_server.py" (
+  echo   echo Could not find bridge. Re-run INSTALL.bat from the mod folder.
+  echo   pause
+  echo   exit /b 1
+  echo ^)
+  echo call START_GROVELINK.bat
+) > "%USERPROFILE%\Desktop\GroveLink Phone.bat"
+if exist "%PUBLIC%\Desktop\" copy /Y "%USERPROFILE%\Desktop\GroveLink Phone.bat" "%PUBLIC%\Desktop\GroveLink Phone.bat" >nul 2>&1
 
+REM Optional bonus: PowerShell .lnk (often fails on Win7 — do not rely on it)
 powershell -NoProfile -Command ^
   "$desk=[Environment]::GetFolderPath('Desktop');" ^
   "$s=(New-Object -COM WScript.Shell).CreateShortcut($desk+'\GroveLink Phone.lnk');" ^
-  "$s.TargetPath=$desk+'\GroveLink_Phone_LAUNCH.bat';" ^
-  "$s.WorkingDirectory='%~dp0grovelink\bridge';" ^
+  "$s.TargetPath=$desk+'\GroveLink Phone.bat';" ^
+  "$s.WorkingDirectory=$desk;" ^
   "$s.WindowStyle=1;" ^
   "$s.Description='Start GroveLink phone bridge + open page';" ^
   "$s.Save()" >nul 2>&1
@@ -308,7 +328,7 @@ powershell -NoProfile -Command ^
   echo.
   echo Do these 3 steps:
   echo.
-  echo   1. Double-click Desktop shortcut  "GroveLink Phone"
+  echo   1. Double-click Desktop  "GroveLink Phone.bat"
   echo      ^(keep the black bridge window open^)
   echo.
   echo   2. Launch GTA San Andreas
@@ -329,7 +349,7 @@ powershell -NoProfile -Command ^
 ) > "%USERPROFILE%\Desktop\GroveLink_README.txt"
 if exist "%PUBLIC%\Desktop\" copy /Y "%USERPROFILE%\Desktop\GroveLink_README.txt" "%PUBLIC%\Desktop\GroveLink_README.txt" >nul 2>&1
 
-echo    Desktop: GroveLink Phone, START_GROVELINK, VERIFY_GROVELINK, UPDATE_GROVELINK, README, PHONE_URL + REPO pointer
+echo    Desktop: GroveLink Phone.bat (+ optional .lnk), START_GROVELINK, VERIFY, UPDATE, README, PHONE_URL + REPO
 
 echo.
 echo [8/8] Done
@@ -343,7 +363,7 @@ echo ################################################
 echo.
 echo   Do these 3 steps:
 echo.
-echo   1. Double-click Desktop shortcut  "GroveLink Phone"
+echo   1. Double-click Desktop  "GroveLink Phone.bat"
 echo      ^(keep the black bridge window open^)
 echo.
 echo   2. Launch GTA San Andreas
@@ -373,7 +393,7 @@ echo ------------------------------------------------
 echo.
 set /p RUN=Start GroveLink Phone bridge now? (Y/N): 
 if /I "%RUN%"=="Y" (
-  start "GroveLink" "%USERPROFILE%\Desktop\GroveLink_Phone_LAUNCH.bat"
+  start "GroveLink" "%USERPROFILE%\Desktop\GroveLink Phone.bat"
 )
 echo.
 pause
