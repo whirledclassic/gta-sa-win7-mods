@@ -7,13 +7,14 @@ echo Checking for Git...
 where git >nul 2>&1
 if errorlevel 1 (
   echo Git not installed. Using the files already in this folder.
-  echo Download a fresh zip from GitHub if this folder is old:
+  echo If this folder is old, download a fresh zip:
   echo   https://github.com/whirledclassic/gta-sa-win7-mods
+  echo then run PATCH.bat or CHECK.bat.
   echo.
 ) else (
   echo Pulling latest main...
   git pull origin main
   echo.
 )
-call "%~dp0INSTALL.bat" PATCH
+call "%~dp0INSTALL.bat" CHECK
 endlocal
