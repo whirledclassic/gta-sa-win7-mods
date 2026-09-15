@@ -1,6 +1,12 @@
 # GroveLink changelog
 
-Human-readable highlights from pack **1.0 → 2.5.0**. Full detail also lives in root `README.md` round notes and [grovelink/FEATURES.md](grovelink/FEATURES.md).
+Human-readable highlights from pack **1.0 → 2.5.1**. Full detail also lives in root `README.md` round notes and [grovelink/FEATURES.md](grovelink/FEATURES.md).
+
+## 2.5.1 — Desktop START finds bridge dir
+
+- **Critical fix:** Desktop `START_GROVELINK.bat` no longer `cd`s only to Desktop (missing `grovelink_server.py`). It resolves bridge via: next to bat → `GroveLink_REPO.txt` → `%~dp0grovelink\bridge`; plain-English help if still missing.
+- **INSTALL:** writes `GroveLink_REPO.txt` **before** copying START (Phone shortcut + LAUNCH.bat unchanged).
+- **Docs:** TROUBLESHOOTING for `can't open grovelink_server.py` + nested zip path. VERSION **2.5.1**.
 
 ## 2.5.0 — In-game contacts, calls, friend texts
 

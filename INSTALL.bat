@@ -251,16 +251,16 @@ echo    Rule "GroveLink Phone" allowed on port 8088.
 
 echo.
 echo [7/8] Desktop starters + health check + phone URL note...
+REM Write REPO pointer BEFORE copying START so Desktop START can resolve bridge dir immediately.
+REM Use echo( to avoid a leading space; path still ends with \ which is fine on Win7.
+> "%USERPROFILE%\Desktop\GroveLink_REPO.txt" echo(%~dp0
+if exist "%PUBLIC%\Desktop\" > "%PUBLIC%\Desktop\GroveLink_REPO.txt" echo(%~dp0
 copy /Y "%~dp0grovelink\bridge\START_GROVELINK.bat" "%USERPROFILE%\Desktop\START_GROVELINK.bat" >nul
 copy /Y "%~dp0grovelink\bridge\START_GROVELINK.bat" "%PUBLIC%\Desktop\START_GROVELINK.bat" >nul 2>&1
 copy /Y "%~dp0VERIFY_GROVELINK.bat" "%USERPROFILE%\Desktop\VERIFY_GROVELINK.bat" >nul
 copy /Y "%~dp0VERIFY_GROVELINK.bat" "%PUBLIC%\Desktop\VERIFY_GROVELINK.bat" >nul 2>&1
 copy /Y "%~dp0UPDATE_GROVELINK.bat" "%USERPROFILE%\Desktop\UPDATE_GROVELINK.bat" >nul
 copy /Y "%~dp0UPDATE_GROVELINK.bat" "%PUBLIC%\Desktop\UPDATE_GROVELINK.bat" >nul 2>&1
-REM So Desktop VERIFY / UPDATE can find bridge files even when not run from the zip folder.
-REM Use echo( to avoid a leading space; path still ends with \ which is fine on Win7.
-> "%USERPROFILE%\Desktop\GroveLink_REPO.txt" echo(%~dp0
-if exist "%PUBLIC%\Desktop\" > "%PUBLIC%\Desktop\GroveLink_REPO.txt" echo(%~dp0
 
 REM Launcher that starts bridge (opens browser itself via open_browser=1)
 (

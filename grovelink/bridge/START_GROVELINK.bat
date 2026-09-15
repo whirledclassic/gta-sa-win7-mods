@@ -1,11 +1,94 @@
 @echo off
+setlocal EnableExtensions EnableDelayedExpansion
 title GroveLink Phone Bridge
-cd /d "%~dp0"
+
+REM Find the real bridge folder (Desktop copy of this bat has no .py next to it).
+REM 1) grovelink_server.py next to this bat  -> run from bridge folder
+REM 2) Desktop GroveLink_REPO.txt            -> REPO\grovelink\bridge
+REM 3) %~dp0grovelink\bridge                 -> bat somehow at repo root
+REM Else: plain English help, pause, exit.
+
+set "BRIDGE_DIR="
+
+if exist "%~dp0grovelink_server.py" (
+  set "BRIDGE_DIR=%~dp0"
+  goto have_bridge
+)
+
+REM Strip trailing CR from set /p (Win7 quirk) so paths resolve.
+if exist "%USERPROFILE%\Desktop\GroveLink_REPO.txt" (
+  set /p REPO_FROM_FILE=<"%USERPROFILE%\Desktop\GroveLink_REPO.txt"
+  if defined REPO_FROM_FILE (
+    for /f "delims=" %%A in ("!REPO_FROM_FILE!") do set "REPO_FROM_FILE=%%A"
+    if exist "!REPO_FROM_FILE!\grovelink\bridge\grovelink_server.py" (
+      set "BRIDGE_DIR=!REPO_FROM_FILE!\grovelink\bridge"
+      goto have_bridge
+    )
+  )
+)
+if exist "%PUBLIC%\Desktop\GroveLink_REPO.txt" (
+  set /p REPO_FROM_FILE2=<"%PUBLIC%\Desktop\GroveLink_REPO.txt"
+  if defined REPO_FROM_FILE2 (
+    for /f "delims=" %%A in ("!REPO_FROM_FILE2!") do set "REPO_FROM_FILE2=%%A"
+    if exist "!REPO_FROM_FILE2!\grovelink\bridge\grovelink_server.py" (
+      set "BRIDGE_DIR=!REPO_FROM_FILE2!\grovelink\bridge"
+      goto have_bridge
+    )
+  )
+)
+if exist "%~dp0GroveLink_REPO.txt" (
+  set /p REPO_FROM_FILE3=<"%~dp0GroveLink_REPO.txt"
+  if defined REPO_FROM_FILE3 (
+    for /f "delims=" %%A in ("!REPO_FROM_FILE3!") do set "REPO_FROM_FILE3=%%A"
+    if exist "!REPO_FROM_FILE3!\grovelink\bridge\grovelink_server.py" (
+      set "BRIDGE_DIR=!REPO_FROM_FILE3!\grovelink\bridge"
+      goto have_bridge
+    )
+  )
+)
+
+if exist "%~dp0grovelink\bridge\grovelink_server.py" (
+  set "BRIDGE_DIR=%~dp0grovelink\bridge"
+  goto have_bridge
+)
+
+echo.
+echo ================================================================
+echo  GroveLink bridge files were not found.
+echo.
+echo  This usually means you double-clicked START_GROVELINK on the
+echo  Desktop, but the phone bridge scripts live in the zip folder.
+echo.
+echo  Try one of these:
+echo    1. Double-click the Desktop shortcut  "GroveLink Phone"
+echo       ^(that launches the bridge from the install folder^)
+echo    2. Open your extracted zip folder, then:
+echo         grovelink\bridge\START_GROVELINK.bat
+echo       ^(nested zip path may look like:
+echo         gta-sa-win7-mods-main\gta-sa-win7-mods-main\grovelink\bridge^)
+echo    3. Re-run INSTALL.bat as administrator from the zip folder
+echo       ^(writes GroveLink_REPO.txt so Desktop START works^)
+echo ================================================================
+echo.
+pause
+exit /b 1
+
+:have_bridge
+cd /d "!BRIDGE_DIR!"
+if not exist "grovelink_server.py" (
+  echo.
+  echo  Still cannot find grovelink_server.py in:
+  echo    !BRIDGE_DIR!
+  echo  Re-run INSTALL.bat from the extracted zip folder.
+  echo.
+  pause
+  exit /b 1
+)
 
 REM Pack version from repo-root VERSION (bridge is grovelink\bridge)
 set "GL_VER=unknown"
-if exist "%~dp0..\..\VERSION" (
-  set /p GL_VER=<"%~dp0..\..\VERSION"
+if exist "..\..\VERSION" (
+  set /p GL_VER=<"..\..\VERSION"
 )
 REM Strip quotes + trailing CR (Win7 set /p quirk)
 if defined GL_VER set "GL_VER=%GL_VER:"=%"

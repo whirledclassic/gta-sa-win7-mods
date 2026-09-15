@@ -11,6 +11,10 @@ CLEO mods for **GTA SA PC 1.0** on **Windows 7** (pack version: root **`VERSION`
 
 Docs: [FEATURES](grovelink/FEATURES.md) · [CHANGELOG](CHANGELOG.md) · [TROUBLESHOOTING](grovelink/TROUBLESHOOTING.md). Not affiliated with Rockstar. Single-player only.
 
+## Changelog — 2.5.1 (Desktop START bridge path)
+
+- **Critical:** Desktop `START_GROVELINK` finds bridge via `GroveLink_REPO.txt` (no more `can't open grovelink_server.py`). Prefer **GroveLink Phone**. VERSION **2.5.1**.
+
 ## Changelog — 2.3.0 (comments · mute · download · density · streak · Herald · UI)
 
 - **Photo comments**, mute chat alerts, spectate **Download**, **Dark street/Bright** density, **photo streak** (header + recap)

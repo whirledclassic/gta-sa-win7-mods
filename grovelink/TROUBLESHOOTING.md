@@ -12,6 +12,21 @@ Double-click **`VERIFY_GROVELINK.bat`** (Desktop after INSTALL, or repo root). I
 Fix anything marked MISSING, then run VERIFY again.
 
 
+
+## `python can't open file 'grovelink_server.py'`
+
+Desktop **START_GROVELINK.bat** used to `cd` to the Desktop (where the `.py` is missing). **Fixed in 2.5.1** — Desktop START now reads `GroveLink_REPO.txt` and runs from `REPO\grovelink\bridge`.
+
+**What to do now:**
+1. Prefer the Desktop shortcut **GroveLink Phone** (or `GroveLink_Phone_LAUNCH.bat`) — it starts the bridge from the install folder.
+2. Or open the bridge folder and run `START_GROVELINK.bat` there:
+   - Typical extract: `…\gta-sa-win7-mods-…\grovelink\bridge\`
+   - Nested zip path: `gta-sa-win7-mods-main\gta-sa-win7-mods-main\grovelink\bridge`
+3. Or re-run **INSTALL.bat** as admin from the zip folder (writes a fresh `GroveLink_REPO.txt`, then copies the fixed START).
+
+If you still see the error after updating, delete the old Desktop `START_GROVELINK.bat` and re-run INSTALL / UPDATE so the new bat is copied.
+
+
 ## Updating / outdated version
 
 ### One-click patch (preferred)
