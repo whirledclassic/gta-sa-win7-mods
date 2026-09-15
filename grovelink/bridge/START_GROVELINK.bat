@@ -2,6 +2,13 @@
 title GroveLink Phone Bridge
 cd /d "%~dp0"
 
+echo ==================================================
+echo   GROVELINK PHONE BRIDGE
+echo ==================================================
+echo Leave this window open while you play.
+echo After Python starts it prints http://LAN-IP:8088
+echo.
+
 where python >nul 2>nul
 if %errorlevel%==0 (
   python grovelink_server.py
@@ -32,4 +39,6 @@ echo https://www.python.org/downloads/release/python-3810/
 echo.
 pause
 :end
+echo.
+echo Bridge stopped.
 pause
