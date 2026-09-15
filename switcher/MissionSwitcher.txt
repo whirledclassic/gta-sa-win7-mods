@@ -1,10 +1,18 @@
 {$CLEO .cs}
-// Mission Companion Switcher v6.2
-// Play as them. CJ stays. Grove FAM + story peds. T summons Sweet.
-// H/F6 nearest | G next | J you are CJ | U reset | N CJ leave | B hold | T call Sweet | L status
-// CLEO scripts cannot use #MODEL names (Sanny error 0083). Use numeric IDs. FAM1 = 105.
+// Mission Companion Switcher v7.0
+// Play as them. CJ stays as a bot: foot, shotgun, or his own BMX.
+// First-mission bikes work. Switch while riding. Driving homies are valid targets.
+// H/F6 become | G next | J you are CJ | U reset | N CJ leave | B hold
+// T call Sweet | I give CJ a BMX | L status
+// Numeric model IDs only. FAM1 = 105. BMX = 481.
 0000: NOP
 03A4: name_thread 'MSWITCH'
+
+var
+    7@: Int
+    22@: Int
+    27@: Int
+end
 
 20@ = 0
 21@ = -1
@@ -34,7 +42,7 @@
 0039:   25@ == 0
 004D: jf @KEYS
 0006: 25@ = 1
-0ACD: show_text_highpriority "SWITCHER ON   H PLAY AS THEM   T CALL SWEET   J = CJ" time 4200
+0ACD: show_text_highpriority "SWITCHER V7  H PLAY AS THEM  I CJ BIKE  T SWEET" time 4200
 
 :KEYS
 00D6: if
@@ -55,57 +63,63 @@
 00D6: if
 0AB0:   key_pressed 72
 004D: jf @KEY_F6
-0006: 24@ = 18
+0006: 24@ = 14
 0006: 26@ = -1
 0002: jump @TRY_SWITCH
 :KEY_F6
 00D6: if
 0AB0:   key_pressed 117
 004D: jf @KEY_G
-0006: 24@ = 18
+0006: 24@ = 14
 0006: 26@ = -1
 0002: jump @TRY_SWITCH
 :KEY_G
 00D6: if
 0AB0:   key_pressed 71
 004D: jf @KEY_J
-0006: 24@ = 18
+0006: 24@ = 14
 0002: jump @TRY_SWITCH
 :KEY_J
 00D6: if
 0AB0:   key_pressed 74
 004D: jf @KEY_U
-0006: 24@ = 18
+0006: 24@ = 14
 0002: jump @RESTORE_CJ
 :KEY_U
 00D6: if
 0AB0:   key_pressed 85
 004D: jf @KEY_N
-0006: 24@ = 18
+0006: 24@ = 14
 0002: jump @HARD_RESET
 :KEY_N
 00D6: if
 0AB0:   key_pressed 78
 004D: jf @KEY_B
-0006: 24@ = 18
+0006: 24@ = 14
 0002: jump @TOGGLE_BOT
 :KEY_B
 00D6: if
 0AB0:   key_pressed 66
 004D: jf @KEY_T
-0006: 24@ = 18
+0006: 24@ = 14
 0002: jump @TOGGLE_WAIT
 :KEY_T
 00D6: if
 0AB0:   key_pressed 84
-004D: jf @KEY_L
-0006: 24@ = 18
+004D: jf @KEY_I
+0006: 24@ = 14
 0002: jump @SUMMON
+:KEY_I
+00D6: if
+0AB0:   key_pressed 73
+004D: jf @KEY_L
+0006: 24@ = 14
+0002: jump @FORCE_BIKE
 :KEY_L
 00D6: if
 0AB0:   key_pressed 76
 004D: jf @MAIN
-0006: 24@ = 18
+0006: 24@ = 14
 0002: jump @STATUS
 
 :DIED
@@ -116,12 +130,6 @@
 0002: jump @MAIN
 
 :TRY_SWITCH
-00D6: if
-00DF:   actor $PLAYER_ACTOR driving
-004D: jf @CHK_CTRL
-0ACD: show_text_highpriority "GET OUT OF THE CAR FIRST" time 1800
-0002: jump @MAIN
-:CHK_CTRL
 00D6: if
 03EE:   player $PLAYER_CHAR controllable
 004D: jf @BUSY
@@ -136,7 +144,7 @@
 0006: 5@ = 0
 0007: 11@ = 9999.0
 00D6: if
-0AE1: 10@ = random_actor_near_point 1@ 2@ 3@ radius 40.0 find_next 0 pass_deads 1
+0AE1: 10@ = random_actor_near_point 1@ 2@ 3@ radius 45.0 find_next 0 pass_deads 1
 004D: jf @NONE_FOUND
 :SCAN_LOOP
 00D6: if
@@ -154,11 +162,6 @@
 00D6: if
 8039:   not 26@ == 10@
 004D: jf @SCAN_NEXT
-00D6: if
-00DF:   actor 10@ driving
-004D: jf @SCAN_MOD
-0002: jump @SCAN_NEXT
-:SCAN_MOD
 0665: get_actor 10@ model_to 6@
 0006: 7@ = 0
 0050: gosub @IS_STORY_CHAR
@@ -175,7 +178,7 @@
 0085: 5@ = 6@
 :SCAN_NEXT
 00D6: if
-0AE1: 10@ = random_actor_near_point 1@ 2@ 3@ radius 40.0 find_next 1 pass_deads 1
+0AE1: 10@ = random_actor_near_point 1@ 2@ 3@ radius 45.0 find_next 1 pass_deads 1
 004D: jf @AFTER_SCAN
 0002: jump @SCAN_LOOP
 :AFTER_SCAN
@@ -188,7 +191,7 @@
 0006: 26@ = -1
 0002: jump @FIND_NEAR
 :NONE_FOUND
-0ACD: show_text_highpriority "NOBODY NEAR - STAND BY A HOMIE OR PRESS T" time 2200
+0ACD: show_text_highpriority "NOBODY NEAR - RIDE WITH A HOMIE OR PRESS T" time 2200
 0002: jump @MAIN
 
 :DO_BECOME
@@ -216,8 +219,14 @@
 0470: 9@ = actor 4@ current_weapon
 0172: 16@ = actor 4@ z_angle
 00A0: store_actor 4@ position_to 13@ 14@ 15@
+00D6: if
+00DF:   actor $PLAYER_ACTOR driving
+004D: jf @WARP_TO
+0002: jump @LOAD_SKIN
+:WARP_TO
 00A1: put_actor $PLAYER_ACTOR at 13@ 14@ 15@
 0173: set_actor $PLAYER_ACTOR z_angle_to 16@
+:LOAD_SKIN
 0247: load_model 5@
 038B: load_requested_models
 0006: 27@ = 0
@@ -279,6 +288,11 @@
 0223: set_actor 21@ health_to 1000
 02AB: set_actor 21@ immunities 1 1 1 1 1
 039E: set_actor 21@ locked 1
+00D6: if
+00DF:   actor 21@ driving
+004D: jf @HIDE_FOOT
+0002: jump @HIDE_X
+:HIDE_FOOT
 0687: clear_actor_task 21@
 00A0: store_actor $PLAYER_ACTOR position_to 1@ 2@ 3@
 000B: 1@ += 3.4
@@ -296,6 +310,11 @@
 0337: set_actor 21@ visibility 1
 02AB: set_actor 21@ immunities 0 0 0 0 0
 039E: set_actor 21@ locked 0
+00D6: if
+00DF:   actor 21@ driving
+004D: jf @UH_FOOT
+0002: jump @UH_X
+:UH_FOOT
 00A0: store_actor $PLAYER_ACTOR position_to 1@ 2@ 3@
 0087: 13@ = 1@
 000B: 13@ += 1.6
@@ -317,6 +336,11 @@
 004D: jf @EN_FLW
 0051: return
 :EN_FLW
+00D6: if
+00DF:   actor $PLAYER_ACTOR driving
+004D: jf @EN_FOOT
+0051: return
+:EN_FOOT
 0633: AS_actor 23@ follow_actor $PLAYER_ACTOR
 0051: return
 
@@ -369,8 +393,9 @@
 0051: return
 :BOT_READY
 0173: set_actor 23@ z_angle_to 16@
-0223: set_actor 23@ health_to 300
+0223: set_actor 23@ health_to 400
 0245: set_actor 23@ walk_style_to "PLAYER"
+02AB: set_actor 23@ immunities 0 1 1 0 0
 01B2: give_actor 23@ weapon 22 ammo 80
 0470: 9@ = actor $PLAYER_ACTOR current_weapon
 0085: 17@ = 9@
@@ -382,6 +407,11 @@
 01DF: put_actor 23@ into_player $PLAYER_CHAR group
 0633: AS_actor 23@ follow_actor $PLAYER_ACTOR
 0006: 31@ = 0
+00D6: if
+00DF:   actor $PLAYER_ACTOR driving
+004D: jf @BOT_X
+0050: gosub @GIVE_CJ_BIKE
+:BOT_X
 0051: return
 
 :TOGGLE_BOT
@@ -427,13 +457,21 @@
 0ACD: show_text_highpriority "CJ ON ME" time 1400
 0002: jump @MAIN
 
-:SUMMON
+:FORCE_BIKE
 00D6: if
-00DF:   actor $PLAYER_ACTOR driving
-004D: jf @SUM_CTRL
-0ACD: show_text_highpriority "GET OUT OF THE CAR FIRST" time 1600
+0039:   20@ == 1
+004D: jf @FB_NO
+00D6: if
+056D:   actor 23@ defined
+004D: jf @FB_NO
+0050: gosub @GIVE_CJ_BIKE
+0ACD: show_text_highpriority "CJ GOT A BMX - HE RIDES WITH YOU" time 2000
 0002: jump @MAIN
-:SUM_CTRL
+:FB_NO
+0ACD: show_text_highpriority "SWITCH FIRST  THEN I FOR CJ BIKE" time 1800
+0002: jump @MAIN
+
+:SUMMON
 00D6: if
 03EE:   player $PLAYER_CHAR controllable
 004D: jf @SUM_BUSY
@@ -484,10 +522,22 @@
 00D6: if
 056D:   actor 23@ defined
 004D: jf @ST_NOCJ
-0ACD: show_text_highpriority "SWITCHED ON  -  CJ BODY LIVE  -  J = YOU ARE CJ" time 2200
+00D6: if
+0039:   31@ == 3
+004D: jf @ST_CAR
+0ACD: show_text_highpriority "SWITCHED  -  CJ ON A BIKE  -  I NEW BMX  J = CJ" time 2200
+0002: jump @MAIN
+:ST_CAR
+00D6: if
+0039:   31@ == 2
+004D: jf @ST_FOOT
+0ACD: show_text_highpriority "SWITCHED  -  CJ SHOTGUN  -  J = YOU ARE CJ" time 2200
+0002: jump @MAIN
+:ST_FOOT
+0ACD: show_text_highpriority "SWITCHED  -  CJ ON FOOT  -  I = GIVE BMX" time 2200
 0002: jump @MAIN
 :ST_NOCJ
-0ACD: show_text_highpriority "SWITCHED ON  -  NO CJ BODY  -  PRESS N" time 2200
+0ACD: show_text_highpriority "SWITCHED  -  NO CJ BODY  -  PRESS N" time 2200
 0002: jump @MAIN
 :ST_OFF
 0ACD: show_text_highpriority "YOU ARE CJ  -  H PLAY AS THEM  -  T CALL SWEET" time 2200
@@ -502,7 +552,7 @@
 00A0: store_actor $PLAYER_ACTOR position_to 1@ 2@ 3@
 0006: 5@ = 0
 00D6: if
-0AE1: 10@ = random_actor_near_point 1@ 2@ 3@ radius 40.0 find_next 0 pass_deads 1
+0AE1: 10@ = random_actor_near_point 1@ 2@ 3@ radius 45.0 find_next 0 pass_deads 1
 004D: jf @NH_X
 :NH_LOOP
 00D6: if
@@ -511,11 +561,6 @@
 00D6: if
 8118:   not actor 10@ dead
 004D: jf @NH_NEXT
-00D6: if
-00DF:   actor 10@ driving
-004D: jf @NH_MOD
-0002: jump @NH_NEXT
-:NH_MOD
 0665: get_actor 10@ model_to 6@
 0006: 7@ = 0
 0050: gosub @IS_STORY_CHAR
@@ -526,7 +571,7 @@
 0002: jump @NH_HIT
 :NH_NEXT
 00D6: if
-0AE1: 10@ = random_actor_near_point 1@ 2@ 3@ radius 40.0 find_next 1 pass_deads 1
+0AE1: 10@ = random_actor_near_point 1@ 2@ 3@ radius 45.0 find_next 1 pass_deads 1
 004D: jf @NH_X
 0002: jump @NH_LOOP
 :NH_HIT
@@ -537,7 +582,7 @@
 :WATCH
 000A: 18@ += 1
 00D6: if
-0019:   18@ > 50
+0019:   18@ > 40
 004D: jf @W_X
 0006: 18@ = 0
 0050: gosub @KEEP_HIDDEN
@@ -556,15 +601,12 @@
 00D6: if
 00DF:   actor $PLAYER_ACTOR driving
 004D: jf @W_FOOT
+0006: 7@ = 0
+0050: gosub @PLAYER_ON_BIKE
 00D6: if
-047A:   actor $PLAYER_ACTOR driving_a_motorbike
+0039:   7@ == 1
 004D: jf @W_CAR
-00D6: if
-00DF:   actor 23@ driving
-004D: jf @W_X
-03C0: 12@ = actor 23@ car
-05CD: AS_actor 23@ leave_car 12@
-0006: 31@ = 0
+0050: gosub @CJ_KEEP_BIKE
 0002: jump @W_X
 :W_CAR
 03C0: 12@ = actor $PLAYER_ACTOR car
@@ -602,7 +644,7 @@
 00A0: store_actor 23@ position_to 13@ 14@ 15@
 050A: 8@ = distance_between_XYZ 1@ 2@ 3@ and_XYZ 13@ 14@ 15@
 00D6: if
-0021:   8@ > 22.0
+0021:   8@ > 18.0
 004D: jf @W_NEAR
 0087: 13@ = 1@
 000B: 13@ += 1.1
@@ -613,7 +655,7 @@
 0002: jump @W_X
 :W_NEAR
 00D6: if
-0021:   8@ > 4.5
+0021:   8@ > 4.0
 004D: jf @W_X
 0633: AS_actor 23@ follow_actor $PLAYER_ACTOR
 0002: jump @W_X
@@ -628,6 +670,133 @@
 :W_X
 0051: return
 
+:PLAYER_ON_BIKE
+0006: 7@ = 0
+00D6: if
+047A:   actor $PLAYER_ACTOR driving_a_motorbike
+004D: jf @POB_MOD
+0006: 7@ = 1
+0051: return
+:POB_MOD
+00D6: if
+00DF:   actor $PLAYER_ACTOR driving
+004D: jf @POB_X
+03C0: 12@ = actor $PLAYER_ACTOR car
+0441: 6@ = car 12@ model
+00D6: if or
+0039:   6@ == 481
+0039:   6@ == 509
+0039:   6@ == 510
+0039:   6@ == 448
+0039:   6@ == 461
+0039:   6@ == 462
+0039:   6@ == 463
+0039:   6@ == 468
+004D: jf @POB2
+0006: 7@ = 1
+0051: return
+:POB2
+00D6: if or
+0039:   6@ == 471
+0039:   6@ == 521
+0039:   6@ == 522
+0039:   6@ == 581
+0039:   6@ == 586
+004D: jf @POB_X
+0006: 7@ = 1
+:POB_X
+0051: return
+
+:GIVE_CJ_BIKE
+00D6: if
+056D:   actor 23@ defined
+004D: jf @GCB_X
+00D6: if
+8118:   not actor 23@ dead
+004D: jf @GCB_X
+00D6: if
+00DF:   actor 23@ driving
+004D: jf @GCB_MAKE
+03C0: 12@ = actor 23@ car
+0441: 6@ = car 12@ model
+00D6: if or
+0039:   6@ == 481
+0039:   6@ == 509
+0039:   6@ == 510
+0039:   6@ == 461
+0039:   6@ == 462
+0039:   6@ == 463
+0039:   6@ == 468
+0039:   6@ == 521
+004D: jf @GCB_LEAVE
+0002: jump @GCB_DRIVE
+:GCB_LEAVE
+05CD: AS_actor 23@ leave_car 12@
+0001: wait 0
+:GCB_MAKE
+00A0: store_actor $PLAYER_ACTOR position_to 1@ 2@ 3@
+0172: 16@ = actor $PLAYER_ACTOR z_angle
+0087: 13@ = 1@
+000B: 13@ += 2.4
+0087: 14@ = 2@
+000B: 14@ += 1.2
+0247: load_model 481
+038B: load_requested_models
+00D6: if
+0248:   model 481 available
+004D: jf @GCB_X
+00A5: 12@ = create_car 481 at 13@ 14@ 3@
+0175: set_car 12@ z_angle_to 16@
+0224: set_car 12@ health_to 1000
+072A: put_actor 23@ into_car 12@ driverseat
+08C6: set_actor 23@ stay_on_bike 1
+00AD: set_car 12@ max_speed_to 28.0
+00AE: set_car 12@ traffic_behaviour_to 2
+01C3: remove_references_to_car 12@
+0249: release_model 481
+0006: 31@ = 3
+00D6: if
+0039:   30@ == 2
+004D: jf @GCB_MSG
+0002: jump @GCB_DRIVE
+:GCB_MSG
+0006: 30@ = 2
+0ACD: show_text_highpriority "CJ ON A BMX - HE KEEPS THE RIDE GOING" time 1600
+:GCB_DRIVE
+00A0: store_actor $PLAYER_ACTOR position_to 1@ 2@ 3@
+00D6: if
+00DF:   actor 23@ driving
+004D: jf @GCB_X
+03C0: 12@ = actor 23@ car
+00AD: set_car 12@ max_speed_to 28.0
+05D1: AS_actor 23@ drive_car 12@ to 1@ 2@ 3@ speed 22.0 2 0 5
+0006: 31@ = 3
+:GCB_X
+0051: return
+
+:CJ_KEEP_BIKE
+00D6: if
+00DF:   actor 23@ driving
+004D: jf @CKB_NEED
+00A0: store_actor $PLAYER_ACTOR position_to 1@ 2@ 3@
+00A0: store_actor 23@ position_to 13@ 14@ 15@
+050A: 8@ = distance_between_XYZ 1@ 2@ 3@ and_XYZ 13@ 14@ 15@
+00D6: if
+0021:   8@ > 28.0
+004D: jf @CKB_GO
+0087: 13@ = 1@
+000B: 13@ += 2.0
+0087: 14@ = 2@
+000B: 14@ += 1.0
+03C0: 12@ = actor 23@ car
+00AB: put_car 12@ at 13@ 14@ 3@
+:CKB_GO
+0050: gosub @GIVE_CJ_BIKE
+0051: return
+:CKB_NEED
+0050: gosub @GIVE_CJ_BIKE
+0051: return
+
 :KEEP_HIDDEN
 00D6: if
 056D:   actor 21@ defined
@@ -637,6 +806,11 @@
 004D: jf @KH_LOST
 0337: set_actor 21@ visibility 0
 039E: set_actor 21@ locked 1
+00D6: if
+00DF:   actor 21@ driving
+004D: jf @KH_FOOT
+0051: return
+:KH_FOOT
 00A0: store_actor $PLAYER_ACTOR position_to 1@ 2@ 3@
 000B: 1@ += 3.4
 00A1: put_actor 21@ at 1@ 2@ 3@
@@ -703,25 +877,25 @@
 00D6: if
 0039:   22@ == 270
 004D: jf @NM_SM
-0ACD: show_text_highpriority "YOU ARE SWEET  -  CJ IS WITH YOU" time 2400
+0ACD: show_text_highpriority "YOU ARE SWEET  -  CJ RIDES WITH YOU" time 2400
 0051: return
 :NM_SM
 00D6: if
 0039:   22@ == 269
 004D: jf @NM_RY
-0ACD: show_text_highpriority "YOU ARE SMOKE  -  CJ IS WITH YOU" time 2400
+0ACD: show_text_highpriority "YOU ARE SMOKE  -  CJ RIDES WITH YOU" time 2400
 0051: return
 :NM_RY
 00D6: if
 0039:   22@ == 271
 004D: jf @NM_CE
-0ACD: show_text_highpriority "YOU ARE RYDER  -  CJ IS WITH YOU" time 2400
+0ACD: show_text_highpriority "YOU ARE RYDER  -  CJ RIDES WITH YOU" time 2400
 0051: return
 :NM_CE
 00D6: if
 0039:   22@ == 292
 004D: jf @NM_OG
-0ACD: show_text_highpriority "YOU ARE CESAR  -  CJ IS WITH YOU" time 2400
+0ACD: show_text_highpriority "YOU ARE CESAR  -  CJ RIDES WITH YOU" time 2400
 0051: return
 :NM_OG
 00D6: if
@@ -768,7 +942,7 @@
 0ACD: show_text_highpriority "YOU ARE JIZZY  -  CJ IS WITH YOU" time 2400
 0051: return
 :NM_GEN
-0ACD: show_text_highpriority "YOU SWITCHED  -  CJ IS WITH YOU" time 2400
+0ACD: show_text_highpriority "YOU SWITCHED  -  CJ KEEPS UP" time 2400
 0051: return
 
 :SAY_NEAR
