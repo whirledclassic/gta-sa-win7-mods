@@ -111,6 +111,8 @@ STATE = {
     "spectate_on": False,
     # IP -> last_seen unix for /spectate + /api/spectate polls (~30s window)
     "spectate_viewers": {},
+    "started_at": 0,  # unix — set in main(); bridge uptime
+    "pinned_chat_id": "",  # one pinned chat message id (empty = none)
 }
 
 SPECTATE_VIEWER_WINDOW = 30
@@ -800,16 +802,60 @@ def set_caption(name, caption):
     return True, caption
 
 
+
+
+ALLOWED_REACTIONS = ("👍", "😂", "🔥")  # thumbs / laugh / fire
+
+
+def _new_chat_id():
+    """Stable-enough id for chat log entries (reactions / pin)."""
+    try:
+        t = int(time.time() * 1000)
+    except Exception:
+        t = int(time.time())
+    return "c%d" % t
+
+
+def _ensure_chat_entry_shape(entry, idx=0):
+    """Backfill id + reactions on older chat log rows."""
+    if not isinstance(entry, dict):
+        return entry
+    if not entry.get("id"):
+        ts = entry.get("ts") or 0
+        try:
+            entry["id"] = "c%d_%d" % (int(ts), int(idx))
+        except Exception:
+            entry["id"] = _new_chat_id()
+    react = entry.get("reactions")
+    if not isinstance(react, dict):
+        react = {}
+    for key in ALLOWED_REACTIONS:
+        if key not in react:
+            react[key] = 0
+        else:
+            try:
+                react[key] = max(0, int(react[key]))
+            except Exception:
+                react[key] = 0
+    entry["reactions"] = react
+    return entry
+
+
 def load_chat_log():
     data = _load_json_file(CHAT_LOG_PATH, [])
     if not isinstance(data, list):
         return []
-    return data[:50]
+    out = []
+    for i, row in enumerate(data[:50]):
+        if isinstance(row, dict):
+            out.append(_ensure_chat_entry_shape(dict(row), i))
+    return out
 
 
 def append_chat_delivered(frm, msg):
     log = load_chat_log()
-    entry = {
+    entry = _ensure_chat_entry_shape({
+        "id": _new_chat_id(),
         "from": (frm or "REAL PHONE")[:40],
         "msg": (msg or "")[:80],
         "ts": int(time.time()),
@@ -817,7 +863,8 @@ def append_chat_delivered(frm, msg):
         "delivered": True,
         "role": "visitor",
         "side": "visitor",
-    }
+        "reactions": dict((k, 0) for k in ALLOWED_REACTIONS),
+    })
     log.insert(0, entry)
     log = log[:40]
     _save_json_file(CHAT_LOG_PATH, log)
@@ -828,7 +875,8 @@ def append_chat_delivered(frm, msg):
 def append_chat_cj_reply(frm, msg):
     """CJ reply from CLEO OUTBOX — show as CJ bubble on web thread."""
     log = load_chat_log()
-    entry = {
+    entry = _ensure_chat_entry_shape({
+        "id": _new_chat_id(),
         "from": (frm or "CJ")[:40],
         "msg": (msg or "")[:80],
         "ts": int(time.time()),
@@ -836,12 +884,160 @@ def append_chat_cj_reply(frm, msg):
         "delivered": False,
         "role": "cj",
         "side": "cj",
-    }
+        "reactions": dict((k, 0) for k in ALLOWED_REACTIONS),
+    })
     log.insert(0, entry)
     log = log[:40]
     _save_json_file(CHAT_LOG_PATH, log)
     STATE["inbox"] = log
     return entry
+
+
+def find_chat_entry(msg_id):
+    msg_id = (msg_id or "").strip()
+    if not msg_id:
+        return None
+    for row in load_chat_log():
+        if isinstance(row, dict) and str(row.get("id") or "") == msg_id:
+            return row
+    return None
+
+
+def react_to_chat(msg_id, emoji):
+    """Increment a reaction count on a chat message. Returns (ok, entry|detail)."""
+    emoji = (emoji or "").strip()
+    # Accept short aliases
+    aliases = {
+        "up": "👍", "thumb": "👍", "thumbsup": "👍", "+1": "👍",
+        "laugh": "😂", "lol": "😂", "joy": "😂",
+        "fire": "🔥", "hot": "🔥",
+        "thumbs_up": "👍",
+    }
+    if emoji in aliases:
+        emoji = aliases[emoji]
+    # Also map literal escaped forms if callers send unicode
+    if emoji not in ALLOWED_REACTIONS:
+        return False, "bad reaction"
+    msg_id = (msg_id or "").strip()
+    if not msg_id:
+        return False, "missing id"
+    log = load_chat_log()
+    hit = None
+    for i, row in enumerate(log):
+        if isinstance(row, dict) and str(row.get("id") or "") == msg_id:
+            row = _ensure_chat_entry_shape(row, i)
+            row["reactions"][emoji] = int(row["reactions"].get(emoji) or 0) + 1
+            log[i] = row
+            hit = row
+            break
+    if not hit:
+        return False, "not found"
+    _save_json_file(CHAT_LOG_PATH, log[:40])
+    STATE["inbox"] = log[:40]
+    return True, hit
+
+
+def pin_chat_message(msg_id):
+    """Pin one chat message (empty id clears). Stored in STATE; exposed via /api."""
+    msg_id = (msg_id or "").strip()
+    if not msg_id:
+        STATE["pinned_chat_id"] = ""
+        return True, None, "unpinned"
+    entry = find_chat_entry(msg_id)
+    if not entry:
+        return False, None, "not found"
+    STATE["pinned_chat_id"] = str(entry.get("id") or msg_id)
+    return True, entry, "pinned"
+
+
+def get_pinned_chat():
+    pid = (STATE.get("pinned_chat_id") or "").strip()
+    if not pid:
+        return None
+    return find_chat_entry(pid)
+
+
+def bridge_uptime_sec():
+    started = int(STATE.get("started_at") or 0)
+    if started <= 0:
+        return 0
+    try:
+        return max(0, int(time.time()) - started)
+    except Exception:
+        return 0
+
+
+def format_uptime(sec):
+    sec = max(0, int(sec or 0))
+    h = sec // 3600
+    m = (sec % 3600) // 60
+    s = sec % 60
+    if h > 0:
+        return "%dh %dm" % (h, m)
+    if m > 0:
+        return "%dm %ds" % (m, s)
+    return "%ds" % s
+
+
+def _start_of_today_sec():
+    try:
+        lt = time.localtime()
+        return int(time.mktime((lt.tm_year, lt.tm_mon, lt.tm_mday, 0, 0, 0, 0, 0, -1)))
+    except Exception:
+        return int(time.time()) - 86400
+
+
+def session_recap_data():
+    """Today's photo / news / chat counts + top location (stdlib)."""
+    today0 = _start_of_today_sec()
+    photos = STATE.get("photos") or []
+    try:
+        photos = attach_locations_to_photos(photos)
+    except Exception:
+        pass
+    photo_n = 0
+    for p in photos:
+        if not isinstance(p, dict):
+            continue
+        try:
+            if int(p.get("mtime") or 0) >= today0:
+                photo_n += 1
+        except Exception:
+            pass
+    news_n = 0
+    for art in list_news_articles(80):
+        try:
+            if int(art.get("mtime") or 0) >= today0:
+                news_n += 1
+        except Exception:
+            pass
+    chat_n = 0
+    for row in load_chat_log():
+        if not isinstance(row, dict):
+            continue
+        try:
+            if int(row.get("ts") or 0) >= today0:
+                chat_n += 1
+        except Exception:
+            pass
+    places = places_summary(photos)
+    top_place = ""
+    top_count = 0
+    if places:
+        top_place = places[0].get("place") or ""
+        top_count = int(places[0].get("count") or 0)
+    return {
+        "ok": True,
+        "photo_count_today": photo_n,
+        "news_count_today": news_n,
+        "chat_count_today": chat_n,
+        "top_location": top_place,
+        "top_location_count": top_count,
+        "uptime_sec": bridge_uptime_sec(),
+        "uptime_human": format_uptime(bridge_uptime_sec()),
+        "version": STATE.get("version", "unknown") or "unknown",
+    }
+
 
 
 def process_outbox_flag(ini):
@@ -1620,6 +1816,24 @@ HTML_TEMPLATE = """<!DOCTYPE html>
   .chatmsg .deliv { font-size:10px; color:#2cff6a; margin-top:4px; }
   .chatmsg.cj .deliv { color:#7abfff; }
   .chatempty { font-size:12px; color:#7aaa7a; }
+  .chatmsg .reacts { margin-top:6px; display:flex; flex-wrap:wrap; gap:4px; align-items:center; }
+  .chatmsg .reacts button {
+    background:#0b0f0c; border:1px solid #1a4; color:#d7ffd0; font-size:12px;
+    padding:4px 8px; border-radius:12px; cursor:pointer; min-height:28px;
+  }
+  .chatmsg .reacts button:active { border-color:#2cff6a; }
+  .chatmsg .reacts .pinbtn { border-color:#c4a35a; color:#f5e6c8; }
+  .chatmsg.pinned {
+    outline:1px solid #c4a35a; box-shadow:0 0 0 1px rgba(196,163,90,0.35);
+  }
+  .chatpin {
+    display:none; margin:0 0 10px; padding:8px 10px; background:#1a1508;
+    border:1px solid #c4a35a; border-radius:4px; font-size:13px;
+  }
+  .chatpin.show { display:block; }
+  .chatpin .plab { font-size:10px; letter-spacing:1px; color:#c4a35a; margin-bottom:4px; }
+  .uptimefoot { color:#7aaa7a; font-size:11px; margin-top:6px; }
+  .uptimefoot b { color:#2cff6a; }
   .spectate-link {
     display:inline-block; margin:8px 12px; padding:8px 12px; background:#1a2a40;
     border:1px solid #4af; color:#9cf; text-decoration:none; font-size:12px; font-weight:bold;
@@ -1783,6 +1997,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     box-sizing:border-box; border-radius:2px;
   }
   .quickbar a.qa-herald { border-color:#c4a35a; color:#f5e6c8; background:#2a1a08; }
+  .quickbar a.qa-recap { border-color:#2cff6a; color:#b6e6b0; background:#0b1a10; }
   .quickbar a.qa-spec { border-color:#4af; color:#9cf; background:#1a2a40; }
   .favbtn {
     background:#143; color:#d7ffd0; border:1px solid #2cff6a; padding:10px 12px;
@@ -1913,6 +2128,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     <button type="button" id="qa_camera" title="Open GTA and press K → Camera">Camera tip</button>
     <a class="qa-spec" href="/spectate">Spectate</a>
     <a class="qa-herald" href="/news">Herald</a>
+    <a class="qa-recap" href="/recap">Recap</a>
     <button type="button" id="qa_text">Text CJ</button>
     <span class="qa-watch" id="qa_watching" title="Spectate viewers (last ~30s)">0 watching</span>
   </div>
@@ -1926,6 +2142,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       <button type="button" id="chat_mark_read">Mark chat read</button>
       <button type="button" id="chat_notify_btn">Enable CJ alerts</button>
     </div>
+    <div class="chatpin" id="chat_pin"><div class="plab">PINNED</div><div id="chat_pin_body"></div></div>
     <div id="chat_thread"><div class="chatempty">Send a message below — delivered texts show here. CJ replies appear on the right.</div></div>
   </div>
   <a class="spectate-link" href="/spectate">LIVE SPECTATE — snapshot view</a>
@@ -1949,6 +2166,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
   <div id="feed"></div>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
   <div class="helpfoot" id="help_foot">
+    <div class="uptimefoot" id="uptime_foot">Bridge uptime: <b id="uptime_val">—</b></div>
     <div><strong>Shortcuts</strong> —
       <kbd>?</kbd> help ·
       <kbd>Esc</kbd> close lightbox ·
@@ -2030,6 +2248,7 @@ var PLACE_FILTER = '';
 var LAST_PHOTOS = [];
 var LAST_PLACES = [];
 var LAST_CHAT = [];
+var PINNED_ID = '';
 var LAST_HUD = null;
 var LAST_WANTED = -1;
 var PENDING_ACTION = ''; // 'delete:NAME' or 'clear'
@@ -2579,12 +2798,30 @@ function photoCard(p, isHero) {
   return { html: html, isNew: isNew };
 }
 
-function renderChat(inbox) {
+function renderPinned(pinned) {
+  var wrap = document.getElementById('chat_pin');
+  var body = document.getElementById('chat_pin_body');
+  if (!wrap || !body) return;
+  PINNED_ID = (pinned && pinned.id) ? String(pinned.id) : '';
+  if (!pinned || !pinned.msg) {
+    wrap.className = 'chatpin';
+    body.innerHTML = '';
+    return;
+  }
+  var who = pinned.from || 'REAL PHONE';
+  body.innerHTML = '<strong>' + escapeHtml(who) + '</strong>: ' + escapeHtml(pinned.msg || '') +
+    ' <button type="button" class="pinbtn" onclick="pinChat(\'\')">Unpin</button>';
+  wrap.className = 'chatpin show';
+}
+function renderChat(inbox, pinned) {
   LAST_CHAT = inbox || [];
   var box = document.getElementById('chat_thread');
   if (!box) return;
   var list = inbox || [];
   LAST_CHAT = list;
+  if (typeof pinned !== 'undefined') {
+    renderPinned(pinned);
+  }
   if (!list.length) {
     box.innerHTML = '<div class="chatempty">Send a message below — delivered texts show here. CJ replies appear on the right.</div>';
     return;
@@ -2597,16 +2834,46 @@ function renderChat(inbox) {
     var when = (typeof m === 'object' && m.when) ? m.when : '';
     var role = (typeof m === 'object' && (m.role || m.side)) ? String(m.role || m.side).toLowerCase() : '';
     var isCj = role === 'cj' || String(who).toUpperCase() === 'CJ';
+    var mid = (typeof m === 'object' && m.id) ? String(m.id) : '';
     var cls = isCj ? 'chatmsg cj' : 'chatmsg visitor';
-    html += '<div class="' + cls + '"><div class="who">' + escapeHtml(who) + (when ? ' · ' + escapeHtml(when) : '') + '</div>';
+    if (mid && mid === PINNED_ID) cls += ' pinned';
+    html += '<div class="' + cls + '" data-id="' + escapeHtml(mid) + '"><div class="who">' + escapeHtml(who) + (when ? ' · ' + escapeHtml(when) : '') + '</div>';
     html += escapeHtml(text);
     if (isCj) {
-      html += '<div class="deliv">CJ replied</div></div>';
+      html += '<div class="deliv">CJ replied</div>';
     } else {
-      html += '<div class="deliv">Delivered to CJ</div></div>';
+      html += '<div class="deliv">Delivered to CJ</div>';
     }
+    if (mid) {
+      var rx = (typeof m === 'object' && m.reactions) ? m.reactions : {};
+      var u = parseInt(rx['👍'] || 0, 10) || 0;
+      var l = parseInt(rx['😂'] || 0, 10) || 0;
+      var f = parseInt(rx['🔥'] || 0, 10) || 0;
+      var safeId = String(mid).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+      html += '<div class="reacts">';
+      html += '<button type="button" onclick="reactChat(\'' + safeId + '\',\'up\')">👍 ' + u + '</button>';
+      html += '<button type="button" onclick="reactChat(\'' + safeId + '\',\'laugh\')">😂 ' + l + '</button>';
+      html += '<button type="button" onclick="reactChat(\'' + safeId + '\',\'fire\')">🔥 ' + f + '</button>';
+      html += '<button type="button" class="pinbtn" onclick="pinChat(\'' + safeId + '\')">' + (mid === PINNED_ID ? 'Unpin' : 'Pin') + '</button>';
+      html += '</div>';
+    }
+    html += '</div>';
   }
   box.innerHTML = html;
+}
+function reactChat(id, reaction) {
+  var x = new XMLHttpRequest();
+  x.open('POST', '/react', true);
+  x.setRequestHeader('Content-Type', 'application/json');
+  x.onload = function() { try { refreshNow(); } catch (e) {} };
+  x.send(JSON.stringify({id: id, reaction: reaction}));
+}
+function pinChat(id) {
+  var x = new XMLHttpRequest();
+  x.open('POST', '/pin', true);
+  x.setRequestHeader('Content-Type', 'application/json');
+  x.onload = function() { try { refreshNow(); } catch (e) {} };
+  x.send(JSON.stringify(id ? {id: id} : {clear: 1}));
 }
 
 function renderMoments(photos) {
@@ -2838,8 +3105,10 @@ function paint(data) {
   maybeWantedToast(data.hud || null);
   paintWatching(data.watching);
   LAST_PLACES = data.places || [];
-  renderChat(data.inbox || []);
+  renderChat(data.inbox || [], data.pinned || null);
   updateChatBadge(data.inbox || []);
+  var upEl = document.getElementById('uptime_val');
+  if (upEl) upEl.textContent = data.uptime_human || (data.uptime_sec != null ? (data.uptime_sec + 's') : '—');
   maybeNotifyCj(data.inbox || []);
   if (data.poll_ms && data.spectate_on) {
     var hot = Math.min(parseInt(data.poll_ms, 10) || 2000, 1000);
@@ -2904,6 +3173,7 @@ function setOfflineUI(reason) {
   var hint = document.getElementById('refresh_hint');
   if (hint) hint.textContent = reason || 'reconnect...';
 }
+function refreshNow() { poll(); }
 function poll() {
   var x = new XMLHttpRequest();
   x.open('GET', '/api', true);
@@ -3172,6 +3442,63 @@ def render_qr_page():
     )
 
 
+
+def render_recap_html():
+    """Simple HTML session recap for today (photos / news / chat / top place)."""
+    data = session_recap_data()
+    ver = _esc(data.get("version") or "unknown")
+    top = data.get("top_location") or ""
+    top_s = _esc(top) if top else "(none yet)"
+    top_c = int(data.get("top_location_count") or 0)
+    up = _esc(data.get("uptime_human") or "0s")
+    top_extra = ""
+    if top:
+        top_extra = ' <span style="color:#7aaa7a;font-size:14px">&times;%d</span>' % top_c
+    body = (
+        '<!DOCTYPE html><html><head><meta charset="utf-8">'
+        '<meta name="viewport" content="width=device-width, initial-scale=1">'
+        '<meta name="theme-color" content="#041006">'
+        '<title>GroveLink Session Recap</title>'
+        '<style>'
+        'body{margin:0;background:#041006;color:#d7ffd0;font-family:system-ui,sans-serif;padding:20px}'
+        'h1{font-size:18px;letter-spacing:2px;color:#2cff6a;margin:0 0 8px}'
+        'p.sub{color:#7aaa7a;font-size:13px;margin:0 0 18px}'
+        '.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;max-width:520px}'
+        '.card{background:#0b0f0c;border:1px solid #1a4;border-radius:6px;padding:14px}'
+        '.card .k{font-size:11px;letter-spacing:1px;color:#7aaa7a}'
+        '.card .v{font-size:28px;font-weight:bold;color:#2cff6a;margin-top:4px}'
+        '.card.wide{grid-column:1/-1}'
+        'a.back{display:inline-block;margin-top:18px;color:#2cff6a;font-weight:bold;margin-right:10px}'
+        '.foot{margin-top:16px;font-size:12px;color:#7aaa7a}'
+        '</style></head><body>'
+        '<h1>SESSION RECAP</h1>'
+        '<p class="sub">Today on this bridge · GroveLink __VER__</p>'
+        '<div class="grid">'
+        '<div class="card"><div class="k">PHOTOS TODAY</div><div class="v">__P__</div></div>'
+        '<div class="card"><div class="k">NEWS TODAY</div><div class="v">__N__</div></div>'
+        '<div class="card"><div class="k">CHAT TODAY</div><div class="v">__C__</div></div>'
+        '<div class="card"><div class="k">BRIDGE UPTIME</div><div class="v" style="font-size:20px">__U__</div></div>'
+        '<div class="card wide"><div class="k">TOP LOCATION</div>'
+        '<div class="v" style="font-size:20px">__T____TE__</div></div>'
+        '</div>'
+        '<a class="back" href="/">&larr; Back to phone</a>'
+        '<a class="back" href="/news">Herald</a>'
+        '<a class="back" href="/spectate">Spectate</a>'
+        '<div class="foot">Camera stays gallery-only · NEWS is separate · Win7 stdlib bridge</div>'
+        '</body></html>'
+    )
+    return (
+        body.replace("__VER__", ver)
+        .replace("__P__", str(int(data.get("photo_count_today") or 0)))
+        .replace("__N__", str(int(data.get("news_count_today") or 0)))
+        .replace("__C__", str(int(data.get("chat_count_today") or 0)))
+        .replace("__U__", up)
+        .replace("__T__", top_s)
+        .replace("__TE__", top_extra)
+    )
+
+
+
 def render_spectate_html():
     """Snapshot-based live view — refreshes latest bridge photo (not H.264/WebRTC)."""
     ver = STATE.get("version", "unknown") or "unknown"
@@ -3201,14 +3528,22 @@ def render_spectate_html():
         "padding:8px 12px;text-decoration:none;font-size:12px;font-weight:bold;cursor:pointer;min-height:40px}"
         ".meta{position:fixed;bottom:12px;left:12px;right:12px;z-index:5;font-size:11px;color:#7aaa7a;"
         "text-align:center;text-shadow:0 1px 3px #000}"
+        "body.cinema .badge,body.cinema .banner,body.cinema .controls,body.cinema .meta{display:none!important}"
+        "body.cinema #frame{inset:0;width:100vw;height:100vh;object-fit:contain}"
+        "body.cinema #wait{inset:0}"
+        ".cinema-hint{display:none;position:fixed;bottom:10px;left:50%;transform:translateX(-50%);z-index:8;"
+        "font-size:11px;color:#7aaa7a;background:rgba(0,0,0,0.5);padding:4px 10px;border-radius:2px}"
+        "body.cinema .cinema-hint{display:block}"
         "</style></head><body>"
         "<div class=\"badge\" id=\"badge\">LIVE SPECTATE</div>"
         "<div class=\"banner\" id=\"banner\"><b>Snapshot live — not video</b> · slideshow of camera stills · same Wi-Fi + bridge · <span id=\"watching\">0 watching</span></div>"
         "<div class=\"controls\">"
         "<button type=\"button\" id=\"btn_pause\">Pause</button>"
         "<button type=\"button\" id=\"btn_fs\">Fullscreen</button>"
+        "<button type=\"button\" id=\"btn_cinema\" title=\"Hide chrome (H)\">Cinema</button>"
         "<a class=\"back\" href=\"/\">← Phone</a>"
         "</div>"
+        "<div class=\"cinema-hint\" id=\"cinema_hint\">Press H to show controls</div>"
         "<img id=\"frame\" alt=\"spectate frame\">"
         "<div id=\"wait\">"
         "<h1>WAITING FOR SPECTATE FRAMES</h1>"
@@ -3287,6 +3622,23 @@ def render_spectate_html():
         "    }"
         "  }catch(e){}"
         "};"
+        "function setCinema(on){"
+        "  document.body.className=on?'cinema':'';"
+        "  var b=document.getElementById('btn_cinema');"
+        "  if(b) b.textContent=on?'Exit cinema':'Cinema';"
+        "  try{ localStorage.setItem('grovelink_cinema', on?'1':'0'); }catch(e){}"
+        "}"
+        "document.getElementById('btn_cinema').onclick=function(){"
+        "  setCinema(document.body.className.indexOf('cinema')<0);"
+        "};"
+        "document.addEventListener('keydown',function(ev){"
+        "  var t=(ev.target&&ev.target.tagName)||'';"
+        "  if(t==='INPUT'||t==='TEXTAREA') return;"
+        "  if(ev.key==='h'||ev.key==='H'){"
+        "    setCinema(document.body.className.indexOf('cinema')<0);"
+        "  }"
+        "});"
+        "try{ if(localStorage.getItem('grovelink_cinema')==='1') setCinema(true); }catch(e){}"
         "tick();"
         "</script></body></html>"
     ).replace('__VER__', _esc(ver))
@@ -3390,6 +3742,10 @@ def api_payload():
         "hud": read_hud_from_ini(),
         "watching": spectate_watching_count(),
         "places": places_summary(photos),
+        "uptime_sec": bridge_uptime_sec(),
+        "uptime_human": format_uptime(bridge_uptime_sec()),
+        "pinned": get_pinned_chat(),
+        "pinned_chat_id": (STATE.get("pinned_chat_id") or ""),
     }
 
 
@@ -3415,6 +3771,9 @@ def health_payload():
         "max_photos": int(STATE.get("max_photos") or 40),
         "last_error": STATE.get("last_error", "") or "",
         "skipped_deleted": len(DELETED),
+        "uptime_sec": bridge_uptime_sec(),
+        "uptime_human": format_uptime(bridge_uptime_sec()),
+        "started_at": int(STATE.get("started_at") or 0),
     }
 
 
@@ -3676,7 +4035,15 @@ class Handler(BaseHTTPRequestHandler):
             self._html(page)
             return
         if path == "/api/chat":
-            self._json({"ok": True, "inbox": load_chat_log()})
+            self._json({
+                "ok": True,
+                "inbox": load_chat_log(),
+                "pinned": get_pinned_chat(),
+                "pinned_chat_id": (STATE.get("pinned_chat_id") or ""),
+            })
+            return
+        if path == "/recap" or path == "/recap/":
+            self._html(render_recap_html())
             return
         if path == "/api/spectate":
             try:
@@ -3869,6 +4236,69 @@ class Handler(BaseHTTPRequestHandler):
                 "location": article.get("location") or "",
                 "url": "/news/%s" % article.get("id"),
             })
+            return
+
+        if path == "/react" or path == "/api/chat/react":
+            msg_id = ""
+            emoji = ""
+            if text_body.lstrip().startswith("{"):
+                try:
+                    obj = json.loads(text_body)
+                    msg_id = obj.get("id") or obj.get("msg_id") or ""
+                    emoji = obj.get("reaction") or obj.get("emoji") or obj.get("r") or ""
+                except Exception:
+                    msg_id = ""
+            else:
+                fields = parse_qs(text_body)
+                if "id" in fields and fields["id"]:
+                    msg_id = fields["id"][0]
+                elif "msg_id" in fields and fields["msg_id"]:
+                    msg_id = fields["msg_id"][0]
+                if "reaction" in fields and fields["reaction"]:
+                    emoji = fields["reaction"][0]
+                elif "emoji" in fields and fields["emoji"]:
+                    emoji = fields["emoji"][0]
+                elif "r" in fields and fields["r"]:
+                    emoji = fields["r"][0]
+            ok, detail = react_to_chat(msg_id, emoji)
+            if not ok:
+                self._json({"ok": False, "detail": detail}, code=400)
+                return
+            self._json({
+                "ok": True,
+                "entry": detail,
+                "id": detail.get("id") if isinstance(detail, dict) else msg_id,
+                "reactions": (detail.get("reactions") if isinstance(detail, dict) else {}),
+                "pinned": get_pinned_chat(),
+            })
+            return
+
+        if path == "/pin" or path == "/api/chat/pin":
+            msg_id = ""
+            if text_body.lstrip().startswith("{"):
+                try:
+                    obj = json.loads(text_body)
+                    msg_id = obj.get("id") or obj.get("msg_id") or ""
+                    if obj.get("clear") in (1, True, "1", "true", "yes"):
+                        msg_id = ""
+                except Exception:
+                    msg_id = ""
+            else:
+                fields = parse_qs(text_body)
+                if "id" in fields and fields["id"]:
+                    msg_id = fields["id"][0]
+                elif "msg_id" in fields and fields["msg_id"]:
+                    msg_id = fields["msg_id"][0]
+                if "clear" in fields and fields["clear"] and fields["clear"][0] in ("1", "true", "yes"):
+                    msg_id = ""
+            ok, entry, detail = pin_chat_message(msg_id)
+            code = 200 if ok else 404
+            self._json({
+                "ok": ok,
+                "detail": detail,
+                "pinned": entry,
+                "pinned_chat_id": (STATE.get("pinned_chat_id") or ""),
+            }, code=code)
             return
 
         if path != "/send":
@@ -4067,6 +4497,9 @@ def main():
     STATE["version"] = read_pack_version()
     STATE["last_error"] = ""
     STATE["link_ini"] = ini
+    STATE["started_at"] = int(time.time())
+    if not STATE.get("pinned_chat_id"):
+        STATE["pinned_chat_id"] = ""
     try:
         STATE["spectate_on"] = read_ini_key(ini, "SPECTATE", "on", "0") == "1"
     except Exception:

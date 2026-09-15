@@ -1,6 +1,16 @@
 # GroveLink changelog
 
-Human-readable highlights from pack **1.0 → 2.1.0**. Full detail also lives in root `README.md` round notes and [grovelink/FEATURES.md](grovelink/FEATURES.md).
+Human-readable highlights from pack **1.0 → 2.2.0**. Full detail also lives in root `README.md` round notes and [grovelink/FEATURES.md](grovelink/FEATURES.md).
+
+## 2.2.0 — Reactions, pin, cinema, recap, uptime
+
+- **Chat reactions:** web visitors tap 👍 / 😂 / 🔥 on a message; counts stored in `chat_delivered.json`; shown on the thread.
+- **Pin message:** pin one chat message to the top (`STATE.pinned_chat_id` + `/api` `pinned` / `POST /pin`).
+- **Spectate cinema mode:** hide chrome on `/spectate` (hotkey **H** or Cinema button) for a bigger frame.
+- **Session recap:** `GET /recap` simple HTML — today's photo / news / chat counts + top location; Quick Actions link.
+- **Bridge uptime:** `uptime_sec` / `uptime_human` on `/health` + phone footer (from `STATE.started_at`).
+- **CLEO:** sixth canned REPLY ("Later homie"); HELP mentions Moments + Spectate URL.
+- Camera stays gallery-only; NEWS stays separate; Win7 stdlib; crash-safer CLEO. Docs + smoke PASS. VERSION **2.2.0**.
 
 ## 2.1.0 — Nicknames, watching, Moments, wanted toasts, By place
 

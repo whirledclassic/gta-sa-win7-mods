@@ -8,7 +8,7 @@
 // Menu: CAMERA / INBOX / REPLY / NEWS / SPECTATE / CONTACTS / STATUS / HELP / CLOSE
 // CAMERA = pics to phone/PC gallery ONLY (never writes NEWS keys / never triggers Herald).
 // NEWS = snap + NEWS.make=1 + NEWS.zone location tag so bridge files Herald (separate feature).
-// REPLY = Up/Down canned lines + Enter → OUTBOX (CJ replies on web chat).
+// REPLY = Up/Down canned lines (6) + Enter → OUTBOX (CJ replies on web chat).
 // SPECTATE = toggle snapshot live view; while on (phone open or closed) every ~2.5s
 //   take_photo + SPECTATE.frame=1 (bridge copies; never NEWS).
 // INBOX plays 018C when new=1. CONTACTS cycles static flavor lines (no models).
@@ -27,7 +27,7 @@
 26@ = 0 // contacts cycle index 0=Sweet 1=Smoke 2=Ryder 3=Cesar 4=Catalina
 27@ = 0 // phone-just-opened edge (remind / setup once per open)
 28@ = 0 // SMS closed-phone notify latch (1 = already shown for current new=1)
-29@ = 0 // reply canned index 0-4
+29@ = 0 // reply canned index 0-5
 30@ = 0 // last spectate game timer (ms)
 31@ = 0 // last status HUD write timer (ms)
 
@@ -559,6 +559,8 @@
 0001: wait 2100
 0ACD: show_text_highpriority "SPECTATE: web /spectate live" time 2200
 0001: wait 2300
+0ACD: show_text_highpriority "Moments+Spectate on phone URL" time 2200
+0001: wait 2300
 0ACD: show_text_highpriority "OPEN START GROVELINK ON PC" time 2200
 0001: wait 2300
 0ACD: show_text_highpriority "Outdated? UPDATE_GROVELINK" time 2500
@@ -611,7 +613,13 @@
 0ACD: show_text_highpriority "REPLY: Busy rn" time 900
 0002: jump @RKEYS
 :RSHOW4
+00D6: if
+0039:   29@ == 4
+004D: jf @RSHOW5
 0ACD: show_text_highpriority "REPLY: Where you at?" time 900
+0002: jump @RKEYS
+:RSHOW5
+0ACD: show_text_highpriority "REPLY: Later homie" time 900
 
 :RKEYS
 00D6: if
@@ -620,7 +628,7 @@
 0001: wait 160
 000A: 29@ += 1
 00D6: if
-0019:   29@ > 4
+0019:   29@ > 5
 004D: jf @REPLY_MODE
 0006: 29@ = 0
 0002: jump @REPLY_MODE
@@ -633,7 +641,7 @@
 00D6: if
 001B:   0 > 29@
 004D: jf @REPLY_MODE
-0006: 29@ = 4
+0006: 29@ = 5
 0002: jump @REPLY_MODE
 
 :RKEY_SEND
@@ -670,7 +678,13 @@
 0AF5: write_string "Busy rn" to_ini_file "cleo\GroveLink\link.ini" section "OUTBOX" key "msg"
 0002: jump @RSEND_GO
 :RSEND4
+00D6: if
+0039:   29@ == 4
+004D: jf @RSEND5
 0AF5: write_string "Where you at?" to_ini_file "cleo\GroveLink\link.ini" section "OUTBOX" key "msg"
+0002: jump @RSEND_GO
+:RSEND5
+0AF5: write_string "Later homie" to_ini_file "cleo\GroveLink\link.ini" section "OUTBOX" key "msg"
 :RSEND_GO
 0AF5: write_string "CJ" to_ini_file "cleo\GroveLink\link.ini" section "OUTBOX" key "from"
 0AF1: write_int 1 to_ini_file "cleo\GroveLink\link.ini" section "OUTBOX" key "new"

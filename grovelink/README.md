@@ -49,6 +49,7 @@ Until PR #1 merges, `update.ini` defaults to branch `fix/grovelink-camera-snapsh
 - Sticky **composer** with **Nickname** (localStorage; default REAL PHONE); chat thread shows your name + **Delivered to CJ** / **CJ replied**
 - **Moments** Today reel + **By place** tab (Herald location / caption tags); **WANTED ★ increased** toast when HUD wanted rises
 - Spectate **N watching** (recent polls, ~30s) on `/spectate` + Quick Actions
+- **2.2.0:** chat reactions + pin, spectate cinema (H), `/recap`, bridge uptime; CLEO sixth REPLY
 - **LIVE SPECTATE** link → `GET /spectate` (full-viewport latest frame, auto-refresh; snapshot slideshow only — not H.264/WebRTC)
 - Header shows prominent **VERSION** + **PHOTOS** stats, **LIVE** pulse badge, **LAN** + **localhost** URLs, last poll time, unread count
 - **Grove Street Herald** link → `GET /news` (fake newspaper; articles embed `/photo/…`)

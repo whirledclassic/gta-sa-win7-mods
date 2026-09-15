@@ -11,6 +11,7 @@ help footer + empty-action disable + VERIFY VERSION + CHANGELOG + port-busy + RE
 1.9.0: CJ REPLY (OUTBOX→chat); /spectate snapshot live view; SPECTATE.frame copy (no NEWS).
 2.0.0: favorites API; /manifest.webmanifest; /api hud; spectate UX; share article; RESEARCH.md.
 2.1.0: chat nicknames; spectate watching count; Moments reel; wanted toasts; By place; docs.
+2.2.0: chat reactions+pin; spectate cinema; /recap; bridge uptime; CLEO 6th REPLY; docs.
 
 Run from repo root or anywhere:
   python tests/smoke_bridge.py
@@ -133,6 +134,8 @@ def main():
     gl.STATE["gta_dir"] = tmp
     gl.STATE["spectate_viewers"] = {}
     gl.STATE["spectate_on"] = False
+    gl.STATE["started_at"] = time.time() - 90
+    gl.STATE["pinned_chat_id"] = ""
 
     try:
         from http.server import HTTPServer
@@ -889,6 +892,93 @@ def main():
         check("2.1.0 nicknames/watching/places suite", False, "%s\n%s" % (exc, traceback.format_exc()[:600]))
 
 
+
+    # --- 2.2.0 reactions + pin + cinema + recap + uptime ---
+    try:
+        try:
+            from urllib.request import Request, urlopen
+        except ImportError:
+            from urllib2 import Request, urlopen
+
+        # Seed a chat message with id
+        entry = gl.append_chat_delivered("ReactFan", "React me")
+        mid = entry.get("id")
+        check("chat entry has id", bool(mid), entry)
+
+        req_r = Request(
+            "http://127.0.0.1:%s/react" % port,
+            data=("id=%s&reaction=fire" % mid).encode("utf-8"),
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+        )
+        resp_r = urlopen(req_r, timeout=5)
+        jr = json.loads(resp_r.read().decode("utf-8"))
+        check("POST /react ok", jr.get("ok") is True, jr)
+        rx = (jr.get("reactions") or (jr.get("entry") or {}).get("reactions") or {})
+        fire_n = int(rx.get("🔥") or rx.get("fire") or 0)
+        check("POST /react fire count", fire_n >= 1, rx)
+
+        req_p = Request(
+            "http://127.0.0.1:%s/pin" % port,
+            data=("id=%s" % mid).encode("utf-8"),
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+        )
+        resp_p = urlopen(req_p, timeout=5)
+        jp = json.loads(resp_p.read().decode("utf-8"))
+        check("POST /pin ok", jp.get("ok") is True and jp.get("pinned_chat_id") == mid, jp)
+
+        code_api22, raw_api22 = http_get(port, "/api")
+        japi22 = json.loads(raw_api22.decode("utf-8") if isinstance(raw_api22, bytes) else raw_api22)
+        check("GET /api has uptime_sec", isinstance(japi22.get("uptime_sec"), int) and japi22.get("uptime_sec") >= 1, japi22.get("uptime_sec"))
+        check("GET /api has uptime_human", bool(japi22.get("uptime_human")), japi22.get("uptime_human"))
+        pinned = japi22.get("pinned") or {}
+        check("GET /api pinned message", isinstance(pinned, dict) and pinned.get("id") == mid, pinned)
+
+        code_h22, raw_h22 = http_get(port, "/health")
+        jh22 = json.loads(raw_h22.decode("utf-8") if isinstance(raw_h22, bytes) else raw_h22)
+        check("GET /health has uptime", "uptime_sec" in jh22 and "uptime_human" in jh22, jh22)
+
+        code_rec, raw_rec = http_get(port, "/recap")
+        html_rec = raw_rec.decode("utf-8") if isinstance(raw_rec, bytes) else raw_rec
+        check("GET /recap status 200", code_rec == 200, code_rec)
+        check("GET /recap PHOTOS TODAY", "PHOTOS TODAY" in html_rec)
+        check("GET /recap NEWS TODAY", "NEWS TODAY" in html_rec)
+        check("GET /recap CHAT TODAY", "CHAT TODAY" in html_rec)
+        check("GET /recap TOP LOCATION", "TOP LOCATION" in html_rec)
+
+        code_home22, raw_home22 = http_get(port, "/")
+        html22 = raw_home22.decode("utf-8") if isinstance(raw_home22, bytes) else raw_home22
+        check("GET / reactChat UI", "reactChat" in html22 and "👍" in html22)
+        check("GET / pinChat UI", "pinChat" in html22 and "chat_pin" in html22)
+        check("GET / Recap quick action", 'href="/recap"' in html22 and "Recap" in html22)
+        check("GET / uptime footer", "uptime_foot" in html22 or "uptime_val" in html22)
+
+        code_sp22, raw_sp22 = http_get(port, "/spectate")
+        html_sp22 = raw_sp22.decode("utf-8") if isinstance(raw_sp22, bytes) else raw_sp22
+        check("GET /spectate cinema btn", "btn_cinema" in html_sp22 and "Cinema" in html_sp22)
+        check("GET /spectate cinema hotkey H", "setCinema" in html_sp22 and ("ev.key==='h'" in html_sp22 or 'ev.key===\'h\'' in html_sp22 or "key==='H'" in html_sp22 or 'key===\'H\'' in html_sp22))
+        check("GET /spectate cinema CSS", "body.cinema" in html_sp22)
+
+        # CLEO 6th reply + HELP Moments
+        with open(os.path.join(REPO, "grovelink", "GroveLinkPhone.txt"), "r") as f:
+            cleo22 = f.read()
+        check("CLEO Later homie reply", "Later homie" in cleo22)
+        check("CLEO reply index 0-5", "0-5" in cleo22 or "29@ > 5" in cleo22)
+        check("CLEO HELP Moments+Spectate", "Moments" in cleo22 and "Spectate" in cleo22)
+
+        with open(os.path.join(REPO, "grovelink", "FEATURES.md"), "r") as f:
+            feat22 = f.read()
+        check("FEATURES.md 2.2.0", "2.2.0" in feat22 and "reaction" in feat22.lower())
+        check("FEATURES.md recap/cinema/uptime", "/recap" in feat22 and "cinema" in feat22.lower() and "uptime" in feat22.lower())
+        with open(os.path.join(REPO, "CHANGELOG.md"), "r") as f:
+            cl22 = f.read()
+        check("CHANGELOG.md has 2.2.0", "2.2.0" in cl22 and ("reaction" in cl22.lower() or "recap" in cl22.lower()))
+        with open(os.path.join(REPO, "grovelink", "RESEARCH.md"), "r") as f:
+            res22 = f.read()
+        check("RESEARCH.md 2.2.0", "2.2.0" in res22)
+    except Exception as exc:
+        check("2.2.0 reactions/pin/recap suite", False, "%s\n%s" % (exc, traceback.format_exc()[:600]))
+
+
     try:
         server.shutdown()
     except Exception:
@@ -926,6 +1016,8 @@ def main():
         check("CLEO HELP Camera vs NEWS", "Camera: pics to phone only" in full and "NEWS: snap + Herald" in full)
         check("CLEO HELP mentions REPLY", "REPLY:" in full and "Enter send" in full)
         check("CLEO HELP mentions SPECTATE", "SPECTATE:" in full and "/spectate" in full)
+        check("CLEO has Later homie canned", "Later homie" in full)
+        check("CLEO HELP Moments line", "Moments" in full)
         cam_to_inbox = full.split(":SEL_INBOX")[0]
         # Camera menu select is the LAST shutter before :SEL_INBOX (SPECTATE_TICK may shutter earlier)
         if "0A2F: set_photo_camera_effect 1" in cam_to_inbox:
@@ -1005,6 +1097,7 @@ def main():
         check("CHANGELOG.md has 1.9.0 CJ reply + spectate", "1.9.0" in cl and ("OUTBOX" in cl or "REPLY" in cl) and ("spectate" in cl.lower() or "SPECTATE" in cl))
         check("CHANGELOG.md has 2.0.0 research pass", "2.0.0" in cl and ("favorite" in cl.lower() or "HUD" in cl or "manifest" in cl.lower()))
         check("CHANGELOG.md has 2.1.0 features", "2.1.0" in cl and ("nickname" in cl.lower() or "watching" in cl.lower() or "Moments" in cl))
+        check("CHANGELOG.md has 2.2.0 features", "2.2.0" in cl and ("reaction" in cl.lower() or "recap" in cl.lower() or "uptime" in cl.lower() or "cinema" in cl.lower()))
         check("CHANGELOG covers 1.0 foundation", "1.0" in cl and ("Foundation" in cl or "crash-safer" in cl))
     except Exception as exc:
         check("CHANGELOG.md", False, exc)
@@ -1035,7 +1128,7 @@ def main():
     except Exception as exc:
         check("README polish", False, exc)
 
-    check("VERSION is 2.1.0", pack_ver == "2.1.0", pack_ver)
+    check("VERSION is 2.2.0", pack_ver == "2.2.0", pack_ver)
 
     # Runtime: after clear, HTML still disables; after photo, actions enabled via setCountActions path
     # (API count already covered; spot-check helper exists in page source above)

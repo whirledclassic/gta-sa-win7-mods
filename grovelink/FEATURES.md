@@ -1,6 +1,6 @@
 # GroveLink — current features
 
-Pack version: see root **`VERSION`** (`2.1.0`). Crash-safer CLEO (no `hold_cellphone`, no custom GXT `033E`). Bridge is **stdlib-only** (Win7 Python 2.7 / 3.4–3.8).
+Pack version: see root **`VERSION`** (`2.2.0`; includes **2.1.0** nicknames/watching/Moments). Crash-safer CLEO (no `hold_cellphone`, no custom GXT `033E`). Bridge is **stdlib-only** (Win7 Python 2.7 / 3.4–3.8).
 
 ## Install / update / verify / test
 
@@ -11,7 +11,7 @@ Pack version: see root **`VERSION`** (`2.1.0`). Crash-safer CLEO (no `hold_cellp
 | **One-click update** | Desktop / repo `UPDATE_GROVELINK.bat` — GitHub zip (no Git), overlays files, re-runs INSTALL |
 | **Health check** | Desktop / repo `VERIFY_GROVELINK.bat` — OK/MISSING for game, CLEO, `.cs`, `link.ini`, Python, config, photos dir, **VERSION** (prints pack version), URLs |
 | **Human changelog** | Root `CHANGELOG.md` — pack 1.0→current highlights |
-| **Smoke test** | `tests/smoke_bridge.py` (Linux/Win7, stdlib) or `grovelink/bridge/TEST_BRIDGE.bat` — asserts `/health`, `/api` (+ `hud`, `watching`, `places`), `/news`, `/send` (+ nickname), `/favorite`, `/manifest.webmanifest`, `/export.zip`, HTML gallery, CLEO static |
+| **Smoke test** | `tests/smoke_bridge.py` (Linux/Win7, stdlib) or `grovelink/bridge/TEST_BRIDGE.bat` — asserts `/health` (+ uptime), `/api` (+ `hud`, `watching`, `places`, `pinned`, uptime), `/recap`, `/react`, `/pin`, `/news`, `/send` (+ nickname), `/favorite`, `/manifest.webmanifest`, `/export.zip`, HTML gallery, CLEO static |
 | **Desktop starters** | **GroveLink Phone**, `START_GROVELINK`, `VERIFY_GROVELINK`, `UPDATE_GROVELINK`, `GroveLink_README.txt`, `GroveLink_PHONE_URL.txt`, `GroveLink_REPO.txt` (not INSTALL itself) |
 | **START bat** | Prints pack **VERSION** (CR-stripped); if Python missing, clear Win7 3.8.10 instructions + opens python.org download page |
 | **Port in use** | Bridge prints plain English **port N busy** if TCP bind fails (close other GroveLink / free the port) |
@@ -22,14 +22,14 @@ Pack version: see root **`VERSION`** (`2.1.0`). Crash-safer CLEO (no `hold_cellp
 |------|----------|
 | **CAMERA** | Snap (Enter/Space); shutter sound; `PHOTO.take` + count; **PHOTO TAKEN #N**. **Gallery only — never writes NEWS keys / never files Herald** |
 | **INBOX** | Shows SMS when `new=1`; otherwise **NO NEW TEXTS**; sound when new |
-| **REPLY** | Up/Down canned lines → Enter sends `[OUTBOX]` (`new=1`, `from=CJ`, `msg=…`) to web chat thread |
+| **REPLY** | Up/Down **6** canned lines (incl. **Later homie**) → Enter sends `[OUTBOX]` (`new=1`, `from=CJ`, `msg=…`) to web chat thread |
 | **NEWS** | **Separate feature:** snap + `PHOTO.take` + count + `NEWS.make=1` + **`NEWS.zone` location tag** → bridge files Herald with 📍 badge; shows **BREAKING NEWS SNAP** |
 | **SPECTATE** | Toggle `SPECTATE.on`; while on (phone open/closed) ~2.5s snap + `SPECTATE.frame=1` for `/spectate` (never NEWS) |
 | **Closed-phone SMS** | If `INBOX.new=1`, once: **SMS FROM REAL PHONE** (0ACD + sound) so you open **K** |
 | **NEWS toast** | If `NEWS.new=1` (after NEWS menu or web Breaking News): **NEWS FILED** once, then clears flag |
 | **CONTACTS** | Cycles Sweet / Smoke / Ryder / Cesar / **Catalina** flavor lines (static text; advances each select) |
 | **STATUS** | **LIVE N  PHONE PAGE ON PC** / **NO BRIDGE** + shot count; while `bridge=1` CLEO also writes safe **HUD** ints/strings (`wanted`, `money`, `zone`, `hour`, `spectate`) for the phone page |
-| **HELP** | Camera / REPLY / NEWS / SPECTATE; START GROVELINK; **UPDATE_GROVELINK** if outdated |
+| **HELP** | Camera / REPLY / NEWS / SPECTATE; Moments+Spectate phone URL; START GROVELINK; **UPDATE_GROVELINK** if outdated |
 | **CLOSE** | Put phone away |
 | Keys | **K** toggle · Up/Down wrap (0–8: CAMERA/INBOX/REPLY/NEWS/SPECTATE/CONTACTS/STATUS/HELP/CLOSE) · Enter/Space select · Backspace close |
 | Bridge-down | Once per open: **START GROVELINK BRIDGE** if `STATUS.bridge=0` |
@@ -71,14 +71,19 @@ Pack version: see root **`VERSION`** (`2.1.0`). Crash-safer CLEO (no `hold_cellp
 | **Chat unread + alerts** | Unread badge for CJ replies; **Enable CJ alerts** requests `Notification` (fail-soft on HTTP LAN); **Mark chat read** |
 | **Spectate UX** | Fullscreen, pause/resume, frame age, **snapshot live — not video** banner; hotter poll when `SPECTATE.on` |
 | **Second-screen HUD** | Header strip from `/api` `hud` (wanted / money / zone / spectate); optional SA time from `STATUS.hour` |
-| **Quick Actions** | Camera tip · Spectate · Herald · Text CJ (companion-app style) |
+| **Quick Actions** | Camera tip · Spectate · Herald · **Recap** · Text CJ (companion-app style) |
 | **Chat nicknames** | Display name in localStorage; sent with `/send` as `from=` / `name=`; thread shows nickname; default **REAL PHONE** |
 | **Spectate viewers** | Track recent `/spectate` + `/api/spectate` polls (IP + ~30s) in STATE; **N watching** on spectate + Quick Actions |
 | **Moments reel** | **Today** story-style strip above gallery (mtime today); tap opens lightbox |
 | **Wanted toasts** | When `/api` `hud.wanted` increases → toast **WANTED ★ increased** (fail-soft) |
 | **By place** | Gallery **By place** tab — zones from Herald `location` or caption tags (`loc:` / `#Place`); counts + filter |
+| **Chat reactions** | Tap 👍 / 😂 / 🔥 on a chat bubble; counts in `chat_delivered.json`; `POST /react` |
+| **Pin message** | Pin one chat msg to top of thread (`STATE` + `/api` `pinned` + `POST /pin`) |
+| **Spectate cinema** | `/spectate` hide chrome (hotkey **H** / Cinema btn) for bigger frame |
+| **Session recap** | `GET /recap` — today's photo / news / chat counts + top location; Quick Actions link |
+| **Bridge uptime** | `uptime_sec` / `uptime_human` on `/health` + phone footer |
 | **Web app manifest** | `GET /manifest.webmanifest` + apple meta for Add to Home Screen |
-| **Endpoints** | `/`, `/api`, `/api/chat`, `/api/spectate`, `/spectate`, `/health`, `/send`, `/caption`, `/favorite`, `/news`, `/news/<id>`, `/delete`, `/clear`, `/photo/…`, `/qr`, `/export.zip`, `/manifest.webmanifest` |
+| **Endpoints** | `/`, `/api`, `/api/chat`, `/api/spectate`, `/spectate`, `/recap`, `/health`, `/send`, `/react`, `/pin`, `/caption`, `/favorite`, `/news`, `/news/<id>`, `/delete`, `/clear`, `/photo/…`, `/qr`, `/export.zip`, `/manifest.webmanifest` |
 | **Out of scope** | Full taxi/homie spawn/call systems (see [RESEARCH.md](RESEARCH.md)) — conflicts with other CLEO packs |
 
 ## Config (`grovelink/bridge/config.ini`)
