@@ -1,33 +1,40 @@
 # GTA San Andreas — Windows 7 Mods
 
-Two single-player CLEO mods for **GTA SA PC 1.0** on **Windows 7**.
+Single-player CLEO mods for **GTA SA PC 1.0**.
 
 | Mod | What it does |
 |-----|----------------|
-| [GroveLink Phone](grovelink/) | Cellphone with contacts, **real Sweet/Smoke/Ryder/Cesar/OG Loc/Kendl audio**, camera, and **two-way texts** with a browser on the same Wi-Fi. |
-| [Mission Switcher](switcher/) | Stand next to Smoke, Sweet, Ryder, Cesar… press **H**. **J** returns to CJ. |
+| [GroveLink Phone](grovelink/) | On-screen cellphone: contacts, **game voice calls**, camera, **two-way browser texts**. |
+| [Mission Switcher](switcher/) | Stand next to Sweet/Smoke/Ryder/Cesar, press **H**. **J** back to CJ. |
 
-Not affiliated with Rockstar Games. Single-player only.
+Not affiliated with Rockstar Games.
 
-## Install
+## Auto install / auto patch
 
-1. Extract the zip to Desktop or Downloads.
-2. Right-click **`INSTALL.bat`** → **Run as administrator**.
-3. Open `grovelink\GroveLinkPhone.txt` in **Sanny Builder** and press **F7**. Copy `GroveLinkPhone.cs` into `[GTA SA]\CLEO\`.
-4. Confirm `GroveLink.fxt` is in that same `CLEO` folder.
-5. Double-click Desktop **START_GROVELINK.bat**, launch GTA, press **K**.
-6. On a phone or browser: open the URL the bat prints (`http://YOUR-LAN-IP:8088`).
+| Script | Use |
+|--------|-----|
+| **INSTALL.bat** | First time. Run as admin. |
+| **PATCH.bat** | You already installed, this folder is newer. Safe to run again. |
+| **UPDATE.bat** | `git pull` then patch. |
 
-Text CJ from the browser. In GTA: **K → MESSAGES → ENTER** to pick a reply. Call Sweet from CONTACTS to hear his game voice.
+Full steps: [docs/INSTALL.md](docs/INSTALL.md)  
+Phone keys and screens: [docs/PHONE.md](docs/PHONE.md)  
+History: [CHANGELOG.md](CHANGELOG.md)
 
-Same Wi-Fi. Keep the bat window open.
+Current pack version is in `VERSION.txt` (**7**). After a successful install you should see the same number in `[GTA]\CLEO\GroveLink\installed.txt`.
+
+## In game
+
+**K** opens the green GroveLink handset on the right.
+
+Browser chat: start `START_GROVELINK.bat`, open `http://LAN-IP:8088`.
 
 ## Requirements
 
 - GTA San Andreas **PC 1.0**
-- **CLEO 4.3 or 4.4** from https://cleo.li including `IniFiles.cleo`
-- **Sanny Builder 3 or 4** from https://sannybuilder.com
-- GroveLink: **Python 2.7.18 or 3.8.10** on Windows 7
+- CLEO **4.3 or 4.4** including `IniFiles.cleo` — https://cleo.li
+- Sanny Builder 3 or 4 — https://sannybuilder.com
+- Python 2.7.18 or 3.8.10 for the Wi-Fi bridge
 
 ## License
 
