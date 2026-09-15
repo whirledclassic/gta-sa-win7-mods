@@ -1,4 +1,4 @@
-GROVELINK + COMPANION SWITCHER
+GROVELINK + COMPANION SWITCHER v8
 ================================
 Windows 7 / GTA SA PC 1.0 / CLEO 4.3 or 4.4
 
@@ -9,32 +9,28 @@ FIRST TIME
    https://sannybuilder.com
 3. Right-click INSTALL.bat  ->  Run as administrator
 
-That finds the game (or asks you for the folder), compiles the
-phone and the switcher, writes Desktop launchers, and opens
-firewall port 8088.
-
-If it cannot find GTA, paste the folder that contains gta_sa.exe.
-That path is saved as GTA_DIR.txt so the next run is silent.
-
 IN GAME
   K     GroveLink phone
-  H     become the companion next to you. CJ stays.
+  H     become the companion next to you (works on bikes). CJ stays.
   F6    same as H
-  T     call Sweet in if the street is empty, then press H
+  T     call Sweet in (he gets a BMX if you are riding)
   G     next companion
-  J     you are CJ again
+  J     you are CJ again (takes CJ's bike if he was riding)
   U     hard reset  (NOT R — R is reload)
   N     send CJ away / call him back
   B     CJ hold / follow
-  L     switcher status line
+  I     give CJ a bike that matches yours
+  Y     CJ fight with you / stand down
+  M     send CJ to your map waypoint
+  L     switcher status
 
-If H does nothing: look for SWITCHER ON at load. Press L. Press T then H.
+Look for SWITCHER V8 at load. Green blip = CJ bot.
 
 PHONE CHAT
   Desktop START_GROVELINK.bat
   open the URL it prints  http://LAN-IP:8088
 
 LATER
-  Desktop CHECK_GROVELINK.bat   refresh / missed update
-  Desktop PATCH_GROVELINK.bat   same
-  UPDATE.bat                    git pull then patch
+  Desktop CHECK_GROVELINK.bat
+  Desktop PATCH_GROVELINK.bat
+  UPDATE.bat
