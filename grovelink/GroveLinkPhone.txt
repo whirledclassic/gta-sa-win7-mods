@@ -1,18 +1,21 @@
 {$USE ini}
 {$USE CLEO}
 {$CLEO .cs}
-// GroveLink Phone v5 — crash-safer. No #model names, no 033E GXT, no hold_cellphone.
+// GroveLink Phone v6 — crash-safer. No #model names, no 033E GXT, no hold_cellphone.
 // K toggle | UP/DOWN | ENTER or SPACE select | BACKSPACE close
-// Menu labels via 0ACD highpriority (same pattern as existing prompts).
+// Menu labels via 0ACD highpriority. INBOX reads link.ini (0AF0/0AF4).
+// If STATUS.bridge=0, remind once per phone-open (no spam).
 0000: NOP
 03A4: name_thread 'GROVELNK'
 
-20@ = 0
+20@ = 0 // phone open
 21@ = 0
-22@ = 0
-23@ = 0
-24@ = 0
-25@ = 0
+22@ = 0 // menu index 0=CAMERA 1=INBOX 2=CLOSE
+23@ = 0 // K debounce
+24@ = 0 // temp int (INBOX.new / STATUS.bridge)
+25@ = 0 // PHOTO.count
+26@ = 0 // reserved
+27@ = 0 // phone-just-opened edge (remind / setup once per open)
 
 :MAIN
 0001: wait 0
@@ -36,6 +39,7 @@
 0006: 20@ = 1
 0006: 21@ = 0
 0006: 22@ = 0
+0006: 27@ = 1
 0ACD: show_text_highpriority "CAMERA / INBOX / CLOSE" time 1800
 018C: play_sound 1138 at 0.0 0.0 0.0
 0002: jump @AFTER_TOGGLE
@@ -43,12 +47,14 @@
 :PUT_AWAY
 0006: 20@ = 0
 0006: 21@ = 0
+0006: 27@ = 0
 0ACD: show_text_highpriority "GROVELINK CLOSED" time 1200
 018C: play_sound 1139 at 0.0 0.0 0.0
 0002: jump @AFTER_TOGGLE
 
 :FORCE_CLOSE
 0006: 20@ = 0
+0006: 27@ = 0
 0002: jump @MAIN
 
 :AFTER_TOGGLE
@@ -64,6 +70,22 @@
 00D6: if
 0039:   20@ == 1
 004D: jf @MAIN
+
+// Once per open: if bridge is down, remind (STATUS.bridge=0). No wait spam.
+00D6: if
+0039:   27@ == 1
+004D: jf @PHONE_DRAW
+0006: 27@ = 0
+00D6: if
+0AAB:   file_exists "cleo\GroveLink\link.ini"
+004D: jf @PHONE_DRAW
+0AF0: 24@ = read_int_from_ini_file "cleo\GroveLink\link.ini" section "STATUS" key "bridge"
+00D6: if
+0039:   24@ == 0
+004D: jf @PHONE_DRAW
+0ACD: show_text_highpriority "START GROVELINK BRIDGE" time 2500
+
+:PHONE_DRAW
 03F0: enable_text_draw 1
 038E: draw_box 548.0 248.0 132.0 292.0 28 28 32 255
 038E: draw_box 548.0 248.0 118.0 276.0 12 12 14 255
@@ -122,20 +144,37 @@
 0A1E: take_photo 1
 0001: wait 200
 0A2F: set_photo_camera_effect 0
-0ACD: show_text_highpriority "PHOTO TAKEN" time 2000
 00D6: if
 0AAB:   file_exists "cleo\GroveLink\link.ini"
-004D: jf @KEY_BACK
+004D: jf @SNAP_NOINI
 0AF1: write_int 1 to_ini_file "cleo\GroveLink\link.ini" section "PHOTO" key "take"
 0AF0: 25@ = read_int_from_ini_file "cleo\GroveLink\link.ini" section "PHOTO" key "count"
 000A: 25@ += 1
 0AF1: write_int 25@ to_ini_file "cleo\GroveLink\link.ini" section "PHOTO" key "count"
+0ACE: show_formatted_text_highpriority "PHOTO TAKEN  #%d" time 2200 25@
+0002: jump @KEY_BACK
+:SNAP_NOINI
+0ACD: show_text_highpriority "PHOTO TAKEN" time 2000
 0002: jump @KEY_BACK
 :SEL2
 00D6: if
 0039:   22@ == 1
 004D: jf @SEL3
-0ACD: show_text_highpriority "INBOX  use real phone page" time 2000
+// INBOX: read msg from link.ini; clear new flag if set
+00D6: if
+0AAB:   file_exists "cleo\GroveLink\link.ini"
+004D: jf @INBOX_EMPTY
+0AF0: 24@ = read_int_from_ini_file "cleo\GroveLink\link.ini" section "INBOX" key "new"
+0AF4: 0@s = read_string_from_ini_file "cleo\GroveLink\link.ini" section "INBOX" key "msg"
+00D6: if
+0039:   24@ == 1
+004D: jf @INBOX_SHOW
+0AF1: write_int 0 to_ini_file "cleo\GroveLink\link.ini" section "INBOX" key "new"
+:INBOX_SHOW
+0ACD: show_text_highpriority 0@s time 3500
+0002: jump @KEY_BACK
+:INBOX_EMPTY
+0ACD: show_text_highpriority "INBOX EMPTY  start bridge" time 2000
 0002: jump @KEY_BACK
 :SEL3
 0006: 20@ = 0
@@ -146,5 +185,6 @@
 0AB0:   key_pressed 8
 004D: jf @MAIN
 0006: 20@ = 0
+0006: 27@ = 0
 0001: wait 160
 0002: jump @MAIN

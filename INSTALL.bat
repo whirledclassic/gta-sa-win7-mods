@@ -1,12 +1,13 @@
 @echo off
 setlocal EnableExtensions EnableDelayedExpansion
-title GroveLink install
+title GroveLink + Mission Switcher — one-click install
 color 0A
 cd /d "%~dp0"
 
 echo.
 echo ================================================
-echo   GROVELINK  -  ONE-CLICK INSTALL
+echo   GROVELINK + SWITCHER  -  ONE-CLICK INSTALL
+echo   For beginners: just wait, then follow 3 steps
 echo ================================================
 echo.
 
@@ -17,29 +18,61 @@ if errorlevel 1 (
   exit /b
 )
 
-echo [1/7] Looking for GTA San Andreas with CLEO...
+echo [1/8] Looking for GTA San Andreas with CLEO...
 set "GTA="
-for %%P in ("E:\GTA San Andreas" "D:\GTA San Andreas" "C:\GTA San Andreas") do (
+
+REM Prefer installs that already have CLEO.asi
+for %%P in (
+  "E:\GTA San Andreas"
+  "D:\GTA San Andreas"
+  "C:\GTA San Andreas"
+  "E:\Games\GTA San Andreas"
+  "D:\Games\GTA San Andreas"
+  "C:\Games\GTA San Andreas"
+  "%ProgramFiles(x86)%\Rockstar Games\GTA San Andreas"
+  "%ProgramFiles%\Rockstar Games\GTA San Andreas"
+) do (
   if exist "%%~P\gta_sa.exe" if exist "%%~P\CLEO.asi" if not defined GTA set "GTA=%%~P"
+  if exist "%%~P\gta_sa.exe" if exist "%%~P\cleo.asi" if not defined GTA set "GTA=%%~P"
 )
+
+REM Registry InstallPath (Steam / Rockstar / common)
+if not defined GTA (
+  for %%K in (
+    "HKLM\SOFTWARE\Rockstar Games\GTA San Andreas\Installation"
+    "HKLM\SOFTWARE\WOW6432Node\Rockstar Games\GTA San Andreas\Installation"
+    "HKCU\SOFTWARE\Rockstar Games\GTA San Andreas\Installation"
+    "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Steam App 12120"
+    "HKLM\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\Steam App 12120"
+  ) do (
+    for /f "tokens=2*" %%A in ('reg query %%K /v InstallPath 2^>nul ^| find /i "InstallPath"') do (
+      if exist "%%~B\gta_sa.exe" if not defined GTA set "GTA=%%~B"
+    )
+    for /f "tokens=2*" %%A in ('reg query %%K /v InstallLocation 2^>nul ^| find /i "InstallLocation"') do (
+      if exist "%%~B\gta_sa.exe" if not defined GTA set "GTA=%%~B"
+    )
+  )
+)
+
+REM Any gta_sa.exe without CLEO preference
 if not defined GTA (
   for %%P in (
+    "E:\GTA San Andreas"
+    "D:\GTA San Andreas"
+    "C:\GTA San Andreas"
     "%ProgramFiles(x86)%\Rockstar Games\GTA San Andreas"
     "%ProgramFiles%\Rockstar Games\GTA San Andreas"
     "C:\Games\GTA San Andreas"
     "D:\Games\GTA San Andreas"
     "E:\Games\GTA San Andreas"
-    "C:\GTA San Andreas"
-    "D:\GTA San Andreas"
-    "E:\GTA San Andreas"
   ) do (
     if exist "%%~P\gta_sa.exe" if not defined GTA set "GTA=%%~P"
   )
 )
-if not defined GTA if exist "E:\GTA San Andreas\gta_sa.exe" set "GTA=E:\GTA San Andreas"
+
 if not defined GTA (
   echo.
-  echo Could not find gta_sa.exe.
+  echo Could not find gta_sa.exe automatically.
   echo Type the FULL folder path that contains gta_sa.exe
   echo Example: E:\GTA San Andreas
   set /p GTA=Path: 
@@ -53,20 +86,25 @@ if not exist "%GTA%\gta_sa.exe" (
   exit /b 1
 )
 echo    Game: %GTA%
+if exist "%GTA%\CLEO.asi" (
+  echo    CLEO.asi: FOUND
+) else if exist "%GTA%\cleo.asi" (
+  echo    CLEO.asi: FOUND
+) else (
+  echo    WARNING: CLEO.asi missing — install CLEO 4.3/4.4 from https://cleo.li
+  echo    Put IniFiles.cleo inside the CLEO folder too.
+)
 
 echo.
-echo [2/7] Installing CLEO support files (fxt + link.ini)...
+echo [2/8] Installing GroveLink support files (fxt + link.ini)...
 if not exist "%GTA%\CLEO" mkdir "%GTA%\CLEO"
 if not exist "%GTA%\CLEO\GroveLink" mkdir "%GTA%\CLEO\GroveLink"
 copy /Y "%~dp0grovelink\GroveLink.fxt" "%GTA%\CLEO\GroveLink.fxt" >nul
 copy /Y "%~dp0grovelink\GroveLink\link.ini" "%GTA%\CLEO\GroveLink\link.ini" >nul
-if not exist "%GTA%\cleo.asi" if not exist "%GTA%\CLEO.asi" (
-  echo    WARNING: CLEO.asi was not found. Install CLEO 4.3/4.4 from https://cleo.li
-  echo    IniFiles.cleo must be inside the CLEO folder.
-)
+echo    GroveLink.fxt + link.ini copied.
 
 echo.
-echo [3/7] Compiling GroveLinkPhone with Sanny Builder if available...
+echo [3/8] Compiling GroveLinkPhone with Sanny Builder if available...
 set "SANNY="
 where sanny.exe >nul 2>nul
 if not errorlevel 1 (
@@ -86,6 +124,8 @@ if not defined SANNY (
     "%USERPROFILE%\Documents\Sanny Builder 4\sanny.exe"
     "C:\Sanny Builder 3\sanny.exe"
     "C:\Sanny Builder 4\sanny.exe"
+    "D:\Sanny Builder 3\sanny.exe"
+    "D:\Sanny Builder 4\sanny.exe"
   ) do (
     if exist "%%~P" if not defined SANNY set "SANNY=%%~P"
   )
@@ -115,19 +155,54 @@ if defined SANNY (
 
 if "%COMPILED%"=="0" (
   echo.
-  echo    Phone script was NOT auto-installed.
-  echo    Open grovelink\GroveLinkPhone.txt in Sanny Builder, press F7,
-  echo    then copy GroveLinkPhone.cs into:
-  echo      %GTA%\CLEO\
+  echo    ================================================
+  echo    PHONE SCRIPT NEEDS A ONE-TIME COMPILE
+  echo    ================================================
   if "%HAD_OLD%"=="1" (
-    echo.
-    echo    NOTE: An existing GroveLinkPhone.cs was LEFT in place
-    echo    so the phone is not deleted after install. Recompile when you can.
+    echo    Keeping your existing GroveLinkPhone.cs ^(not deleted^).
+    echo    Recompile when you can so you get the latest camera/inbox.
+  ) else (
+    echo    No GroveLinkPhone.cs yet — do this once:
   )
+  echo.
+  echo    1. Download Sanny Builder 3 or 4:
+  echo       https://sannybuilder.com
+  echo    2. Install it, then open:
+  echo       %~dp0grovelink\GroveLinkPhone.txt
+  echo    3. Press F7 ^(Compile^).
+  echo    4. Copy the new GroveLinkPhone.cs into:
+  echo       %GTA%\CLEO\
+  echo.
+  echo    NOTE: The tiny file in grovelink\prebuilt\ is an OLD test stub.
+  echo    Do NOT use it for the camera phone — compile GroveLinkPhone.txt.
+  echo    ================================================
 )
 
 echo.
-echo [4/7] Creating Gallery folders + bridge config.ini...
+echo [4/8] Mission Switcher ^(optional, SkinOnly = safer^)...
+set "SW_COMPILED=0"
+if defined SANNY (
+  "%SANNY%" --game sa --no-splash --compile "%~dp0switcher\MissionSwitcher_SkinOnly.txt" "%GTA%\CLEO\MissionSwitcher_SkinOnly.cs.new" 2>nul
+  if not exist "%GTA%\CLEO\MissionSwitcher_SkinOnly.cs.new" (
+    "%SANNY%" --no-splash --compile "%~dp0switcher\MissionSwitcher_SkinOnly.txt" "%GTA%\CLEO\MissionSwitcher_SkinOnly.cs.new" 2>nul
+  )
+  if exist "%GTA%\CLEO\MissionSwitcher_SkinOnly.cs.new" (
+    if exist "%GTA%\CLEO\MissionSwitcher_SkinOnly.cs" del /f /q "%GTA%\CLEO\MissionSwitcher_SkinOnly.cs" >nul 2>&1
+    move /Y "%GTA%\CLEO\MissionSwitcher_SkinOnly.cs.new" "%GTA%\CLEO\MissionSwitcher_SkinOnly.cs" >nul
+    set "SW_COMPILED=1"
+    echo    MissionSwitcher_SkinOnly.cs installed.
+    echo    In game: stand near companion, press H. J = back to CJ.
+  ) else (
+    echo    Switcher auto-compile skipped ^(Sanny could not compile^).
+    echo    Manual: open switcher\MissionSwitcher_SkinOnly.txt in Sanny, F7.
+  )
+) else (
+  echo    Skipped ^(needs Sanny^). Later: F7 on switcher\MissionSwitcher_SkinOnly.txt
+  echo    then copy .cs into %GTA%\CLEO\
+)
+
+echo.
+echo [5/8] Creating Gallery folders + bridge config.ini...
 set "GAL1=%USERPROFILE%\Documents\GTA San Andreas User Files\Gallery"
 set "GAL2=%USERPROFILE%\My Documents\GTA San Andreas User Files\Gallery"
 if not exist "%USERPROFILE%\Documents\GTA San Andreas User Files" mkdir "%USERPROFILE%\Documents\GTA San Andreas User Files" >nul 2>&1
@@ -142,55 +217,100 @@ if not exist "%GAL2%" mkdir "%GAL2%" >nul 2>&1
   echo [server]
   echo host = 0.0.0.0
   echo port = 8088
+  echo open_browser = 1
 ) > "%~dp0grovelink\bridge\config.ini"
 echo    Gallery: %GAL1%
-echo    config.ini written for port 8088.
+echo    config.ini written ^(port 8088, open_browser=1^).
 
 echo.
-echo [5/7] Opening firewall for TCP 8088...
+echo [6/8] Opening firewall for TCP 8088...
 netsh advfirewall firewall delete rule name="GroveLink Phone" >nul 2>&1
 netsh advfirewall firewall add rule name="GroveLink Phone" dir=in action=allow protocol=tcp localport=8088 profile=any >nul 2>&1
 netsh firewall add portopening TCP 8088 "GroveLink Phone" >nul 2>&1
 echo    Rule "GroveLink Phone" allowed on port 8088.
 
 echo.
-echo [6/7] Desktop starter...
+echo [7/8] Desktop starters + phone URL note...
 copy /Y "%~dp0grovelink\bridge\START_GROVELINK.bat" "%USERPROFILE%\Desktop\START_GROVELINK.bat" >nul
 copy /Y "%~dp0grovelink\bridge\START_GROVELINK.bat" "%PUBLIC%\Desktop\START_GROVELINK.bat" >nul 2>&1
+
+REM Launcher that starts bridge (opens browser itself via open_browser=1)
+(
+  echo @echo off
+  echo title GroveLink Phone
+  echo start "GroveLink" "%~dp0grovelink\bridge\START_GROVELINK.bat"
+  echo echo.
+  echo echo Bridge starting... browser should open http://127.0.0.1:8088
+  echo echo Phone URL is printed in the bridge window and in GroveLink_PHONE_URL.txt
+  echo timeout /t 3 /nobreak ^>nul
+) > "%USERPROFILE%\Desktop\GroveLink_Phone_LAUNCH.bat"
+
 powershell -NoProfile -Command ^
   "$desk=[Environment]::GetFolderPath('Desktop');" ^
   "$s=(New-Object -COM WScript.Shell).CreateShortcut($desk+'\GroveLink Phone.lnk');" ^
-  "$s.TargetPath='%~dp0grovelink\bridge\START_GROVELINK.bat';" ^
+  "$s.TargetPath=$desk+'\GroveLink_Phone_LAUNCH.bat';" ^
   "$s.WorkingDirectory='%~dp0grovelink\bridge';" ^
   "$s.WindowStyle=1;" ^
-  "$s.Description='Start GroveLink phone bridge';" ^
+  "$s.Description='Start GroveLink phone bridge + open page';" ^
   "$s.Save()" >nul 2>&1
-echo    Desktop: START_GROVELINK.bat (+ GroveLink Phone shortcut if PowerShell ok)
+
+(
+  echo GroveLink — phone page URL
+  echo ==========================
+  echo.
+  echo The LIVE address is printed by the bridge window when it starts.
+  echo.
+  echo On this PC try:   http://127.0.0.1:8088
+  echo On your phone:    http://YOUR-PC-LAN-IP:8088
+  echo                   ^(same Wi-Fi; IP shown in the bridge window^)
+  echo.
+  echo Also see: grovelink\bridge\OPEN_ON_PHONE.txt after the bridge runs once.
+  echo Health check:     http://127.0.0.1:8088/health
+  echo.
+  echo In GTA: K → Camera → Enter or Space
+) > "%USERPROFILE%\Desktop\GroveLink_PHONE_URL.txt"
+
+echo    Desktop: GroveLink Phone shortcut, START_GROVELINK.bat, GroveLink_PHONE_URL.txt
 
 echo.
-echo [7/7] Summary
-echo ================================================
-echo   DONE
-echo ================================================
+echo [8/8] Done
+echo.
+color 0A
+echo ################################################
+echo #                                              #
+echo #           SUCCESS — YOU ARE READY            #
+echo #                                              #
+echo ################################################
+echo.
+echo   Do these 3 steps:
+echo.
+echo   1. Double-click Desktop shortcut  "GroveLink Phone"
+echo      ^(keep the black bridge window open^)
+echo.
+echo   2. Launch GTA San Andreas
+echo.
+echo   3. Press K → Camera → Enter ^(or Space^)
+echo      Shot appears on the phone page in a couple seconds.
+echo.
+echo ------------------------------------------------
 echo Game folder : %GTA%
 if exist "%GTA%\CLEO\GroveLinkPhone.cs" (
-  echo Phone script: %GTA%\CLEO\GroveLinkPhone.cs  [PRESENT]
+  echo Phone script: PRESENT  %GTA%\CLEO\GroveLinkPhone.cs
 ) else (
-  echo Phone script: MISSING — compile GroveLinkPhone.txt in Sanny ^(F7^)
+  echo Phone script: MISSING — follow Sanny F7 steps printed above
 )
-echo Labels file : %GTA%\CLEO\GroveLink.fxt
-echo Inbox file  : %GTA%\CLEO\GroveLink\link.ini
+if exist "%GTA%\CLEO\MissionSwitcher_SkinOnly.cs" (
+  echo Switcher    : PRESENT  MissionSwitcher_SkinOnly.cs  ^(H / J^)
+) else (
+  echo Switcher    : optional — compile later if you want it
+)
 echo Gallery     : %GAL1%
+echo PC page     : http://127.0.0.1:8088
+echo ------------------------------------------------
 echo.
-echo VERIFY:
-echo   1. Double-click START_GROVELINK on the Desktop ^(keep window open^)
-echo   2. On PC open http://127.0.0.1:8088
-echo   3. On phone open http://LAN-IP:8088 ^(printed by the bridge^)
-echo   4. Launch GTA, press K, Camera, Enter or Space — shot appears in a couple seconds
-echo.
-set /p RUN=Start the phone bridge now? (Y/N): 
+set /p RUN=Start GroveLink Phone bridge now? (Y/N): 
 if /I "%RUN%"=="Y" (
-  start "GroveLink" "%~dp0grovelink\bridge\START_GROVELINK.bat"
+  start "GroveLink" "%USERPROFILE%\Desktop\GroveLink_Phone_LAUNCH.bat"
 )
 echo.
 pause

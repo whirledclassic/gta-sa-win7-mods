@@ -1,9 +1,11 @@
-bridge/photos/
-__pycache__/
+*.cs
 *.pyc
 *.pyo
-*.cs
-Thumbs.db
-desktop.ini
-.DS_Store
 *.zip
+.DS_Store
+Thumbs.db
+__pycache__/
+bridge/photos/
+desktop.ini
+grovelink/bridge/OPEN_ON_PHONE.txt
+grovelink/bridge/photos/
