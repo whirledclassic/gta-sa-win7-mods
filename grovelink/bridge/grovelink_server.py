@@ -28,7 +28,9 @@ except ImportError:
 HERE = os.path.dirname(os.path.abspath(__file__))
 CFG_PATH = os.path.join(HERE, "config.ini")
 WEB_PHOTOS = os.path.join(HERE, "photos")
-STATE = {"photos": [], "inbox": [], "sent": 0}
+CHAT_PATH = os.path.join(HERE, "chat.json")
+STATE = {"photos": [], "chat": [], "sent": 0}
+LOCK = threading.Lock()
 
 
 def read_cfg():
@@ -54,11 +56,14 @@ def detect_gta_dir(cfg):
     hinted = cfg_get(cfg, "paths", "gta_dir")
     candidates = [
         hinted,
-        r"C:\Program Files (x86)\Rockstar Games\GTA San Andreas",
-        r"C:\Program Files\Rockstar Games\GTA San Andreas",
-        r"C:\Games\GTA San Andreas",
-        r"D:\Games\GTA San Andreas",
-        r"E:\Games\GTA San Andreas",
+        r"E:\\GTA San Andreas",
+        r"D:\\GTA San Andreas",
+        r"C:\\GTA San Andreas",
+        r"C:\\Program Files (x86)\\Rockstar Games\\GTA San Andreas",
+        r"C:\\Program Files\\Rockstar Games\\GTA San Andreas",
+        r"C:\\Games\\GTA San Andreas",
+        r"D:\\Games\\GTA San Andreas",
+        r"E:\\Games\\GTA San Andreas",
     ]
     for path in candidates:
         if not path:
@@ -73,7 +78,7 @@ def detect_gta_dir(cfg):
 def detect_gallery(cfg, gta_dir):
     home = os.path.expanduser("~")
     user = os.environ.get("USERPROFILE", home)
-    public = os.environ.get("PUBLIC", r"C:\Users\Public")
+    public = os.environ.get("PUBLIC", r"C:\\Users\\Public")
     candidates = [
         cfg_get(cfg, "paths", "gallery_dir"),
         cfg_get(cfg, "paths", "gallery_dir_alt"),
@@ -99,6 +104,37 @@ def link_ini_path(gta_dir):
     return os.path.join(gta_dir, "CLEO", "GroveLink", "link.ini")
 
 
+def load_chat():
+    if not os.path.isfile(CHAT_PATH):
+        return []
+    try:
+        with open(CHAT_PATH, "r") as f:
+            data = json.loads(f.read())
+        if isinstance(data, list):
+            return data[-80:]
+    except Exception:
+        return []
+    return []
+
+
+def save_chat(rows):
+    try:
+        with open(CHAT_PATH, "w") as f:
+            f.write(json.dumps(rows[-80:]))
+    except Exception:
+        pass
+
+
+def add_chat(who, text):
+    text = (text or "").strip()
+    if not text:
+        return
+    with LOCK:
+        STATE["chat"].append({"from": who, "text": text[:120], "t": int(time.time())})
+        STATE["chat"] = STATE["chat"][-80:]
+        save_chat(STATE["chat"])
+
+
 def ensure_dirs(gta_dir):
     if not os.path.isdir(WEB_PHOTOS):
         os.makedirs(WEB_PHOTOS)
@@ -114,7 +150,7 @@ def ensure_dirs(gta_dir):
     if not os.path.isfile(ini):
         try:
             with open(ini, "w") as f:
-                f.write("[PHOTO]\ntake=0\ncount=0\n\n[INBOX]\nnew=0\nfrom=REAL PHONE\nmsg=\n\n[STATUS]\nbridge=1\nip=0.0.0.0\n")
+                f.write("[PHOTO]\ntake=0\ncount=0\n\n[INBOX]\nnew=0\nfrom=REAL PHONE\nmsg=\n\n[OUTBOX]\nnew=0\nmsg=\n\n[STATUS]\nbridge=1\nip=0.0.0.0\n")
         except Exception:
             pass
 
@@ -228,7 +264,7 @@ def read_ini_key(path, section, key, default="0"):
         with open(path, "r") as f:
             for raw in f:
                 line = raw.strip()
-                if line.startswith("[") and line.endswith("]"):
+                    if line.startswith("[") and line.endswith("]"):
                     current = line[1:-1]
                 elif current == section and "=" in line:
                     k, v = line.split("=", 1)
@@ -259,103 +295,15 @@ def lan_ip():
                 pass
     return ip
 
-
-HTML = """<!DOCTYPE html>
-<html>
-<head>
-<meta charset=\"utf-8\">
-<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">
-<title>GroveLink</title>
-<style>
-  body { margin:0; background:#070b08; color:#d7ffd0; font-family: Arial, Helvetica, sans-serif; }
-  .shell { max-width: 440px; margin: 0 auto; min-height: 100vh; background:#10180f; }
-  header { padding:16px; background:#071109; border-bottom:2px solid #2cff6a; }
-  h1 { margin:0; font-size:18px; letter-spacing:3px; color:#2cff6a; }
-  .sub { font-size:12px; color:#7aaa7a; margin-top:6px; }
-  form { display:flex; gap:8px; padding:12px; position:sticky; top:0; background:#10180f; }
-  input[type=text] { flex:1; padding:12px; border:1px solid #2cff6a; background:#0b0f0c; color:#d7ffd0; font-size:16px; }
-  button { background:#2cff6a; color:#041006; border:0; padding:12px 14px; font-weight:bold; }
-  .ok { padding:0 12px 8px; color:#2cff6a; font-size:12px; min-height:16px; }
-  .shot { margin:12px; background:#000; border:1px solid #1a4; }
-  .shot img { width:100%; display:block; }
-  .meta { padding:6px 10px; font-size:11px; color:#7aaa7a; }
-  .empty { padding:28px 16px; color:#7aaa7a; }
-</style>
-</head>
-<body>
-<div class=\"shell\">
-  <header>
-    <h1>GROVELINK</h1>
-    <div class=\"sub\">Live from GTA San Andreas &nbsp;·&nbsp; <span id=\"count\">0</span> shots</div>
-  </header>
-  <form id=\"f\">
-    <input id=\"msg\" type=\"text\" maxlength=\"80\" placeholder=\"Message to CJ...\" required>
-    <button type=\"submit\">SEND</button>
-  </form>
-  <div class=\"ok\" id=\"ok\"></div>
-  <div id=\"feed\"><div class=\"empty\">Waiting for a photo. In GTA press K, CAMERA, ENTER.</div></div>
-</div>
-<script>
-function paint(data) {
-  var feed = document.getElementById('feed');
-  var count = document.getElementById('count');
-  var photos = data.photos || [];
-  count.textContent = photos.length;
-  if (!photos.length) {
-    feed.innerHTML = '<div class=\"empty\">Waiting for a photo. In GTA press K, CAMERA, ENTER.</div>';
-    return;
-  }
-  var html = '';
-  for (var i = 0; i < photos.length && i < 20; i++) {
-    var p = photos[i];
-    var name = p.file || p;
-    html += '<div class=\"shot\"><img src=\"/photo/' + name + '\" alt=\"shot\"><div class=\"meta\">' + name + '</div></div>';
-  }
-  feed.innerHTML = html;
-}
-function poll() {
-  var x = new XMLHttpRequest();
-  x.open('GET', '/api', true);
-  x.onreadystatechange = function() {
-    if (x.readyState === 4 && x.status === 200) {
-      try { paint(JSON.parse(x.responseText)); } catch (e) {}
-    }
-  };
-  x.send();
-}
-document.getElementById('f').onsubmit = function(ev) {
-  ev.preventDefault();
-  var msg = document.getElementById('msg').value;
-  var body = 'msg=' + encodeURIComponent(msg);
-  var x = new XMLHttpRequest();
-  x.open('POST', '/send', true);
-  x.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
-  x.onreadystatechange = function() {
-    if (x.readyState === 4) {
-      document.getElementById('ok').textContent = 'Sent to CJ.';
-      document.getElementById('msg').value = '';
-      setTimeout(function(){ document.getElementById('ok').textContent = ''; }, 2500);
-    }
-  };
-  x.send(body);
-};
-poll();
-setInterval(poll, 2000);
-</script>
-</body>
-</html>
-"""
-
+HTML = "CHAT_PAGE_PLACEHOLDER"
 
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
         return
-
     def _bytes(self, text):
         if isinstance(text, bytes):
             return text
         return text.encode("utf-8")
-
     def _html(self, body, code=200):
         data = self._bytes(body)
         self.send_response(code)
@@ -364,14 +312,14 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Cache-Control", "no-store")
         self.end_headers()
         self.wfile.write(data)
-
     def do_GET(self):
         path = self.path.split("?", 1)[0]
         if path == "/" or path == "/index.html":
             self._html(HTML)
             return
         if path == "/api":
-            payload = json.dumps({"photos": STATE.get("photos", []), "inbox": STATE.get("inbox", [])})
+            with LOCK:
+                payload = json.dumps({"photos": STATE.get("photos", []), "chat": STATE.get("chat", [])})
             data = self._bytes(payload)
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
@@ -401,7 +349,6 @@ class Handler(BaseHTTPRequestHandler):
             self.wfile.write(data)
             return
         self.send_error(404)
-
     def do_POST(self):
         if self.path.split("?", 1)[0] != "/send":
             self.send_error(404)
@@ -413,7 +360,7 @@ class Handler(BaseHTTPRequestHandler):
         except Exception:
             text = raw.decode("latin-1")
         msg = ""
-        if text.lstrip().startswith("{"):
+        if text.lstrip().startswith("{ "):
             try:
                 msg = json.loads(text).get("msg") or ""
             except Exception:
@@ -424,14 +371,8 @@ class Handler(BaseHTTPRequestHandler):
                 msg = fields["msg"][0]
         msg = (msg or "").strip().replace("\r", " ").replace("\n", " ")[:80]
         if msg:
-            STATE["inbox"].insert(0, msg)
-            STATE["inbox"] = STATE["inbox"][:30]
-            STATE["sent"] = STATE.get("sent", 0) + 1
-            write_ini_kv(self.server.link_ini, "INBOX", {
-                "new": "1",
-                "from": "REAL PHONE",
-                "msg": msg.replace("=", "-"),
-            })
+            add_chat("PHONE", msg)
+            write_ini_kv(self.server.link_ini, "INBOX", {"new": "1", "from": "REAL PHONE", "msg": msg.replace("=", "-")})
             print("SMS -> GTA:", msg)
         data = self._bytes('{"ok":true}')
         self.send_response(200)
@@ -440,8 +381,8 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(data)
 
-
 def watcher(galleries, ini):
+    last_out = ""
     while True:
         try:
             copy_latest(galleries)
@@ -451,10 +392,16 @@ def watcher(galleries, ini):
                 time.sleep(0.4)
                 copy_latest(galleries)
                 print("Shutter. Phone page has", len(STATE["photos"]), "shots")
+            flag = read_ini_key(ini, "OUTBOX", "new", "0")
+            msg = read_ini_key(ini, "OUTBOX", "msg", "")
+            if flag == "1" and msg and msg != last_out:
+                last_out = msg
+                add_chat("CJ", msg)
+                write_ini_kv(ini, "OUTBOX", {"new": "0"})
+                print("CJ -> phone:", msg)
         except Exception as exc:
             print("watch error:", exc)
-        time.sleep(1.0)
-
+        time.sleep(0.8)
 
 def main():
     cfg = read_cfg()
@@ -467,44 +414,32 @@ def main():
         port = int(cfg_get(cfg, "server", "port", "8088") or "8088")
     except Exception:
         port = 8088
-
+    STATE["chat"] = load_chat()
+    if not STATE["chat"]:
+        add_chat("CJ", "GroveLink on. Text me from this page.")
     print("================================================")
     print("  GROVELINK PHONE BRIDGE")
     print("================================================")
     print("GTA folder :", gta_dir or "(not found — edit config.ini)")
     print("link.ini   :", ini)
-    if galleries:
-        print("Galleries  :")
-        for g in galleries:
-            print("   ", g)
-    else:
-        print("Galleries  : NONE YET")
-        print("             Take one in-game photo, then set gallery_dir")
     ip = lan_ip()
     print("")
-    print("  On your REAL PHONE open:")
+    print("  Open in any browser:")
     print("      http://%s:%s" % (ip, port))
-    print("  On this PC you can also try:")
     print("      http://127.0.0.1:%s" % port)
-    print("")
-    print("  Keep this window open while you play.")
     print("================================================")
     sys.stdout.flush()
-
     write_ini_kv(ini, "STATUS", {"bridge": "1", "ip": ip})
     copy_latest(galleries)
-
     t = threading.Thread(target=watcher, args=(galleries, ini))
     t.daemon = True
     t.start()
-
     server = HTTPServer(("0.0.0.0", port), Handler)
     server.link_ini = ini
     try:
         server.serve_forever()
     except KeyboardInterrupt:
         print("Stopped.")
-
 
 if __name__ == "__main__":
     main()
