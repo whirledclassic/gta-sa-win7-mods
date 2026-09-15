@@ -41,10 +41,10 @@ def cfg_get(cfg, section, key, default=""):
 
 def detect_gta_dir(cfg):
     hinted = cfg_get(cfg, "paths", "gta_dir")
-    candidates = [hinted, r"E:\GTA San Andreas", r"D:\GTA San Andreas", r"C:\GTA San Andreas",
-        r"C:\Program Files (x86)\Rockstar Games\GTA San Andreas",
-        r"C:\Program Files\Rockstar Games\GTA San Andreas",
-        r"C:\Games\GTA San Andreas", r"D:\Games\GTA San Andreas", r"E:\Games\GTA San Andreas"]
+    candidates = [hinted, r"E:\\GTA San Andreas", r"D:\\GTA San Andreas", r"C:\\GTA San Andreas",
+        r"C:\\Program Files (x86)\\Rockstar Games\\GTA San Andreas",
+        r"C:\\Program Files\\Rockstar Games\\GTA San Andreas",
+        r"C:\\Games\\GTA San Andreas", r"D:\\Games\\GTA San Andreas", r"E:\\Games\\GTA San Andreas"]
     for path in candidates:
         if path and os.path.isfile(os.path.join(path, "gta_sa.exe")):
             return path
@@ -55,7 +55,7 @@ def detect_gta_dir(cfg):
 def detect_gallery(cfg, gta_dir):
     home = os.path.expanduser("~")
     user = os.environ.get("USERPROFILE", home)
-    public = os.environ.get("PUBLIC", r"C:\Users\Public")
+    public = os.environ.get("PUBLIC", r"C:\\Users\\Public")
     candidates = [cfg_get(cfg, "paths", "gallery_dir"), cfg_get(cfg, "paths", "gallery_dir_alt"),
         os.path.join(user, "Documents", "GTA San Andreas User Files", "Gallery"),
         os.path.join(user, "My Documents", "GTA San Andreas User Files", "Gallery"),
@@ -116,7 +116,7 @@ def ensure_dirs(gta_dir):
     if not os.path.isfile(ini):
         try:
             with open(ini, "w") as f:
-                f.write("[PHOTO]\ntake=0\ncount=0\n\n[INBOX]\nnew=0\nfrom=REAL PHONE\nmsg=\n\n[OUTBOX]\nnew=0\nmsg=\n\n[STATUS]\nbridge=1\nip=0.0.0.0\n")
+                f.write("[PHOTO]\ntake=0\ncount=0\n\n[INBOX]\nnew=0\nkind=0\nfrom=REAL PHONE\nmsg=\n\n[OUTBOX]\nnew=0\nmsg=\n\n[STATUS]\nbridge=1\nip=0.0.0.0\n")
         except Exception:
             pass
 
@@ -313,19 +313,28 @@ class Handler(BaseHTTPRequestHandler):
         except Exception:
             text = raw.decode("latin-1")
         msg = ""
+        kind = "0"
         if text.lstrip().startswith("{"):
             try:
-                msg = json.loads(text).get("msg") or ""
+                obj = json.loads(text)
+                msg = obj.get("msg") or ""
+                kind = str(obj.get("kind") or "0")
             except Exception:
                 msg = ""
         else:
             fields = parse_qs(text)
             if "msg" in fields and fields["msg"]:
                 msg = fields["msg"][0]
+            if "kind" in fields and fields["kind"]:
+                kind = fields["kind"][0]
         msg = (msg or "").strip().replace("\r", " ").replace("\n", " ")[:80]
-        if msg:
+        if kind == "1":
+            add_chat("PHONE", "Calling CJ...")
+            write_ini_kv(self.server.link_ini, "INBOX", {"new": "1", "kind": "1", "from": "REAL PHONE", "msg": "INCOMING CALL"})
+            print("RING -> GTA")
+        elif msg:
             add_chat("PHONE", msg)
-            write_ini_kv(self.server.link_ini, "INBOX", {"new": "1", "from": "REAL PHONE", "msg": msg.replace("=", "-")})
+            write_ini_kv(self.server.link_ini, "INBOX", {"new": "1", "kind": "0", "from": "REAL PHONE", "msg": msg.replace("=", "-")})
             print("SMS -> GTA:", msg)
         data = self._bytes('{"ok":true}')
         self.send_response(200)
