@@ -1,11 +1,11 @@
-# Mission Companion Switcher v6.2
+# Mission Companion Switcher v7.0
 
-Play as them. **CJ stays with you.**
+Play as them. **CJ stays with you** on foot, in cars, and on a BMX.
 
-H become · G next · J you are CJ · **U** reset · N send CJ · B hold/follow · T call Sweet · L status
+H become · G next · J you are CJ · **U** reset · N send CJ · B hold/follow · T call Sweet · **I** give CJ a BMX · L status
 
-Compile `MissionSwitcher.txt` in Sanny Builder (GTA San Andreas mode, F7). Copy `MissionSwitcher.cs` into `[GTA]\CLEO\`.
+You can switch while riding. Driving homies count. First mission bicycle ride: CJ gets his own BMX and follows.
 
-CLEO scripts must use numeric model IDs, not `#FAM1`. FAM1 is **105**.
+Compile `MissionSwitcher.txt` in Sanny (GTA San Andreas mode, F7). Copy `MissionSwitcher.cs` into `[GTA]\\CLEO\\`.
 
 See [docs/SWITCHER.md](../docs/SWITCHER.md).

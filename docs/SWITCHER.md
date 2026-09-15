@@ -1,61 +1,46 @@
-# Companion switcher v6.2
+# Companion switcher v7.0
 
-Play as Sweet, Smoke, Ryder, Cesar, Grove FAM, and the rest. **CJ stays in the world** and rides with you.
+Play as Sweet, Smoke, Ryder, Cesar, Grove FAM, and the rest. **CJ stays in the world** as a bot: he walks, rides shotgun, or gets his **own BMX** and keeps the first-mission bicycle run going.
 
-If Grove Street is empty, **T** calls Sweet in. Then **H**.
+## First mission / bicycles
+
+Old v6 dumped CJ off bikes and ignored anyone already riding. That broke *In the Beginning* / *Sweet & Kendl*.
+
+v7:
+- **H works while you are on a BMX**
+- Homies who are already riding are valid targets
+- After you switch, press **I** or just ride — CJ is given BMX **481** and drives after you
+- If he falls behind (~28 m) his bike is snapped back onto your line
+- Cars still use shotgun. Bikes never try passenger seats.
+
+You are still the player actor. Story triggers follow **you**. The hidden original ped stays alive so mission scripts keep seeing Sweet/Smoke. CJ is the extra body that looks like the homie riding with the pack.
 
 ## Play loop
 
-1. Load a save. You should see `SWITCHER ON` at the top.
-2. Stand next to a homie **or press T**.
-3. When the hint says `SWEET NEAR - PRESS H`, press **H** (or **F6**).
-4. You take their place. CJ is already beside you.
-5. Drive a car (not a bike) — CJ takes shotgun.
-6. **J** when you want to be CJ again.
-
-The original ped is hidden, locked, and kept a few metres off you so mission scripts still see him.
+1. Load a save. Toast: `SWITCHER V7`.
+2. Stand or **ride next to a homie**. Or press **T**.
+3. `SWEET NEAR - PRESS H` → **H** or **F6**.
+4. You take their look. CJ is already beside you.
+5. Bike? CJ should mount a BMX. If not, tap **I**.
+6. **J** to be CJ again.
 
 ## Keys
 
 | Key | Action |
 |-----|--------|
-| **H** or **F6** | Become the nearest companion (40 m) |
-| **G** | Next companion in range |
+| **H** or **F6** | Become nearest companion (45 m, including riders) |
+| **G** | Next companion |
 | **J** | You are CJ again |
-| **U** | Hard reset (was **R** — **R is reload**, that was breaking it) |
+| **U** | Hard reset |
 | **N** | Send CJ away / call him back |
 | **B** | CJ hold here / CJ on me |
-| **T** | Call Sweet in if nobody is around |
-| **L** | Status line — tells you if the script is live |
+| **T** | Call Sweet in |
+| **I** | Give CJ a BMX now |
+| **L** | Status (foot / shotgun / bike) |
 
-## Why H used to look dead
+## Notes
 
-- Story peds are not standing on Grove 24/7. H only finds *them* (plus Grove FAM 105/106/107). Empty street = `NOBODY NEAR`.
-- **R** was hard reset. Reloading a gun dumped you back to CJ.
-- Radius was 22 m. It is 40 m now.
-- Cutscene / in-car blocks the switch and says so.
-
-## v6.2
-
-- Boot toast so you know `MissionSwitcher.cs` loaded
-- Live `SWEET NEAR - PRESS H` ping
-- **T** summons Sweet
-- Grove FAM on Grove Street are valid targets
-- Clear fail text: car / cutscene / nobody / press T
-- Hidden original offset 3.4 m + re-lock every watchdog tick
-- Reset moved to **U**
-- **F6** is an extra Become key
-- **L** status
-
-## Files
-
-`MissionSwitcher.txt` — this v6.2 (INSTALL compiles it).  
-`MissionSwitcher_SkinOnly.txt` — look like them, no extra CJ body.
-
-## If it feels off
-
-- No `SWITCHER ON` toast = `.cs` is not in `CLEO\`. Run INSTALL/CHECK, or Sanny F7 the txt.
-- Grove FAM1 face on the CJ body = player model 0 did not stream. Fine, he still follows.
-- No bikes.
+- Cutscenes still block the switch.
+- Do not hide a rider off their bike — v7 leaves a driving original on the vehicle.
 - **B** if he blocks a door, **N** to dismiss, **J** before a heavy cutscene.
-- Get out of the car before **H** or **T**.
+- Numeric IDs only (`105` not `#FAM1`, `481` not `#BMX`).
