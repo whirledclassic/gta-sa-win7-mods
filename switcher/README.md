@@ -1,23 +1,16 @@
-# Mission Companion Switcher v2
-
-Stand next to Sweet, Smoke, Ryder, Cesar, OG Loc, Kendl, Truth, Catalina and other story peds.
+# Mission Companion Switcher v3
 
 | Key | Action |
 |-----|--------|
-| **H** | Become the nearest companion |
-| **G** | Next companion in range (22 m) |
+| **H** | Nearest companion |
+| **G** | Next in 22 m |
 | **J** | Restore CJ |
-| **R** | Hard reset (CJ + delete the CJ-bot) |
+| **R** | Reset |
+| **N** | Toggle CJ-bot |
 
-Get out of vehicles first. If you die while switched, CJ is restored automatically.
+Full notes: [docs/SWITCHER.md](../docs/SWITCHER.md).
 
-## Which script
+Compile **one**:
 
-Compile **one** only:
-
-- `MissionSwitcher.txt` — you wear the companion skin. The original ped is hidden (not deleted) so missions keep the handle. A Grove Families ped follows as a CJ stand-in.
-- `MissionSwitcher_SkinOnly.txt` — skin and walkstyle only. Safest for story missions.
-
-`INSTALL.bat` / `PATCH.bat` compile `MissionSwitcher.txt` when Sanny is present.
-
-Copy the `.cs` into `[GTA SA]\CLEO\`.
+- `MissionSwitcher.txt` — hide original + optional CJ-bot (default)
+- `MissionSwitcher_SkinOnly.txt` — skin only
