@@ -1,7 +1,897 @@
 {$CLEO .cs}
-// Mission Companion Switcher v6.1
-// Play as them. CJ stays.
-// Full compile-ready source is switcher/MissionSwitcher_full.txt in the v15 zip.
-// H nearest | G next | J you are CJ | R reset | N CJ leave/return | B CJ wait/follow
-{$INCLUDE ms_a.inc}
-{$INCLUDE ms_b.inc}
+// Mission Companion Switcher v6.2
+// Play as them. CJ stays. Grove FAM + story peds. T summons Sweet.
+// H/F6 nearest | G next | J you are CJ | U reset | N CJ leave | B hold | T call Sweet | L status
+0000: NOP
+03A4: name_thread 'MSWITCH'
+
+20@ = 0
+21@ = -1
+22@ = 0
+23@ = -1
+24@ = 0
+25@ = 0
+26@ = -1
+27@ = 0
+28@ = 0
+17@ = -1
+18@ = 0
+19@ = 1
+29@ = 0
+30@ = 0
+31@ = 0
+
+:MAIN
+0001: wait 0
+00D6: if
+0256:   player $PLAYER_CHAR defined
+004D: jf @MAIN
+00D6: if
+8118:   not actor $PLAYER_ACTOR dead
+004D: jf @DIED
+00D6: if
+0039:   25@ == 0
+004D: jf @KEYS
+0006: 25@ = 1
+0ACD: show_text_highpriority "SWITCHER ON   H PLAY AS THEM   T CALL SWEET   J = CJ" time 4200
+
+:KEYS
+00D6: if
+0039:   20@ == 1
+004D: jf @RADAR
+0050: gosub @WATCH
+0002: jump @DEBOUNCE
+:RADAR
+0050: gosub @NEAR_HINT
+:DEBOUNCE
+00D6: if
+0019:   24@ > 0
+004D: jf @KEY_H
+000E: 24@ -= 1
+0002: jump @MAIN
+
+:KEY_H
+00D6: if
+0AB0:   key_pressed 72
+004D: jf @KEY_F6
+0006: 24@ = 18
+0006: 26@ = -1
+0002: jump @TRY_SWITCH
+:KEY_F6
+00D6: if
+0AB0:   key_pressed 117
+004D: jf @KEY_G
+0006: 24@ = 18
+0006: 26@ = -1
+0002: jump @TRY_SWITCH
+:KEY_G
+00D6: if
+0AB0:   key_pressed 71
+004D: jf @KEY_J
+0006: 24@ = 18
+0002: jump @TRY_SWITCH
+:KEY_J
+00D6: if
+0AB0:   key_pressed 74
+004D: jf @KEY_U
+0006: 24@ = 18
+0002: jump @RESTORE_CJ
+:KEY_U
+00D6: if
+0AB0:   key_pressed 85
+004D: jf @KEY_N
+0006: 24@ = 18
+0002: jump @HARD_RESET
+:KEY_N
+00D6: if
+0AB0:   key_pressed 78
+004D: jf @KEY_B
+0006: 24@ = 18
+0002: jump @TOGGLE_BOT
+:KEY_B
+00D6: if
+0AB0:   key_pressed 66
+004D: jf @KEY_T
+0006: 24@ = 18
+0002: jump @TOGGLE_WAIT
+:KEY_T
+00D6: if
+0AB0:   key_pressed 84
+004D: jf @KEY_L
+0006: 24@ = 18
+0002: jump @SUMMON
+:KEY_L
+00D6: if
+0AB0:   key_pressed 76
+004D: jf @MAIN
+0006: 24@ = 18
+0002: jump @STATUS
+
+:DIED
+00D6: if
+0039:   20@ == 1
+004D: jf @MAIN
+0050: gosub @RESTORE_BODY
+0002: jump @MAIN
+
+:TRY_SWITCH
+00D6: if
+00DF:   actor $PLAYER_ACTOR driving
+004D: jf @CHK_CTRL
+0ACD: show_text_highpriority "GET OUT OF THE CAR FIRST" time 1800
+0002: jump @MAIN
+:CHK_CTRL
+00D6: if
+03EE:   player $PLAYER_CHAR controllable
+004D: jf @BUSY
+0002: jump @FIND_NEAR
+:BUSY
+0ACD: show_text_highpriority "WAIT FOR THE CUTSCENE" time 1800
+0002: jump @MAIN
+
+:FIND_NEAR
+00A0: store_actor $PLAYER_ACTOR position_to 1@ 2@ 3@
+0006: 4@ = -1
+0006: 5@ = 0
+0007: 11@ = 9999.0
+00D6: if
+0AE1: 10@ = random_actor_near_point 1@ 2@ 3@ radius 40.0 find_next 0 pass_deads 1
+004D: jf @NONE_FOUND
+:SCAN_LOOP
+00D6: if
+803C:   not $PLAYER_ACTOR == 10@
+004D: jf @SCAN_NEXT
+00D6: if
+803C:   not 23@ == 10@
+004D: jf @SCAN_NEXT
+00D6: if
+803C:   not 21@ == 10@
+004D: jf @SCAN_NEXT
+00D6: if
+8118:   not actor 10@ dead
+004D: jf @SCAN_NEXT
+00D6: if
+8039:   not 26@ == 10@
+004D: jf @SCAN_NEXT
+00D6: if
+00DF:   actor 10@ driving
+004D: jf @SCAN_MOD
+0002: jump @SCAN_NEXT
+:SCAN_MOD
+0665: get_actor 10@ model_to 6@
+0006: 7@ = 0
+0050: gosub @IS_STORY_CHAR
+00D6: if
+0039:   7@ == 1
+004D: jf @SCAN_NEXT
+00A0: store_actor 10@ position_to 13@ 14@ 15@
+050A: 8@ = distance_between_XYZ 1@ 2@ 3@ and_XYZ 13@ 14@ 15@
+00D6: if
+0025:   11@ > 8@
+004D: jf @SCAN_NEXT
+0087: 11@ = 8@
+0085: 4@ = 10@
+0085: 5@ = 6@
+:SCAN_NEXT
+00D6: if
+0AE1: 10@ = random_actor_near_point 1@ 2@ 3@ radius 40.0 find_next 1 pass_deads 1
+004D: jf @AFTER_SCAN
+0002: jump @SCAN_LOOP
+:AFTER_SCAN
+00D6: if
+0039:   4@ == -1
+004D: jf @DO_BECOME
+00D6: if
+8039:   not 26@ == -1
+004D: jf @NONE_FOUND
+0006: 26@ = -1
+0002: jump @FIND_NEAR
+:NONE_FOUND
+0ACD: show_text_highpriority "NOBODY NEAR - STAND BY A HOMIE OR PRESS T" time 2200
+0002: jump @MAIN
+
+:DO_BECOME
+00D6: if
+0039:   20@ == 1
+004D: jf @BECOME_FRESH
+00D6: if
+003B:   21@ == 4@
+004D: jf @SWAP_OLD
+0ACD: show_text_highpriority "ALREADY THEM" time 1200
+0002: jump @MAIN
+:SWAP_OLD
+0050: gosub @UNHIDE_OLD
+:BECOME_FRESH
+0085: 21@ = 4@
+0085: 22@ = 5@
+0085: 26@ = 4@
+00D6: if
+0019:   28@ > 0
+004D: jf @DO_SAVE
+0002: jump @HAVE_HP
+:DO_SAVE
+0226: 28@ = actor $PLAYER_ACTOR health
+:HAVE_HP
+0470: 9@ = actor 4@ current_weapon
+0172: 16@ = actor 4@ z_angle
+00A0: store_actor 4@ position_to 13@ 14@ 15@
+00A1: put_actor $PLAYER_ACTOR at 13@ 14@ 15@
+0173: set_actor $PLAYER_ACTOR z_angle_to 16@
+0247: load_model 5@
+038B: load_requested_models
+0006: 27@ = 0
+:WAIT_MODEL
+0001: wait 0
+000A: 27@ += 1
+00D6: if
+0248:   model 5@ available
+004D: jf @MODEL_TO
+09C7: change_player $PLAYER_CHAR model_to 5@
+0249: release_model 5@
+0050: gosub @APPLY_WALKSTYLE
+00D6: if
+0019:   9@ > 0
+004D: jf @NO_WEP
+01B2: give_actor $PLAYER_ACTOR weapon 9@ ammo 80
+:NO_WEP
+00D6: if
+056D:   actor 21@ defined
+004D: jf @CAM_OK
+00D6: if
+8118:   not actor 21@ dead
+004D: jf @CAM_OK
+0226: 8@ = actor 21@ health
+00D6: if
+0019:   8@ > 40
+004D: jf @CAM_OK
+0223: set_actor $PLAYER_ACTOR health_to 8@
+:CAM_OK
+0373: set_camera_directly_behind_player
+015B: shake_pad 0 80 70
+018C: play_sound 1138 at 0.0 0.0 0.0
+0050: gosub @HIDE_ORIGINAL
+00D6: if
+0039:   19@ == 1
+004D: jf @NO_BOT
+0050: gosub @ENSURE_BOT
+:NO_BOT
+0006: 20@ = 1
+0006: 31@ = 0
+0006: 30@ = 0
+0050: gosub @SAY_WHO
+0002: jump @MAIN
+:MODEL_TO
+00D6: if
+0019:   27@ > 90
+004D: jf @WAIT_MODEL
+0ACD: show_text_highpriority "MODEL DID NOT LOAD - PRESS U" time 1800
+0002: jump @MAIN
+
+:HIDE_ORIGINAL
+00D6: if
+056D:   actor 21@ defined
+004D: jf @HIDE_X
+00D6: if
+8118:   not actor 21@ dead
+004D: jf @HIDE_X
+0337: set_actor 21@ visibility 0
+0223: set_actor 21@ health_to 1000
+02AB: set_actor 21@ immunities 1 1 1 1 1
+039E: set_actor 21@ locked 1
+0687: clear_actor_task 21@
+00A0: store_actor $PLAYER_ACTOR position_to 1@ 2@ 3@
+000B: 1@ += 3.4
+00A1: put_actor 21@ at 1@ 2@ 3@
+:HIDE_X
+0051: return
+
+:UNHIDE_OLD
+00D6: if
+056D:   actor 21@ defined
+004D: jf @UH_X
+00D6: if
+8118:   not actor 21@ dead
+004D: jf @UH_X
+0337: set_actor 21@ visibility 1
+02AB: set_actor 21@ immunities 0 0 0 0 0
+039E: set_actor 21@ locked 0
+00A0: store_actor $PLAYER_ACTOR position_to 1@ 2@ 3@
+0087: 13@ = 1@
+000B: 13@ += 1.6
+00A1: put_actor 21@ at 13@ 2@ 3@
+0687: clear_actor_task 21@
+:UH_X
+0051: return
+
+:ENSURE_BOT
+00D6: if
+056D:   actor 23@ defined
+004D: jf @SPAWN_BOT
+00D6: if
+8118:   not actor 23@ dead
+004D: jf @SPAWN_BOT
+01DF: put_actor 23@ into_player $PLAYER_CHAR group
+00D6: if
+0039:   29@ == 1
+004D: jf @EN_FLW
+0051: return
+:EN_FLW
+0633: AS_actor 23@ follow_actor $PLAYER_ACTOR
+0051: return
+
+:SPAWN_BOT
+00D6: if
+056D:   actor 23@ defined
+004D: jf @BOT_MAKE
+009B: destroy_actor 23@
+0006: 23@ = -1
+:BOT_MAKE
+00A0: store_actor $PLAYER_ACTOR position_to 1@ 2@ 3@
+0172: 16@ = actor $PLAYER_ACTOR z_angle
+0087: 13@ = 1@
+000B: 13@ += 1.3
+0087: 14@ = 2@
+000B: 14@ += 0.8
+0247: load_model 0
+038B: load_requested_models
+0006: 27@ = 0
+:WAIT_CJ
+0001: wait 0
+000A: 27@ += 1
+00D6: if
+0248:   model 0 available
+004D: jf @CJ_TO
+009A: 23@ = create_actor_pedtype 8 model 0 at 13@ 14@ 3@
+0249: release_model 0
+0002: jump @BOT_READY
+:CJ_TO
+00D6: if
+0019:   27@ > 30
+004D: jf @WAIT_CJ
+0247: load_model #FAM1
+038B: load_requested_models
+0006: 27@ = 0
+:WAIT_FAM
+0001: wait 0
+000A: 27@ += 1
+00D6: if
+0248:   model #FAM1 available
+004D: jf @FAM_TO
+009A: 23@ = create_actor_pedtype 8 model #FAM1 at 13@ 14@ 3@
+0249: release_model #FAM1
+0002: jump @BOT_READY
+:FAM_TO
+00D6: if
+0019:   27@ > 80
+004D: jf @WAIT_FAM
+0006: 23@ = -1
+0051: return
+:BOT_READY
+0173: set_actor 23@ z_angle_to 16@
+0223: set_actor 23@ health_to 300
+0245: set_actor 23@ walk_style_to "PLAYER"
+01B2: give_actor 23@ weapon 22 ammo 80
+0470: 9@ = actor $PLAYER_ACTOR current_weapon
+0085: 17@ = 9@
+00D6: if
+0019:   9@ > 0
+004D: jf @BOT_GRP
+01B2: give_actor 23@ weapon 9@ ammo 80
+:BOT_GRP
+01DF: put_actor 23@ into_player $PLAYER_CHAR group
+0633: AS_actor 23@ follow_actor $PLAYER_ACTOR
+0006: 31@ = 0
+0051: return
+
+:TOGGLE_BOT
+00D6: if
+0039:   19@ == 1
+004D: jf @BOT_ON
+0006: 19@ = 0
+00D6: if
+056D:   actor 23@ defined
+004D: jf @BOT_OFF_MSG
+009B: destroy_actor 23@
+0006: 23@ = -1
+:BOT_OFF_MSG
+0ACD: show_text_highpriority "CJ LEFT" time 1400
+0002: jump @MAIN
+:BOT_ON
+0006: 19@ = 1
+00D6: if
+0039:   20@ == 1
+004D: jf @BOT_ON_MSG
+0050: gosub @ENSURE_BOT
+:BOT_ON_MSG
+0ACD: show_text_highpriority "CJ IS WITH YOU" time 1400
+0002: jump @MAIN
+
+:TOGGLE_WAIT
+00D6: if
+0039:   20@ == 1
+004D: jf @MAIN
+00D6: if
+056D:   actor 23@ defined
+004D: jf @MAIN
+00D6: if
+0039:   29@ == 0
+004D: jf @WAIT_OFF
+0006: 29@ = 1
+0687: clear_actor_task 23@
+0ACD: show_text_highpriority "CJ HOLD HERE" time 1400
+0002: jump @MAIN
+:WAIT_OFF
+0006: 29@ = 0
+0633: AS_actor 23@ follow_actor $PLAYER_ACTOR
+0ACD: show_text_highpriority "CJ ON ME" time 1400
+0002: jump @MAIN
+
+:SUMMON
+00D6: if
+00DF:   actor $PLAYER_ACTOR driving
+004D: jf @SUM_CTRL
+0ACD: show_text_highpriority "GET OUT OF THE CAR FIRST" time 1600
+0002: jump @MAIN
+:SUM_CTRL
+00D6: if
+03EE:   player $PLAYER_CHAR controllable
+004D: jf @SUM_BUSY
+00D6: if
+0039:   20@ == 1
+004D: jf @SUM_GO
+0ACD: show_text_highpriority "PRESS J FIRST - YOU ARE STILL SWITCHED" time 1800
+0002: jump @MAIN
+:SUM_BUSY
+0ACD: show_text_highpriority "WAIT FOR THE CUTSCENE" time 1600
+0002: jump @MAIN
+:SUM_GO
+00A0: store_actor $PLAYER_ACTOR position_to 1@ 2@ 3@
+0087: 13@ = 1@
+000B: 13@ += 2.0
+0087: 14@ = 2@
+000B: 14@ += 0.4
+0247: load_model 270
+038B: load_requested_models
+0006: 27@ = 0
+:SUM_WAIT
+0001: wait 0
+000A: 27@ += 1
+00D6: if
+0248:   model 270 available
+004D: jf @SUM_TO
+009A: 4@ = create_actor_pedtype 8 model 270 at 13@ 14@ 3@
+0249: release_model 270
+0223: set_actor 4@ health_to 200
+0245: set_actor 4@ walk_style_to "GANG1"
+01B2: give_actor 4@ weapon 22 ammo 50
+01DF: put_actor 4@ into_player $PLAYER_CHAR group
+0006: 26@ = -1
+0ACD: show_text_highpriority "SWEET IS HERE - PRESS H TO PLAY AS HIM" time 2600
+018C: play_sound 1052 at 0.0 0.0 0.0
+0002: jump @MAIN
+:SUM_TO
+00D6: if
+0019:   27@ > 90
+004D: jf @SUM_WAIT
+0ACD: show_text_highpriority "SWEET MODEL DID NOT LOAD" time 1800
+0002: jump @MAIN
+
+:STATUS
+00D6: if
+0039:   20@ == 1
+004D: jf @ST_OFF
+00D6: if
+056D:   actor 23@ defined
+004D: jf @ST_NOCJ
+0ACD: show_text_highpriority "SWITCHED ON  -  CJ BODY LIVE  -  J = YOU ARE CJ" time 2200
+0002: jump @MAIN
+:ST_NOCJ
+0ACD: show_text_highpriority "SWITCHED ON  -  NO CJ BODY  -  PRESS N" time 2200
+0002: jump @MAIN
+:ST_OFF
+0ACD: show_text_highpriority "YOU ARE CJ  -  H PLAY AS THEM  -  T CALL SWEET" time 2200
+0002: jump @MAIN
+
+:NEAR_HINT
+000A: 18@ += 1
+00D6: if
+0019:   18@ > 100
+004D: jf @NH_X
+0006: 18@ = 0
+00A0: store_actor $PLAYER_ACTOR position_to 1@ 2@ 3@
+0006: 5@ = 0
+00D6: if
+0AE1: 10@ = random_actor_near_point 1@ 2@ 3@ radius 40.0 find_next 0 pass_deads 1
+004D: jf @NH_X
+:NH_LOOP
+00D6: if
+803C:   not $PLAYER_ACTOR == 10@
+004D: jf @NH_NEXT
+00D6: if
+8118:   not actor 10@ dead
+004D: jf @NH_NEXT
+00D6: if
+00DF:   actor 10@ driving
+004D: jf @NH_MOD
+0002: jump @NH_NEXT
+:NH_MOD
+0665: get_actor 10@ model_to 6@
+0006: 7@ = 0
+0050: gosub @IS_STORY_CHAR
+00D6: if
+0039:   7@ == 1
+004D: jf @NH_NEXT
+0085: 5@ = 6@
+0002: jump @NH_HIT
+:NH_NEXT
+00D6: if
+0AE1: 10@ = random_actor_near_point 1@ 2@ 3@ radius 40.0 find_next 1 pass_deads 1
+004D: jf @NH_X
+0002: jump @NH_LOOP
+:NH_HIT
+0050: gosub @SAY_NEAR
+:NH_X
+0051: return
+
+:WATCH
+000A: 18@ += 1
+00D6: if
+0019:   18@ > 50
+004D: jf @W_X
+0006: 18@ = 0
+0050: gosub @KEEP_HIDDEN
+00D6: if
+8039:   not 19@ == 0
+004D: jf @W_X
+00D6: if
+056D:   actor 23@ defined
+004D: jf @W_NEED
+00D6: if
+8118:   not actor 23@ dead
+004D: jf @W_DEADBOT
+00D6: if
+8039:   not 29@ == 1
+004D: jf @W_X
+00D6: if
+00DF:   actor $PLAYER_ACTOR driving
+004D: jf @W_FOOT
+00D6: if
+047A:   actor $PLAYER_ACTOR driving_a_motorbike
+004D: jf @W_CAR
+00D6: if
+00DF:   actor 23@ driving
+004D: jf @W_X
+03C0: 12@ = actor 23@ car
+05CD: AS_actor 23@ leave_car 12@
+0006: 31@ = 0
+0002: jump @W_X
+:W_CAR
+03C0: 12@ = actor $PLAYER_ACTOR car
+00D6: if
+00DB:   actor 23@ in_car 12@
+004D: jf @W_ASKIN
+0006: 31@ = 2
+0002: jump @W_X
+:W_ASKIN
+05CB: AS_actor 23@ enter_car 12@ passenger_seat 0
+00D6: if
+0039:   31@ == 1
+004D: jf @W_SHOT
+0002: jump @W_X
+:W_SHOT
+0006: 31@ = 1
+00D6: if
+0039:   30@ == 0
+004D: jf @W_X
+0006: 30@ = 1
+0ACD: show_text_highpriority "CJ RIDING SHOTGUN" time 800
+0002: jump @W_X
+:W_FOOT
+00D6: if
+00DF:   actor 23@ driving
+004D: jf @W_FLW
+03C0: 12@ = actor 23@ car
+05CD: AS_actor 23@ leave_car 12@
+0006: 31@ = 0
+0002: jump @W_X
+:W_FLW
+0006: 31@ = 0
+0050: gosub @SYNC_GUN
+00A0: store_actor $PLAYER_ACTOR position_to 1@ 2@ 3@
+00A0: store_actor 23@ position_to 13@ 14@ 15@
+050A: 8@ = distance_between_XYZ 1@ 2@ 3@ and_XYZ 13@ 14@ 15@
+00D6: if
+0021:   8@ > 22.0
+004D: jf @W_NEAR
+0087: 13@ = 1@
+000B: 13@ += 1.1
+0087: 14@ = 2@
+000B: 14@ += 0.7
+00A1: put_actor 23@ at 13@ 14@ 3@
+0633: AS_actor 23@ follow_actor $PLAYER_ACTOR
+0002: jump @W_X
+:W_NEAR
+00D6: if
+0021:   8@ > 4.5
+004D: jf @W_X
+0633: AS_actor 23@ follow_actor $PLAYER_ACTOR
+0002: jump @W_X
+:W_DEADBOT
+009B: destroy_actor 23@
+0006: 23@ = -1
+:W_NEED
+00D6: if
+0039:   19@ == 1
+004D: jf @W_X
+0050: gosub @SPAWN_BOT
+:W_X
+0051: return
+
+:KEEP_HIDDEN
+00D6: if
+056D:   actor 21@ defined
+004D: jf @KH_LOST
+00D6: if
+8118:   not actor 21@ dead
+004D: jf @KH_LOST
+0337: set_actor 21@ visibility 0
+039E: set_actor 21@ locked 1
+00A0: store_actor $PLAYER_ACTOR position_to 1@ 2@ 3@
+000B: 1@ += 3.4
+00A1: put_actor 21@ at 1@ 2@ 3@
+0051: return
+:KH_LOST
+0006: 21@ = -1
+0051: return
+
+:SYNC_GUN
+0470: 9@ = actor $PLAYER_ACTOR current_weapon
+00D6: if
+003B:   9@ == 17@
+004D: jf @SG_X
+0085: 17@ = 9@
+00D6: if
+0019:   9@ > 0
+004D: jf @SG_X
+01B2: give_actor 23@ weapon 9@ ammo 50
+:SG_X
+0051: return
+
+:RESTORE_CJ
+0050: gosub @RESTORE_BODY
+0ACD: show_text_highpriority "YOU ARE CJ AGAIN" time 1400
+018C: play_sound 1139 at 0.0 0.0 0.0
+0002: jump @MAIN
+
+:HARD_RESET
+0050: gosub @RESTORE_BODY
+0ACD: show_text_highpriority "SWITCHER RESET" time 1400
+0002: jump @MAIN
+
+:RESTORE_BODY
+00D6: if
+0256:   player $PLAYER_CHAR defined
+004D: jf @RB_BOT
+09C7: change_player $PLAYER_CHAR model_to 0
+0245: set_actor $PLAYER_ACTOR walk_style_to "PLAYER"
+0373: set_camera_directly_behind_player
+00D6: if
+0019:   28@ > 0
+004D: jf @RB_HIDE
+0223: set_actor $PLAYER_ACTOR health_to 28@
+:RB_HIDE
+0050: gosub @UNHIDE_OLD
+:RB_BOT
+00D6: if
+056D:   actor 23@ defined
+004D: jf @RB_CLR
+009B: destroy_actor 23@
+:RB_CLR
+0006: 23@ = -1
+0006: 20@ = 0
+0006: 21@ = -1
+0006: 22@ = 0
+0006: 28@ = 0
+0006: 29@ = 0
+0006: 30@ = 0
+0006: 31@ = 0
+0006: 17@ = -1
+0051: return
+
+:SAY_WHO
+00D6: if
+0039:   22@ == 270
+004D: jf @NM_SM
+0ACD: show_text_highpriority "YOU ARE SWEET  -  CJ IS WITH YOU" time 2400
+0051: return
+:NM_SM
+00D6: if
+0039:   22@ == 269
+004D: jf @NM_RY
+0ACD: show_text_highpriority "YOU ARE SMOKE  -  CJ IS WITH YOU" time 2400
+0051: return
+:NM_RY
+00D6: if
+0039:   22@ == 271
+004D: jf @NM_CE
+0ACD: show_text_highpriority "YOU ARE RYDER  -  CJ IS WITH YOU" time 2400
+0051: return
+:NM_CE
+00D6: if
+0039:   22@ == 292
+004D: jf @NM_OG
+0ACD: show_text_highpriority "YOU ARE CESAR  -  CJ IS WITH YOU" time 2400
+0051: return
+:NM_OG
+00D6: if
+0039:   22@ == 293
+004D: jf @NM_KE
+0ACD: show_text_highpriority "YOU ARE OG LOC  -  CJ IS WITH YOU" time 2400
+0051: return
+:NM_KE
+00D6: if
+0039:   22@ == 80
+004D: jf @NM_TR
+0ACD: show_text_highpriority "YOU ARE KENDL  -  CJ IS WITH YOU" time 2400
+0051: return
+:NM_TR
+00D6: if
+0039:   22@ == 300
+004D: jf @NM_CAT
+0ACD: show_text_highpriority "YOU ARE THE TRUTH  -  CJ IS WITH YOU" time 2400
+0051: return
+:NM_CAT
+00D6: if
+0039:   22@ == 298
+004D: jf @NM_WU
+0ACD: show_text_highpriority "YOU ARE CATALINA  -  CJ IS WITH YOU" time 2400
+0051: return
+:NM_WU
+00D6: if
+0039:   22@ == 294
+004D: jf @NM_FAM
+0ACD: show_text_highpriority "YOU ARE WOOZIE  -  CJ IS WITH YOU" time 2400
+0051: return
+:NM_FAM
+00D6: if or
+0039:   22@ == 105
+0039:   22@ == 106
+0039:   22@ == 107
+004D: jf @NM_JZ
+0ACD: show_text_highpriority "YOU ARE A GROVE HOMIE  -  CJ IS WITH YOU" time 2400
+0051: return
+:NM_JZ
+00D6: if
+0039:   22@ == 296
+004D: jf @NM_GEN
+0ACD: show_text_highpriority "YOU ARE JIZZY  -  CJ IS WITH YOU" time 2400
+0051: return
+:NM_GEN
+0ACD: show_text_highpriority "YOU SWITCHED  -  CJ IS WITH YOU" time 2400
+0051: return
+
+:SAY_NEAR
+00D6: if
+0039:   5@ == 270
+004D: jf @SN_SM
+0ACD: show_text_highpriority "SWEET NEAR - PRESS H" time 1600
+0051: return
+:SN_SM
+00D6: if
+0039:   5@ == 269
+004D: jf @SN_RY
+0ACD: show_text_highpriority "SMOKE NEAR - PRESS H" time 1600
+0051: return
+:SN_RY
+00D6: if
+0039:   5@ == 271
+004D: jf @SN_CE
+0ACD: show_text_highpriority "RYDER NEAR - PRESS H" time 1600
+0051: return
+:SN_CE
+00D6: if
+0039:   5@ == 292
+004D: jf @SN_FAM
+0ACD: show_text_highpriority "CESAR NEAR - PRESS H" time 1600
+0051: return
+:SN_FAM
+00D6: if or
+0039:   5@ == 105
+0039:   5@ == 106
+0039:   5@ == 107
+004D: jf @SN_GEN
+0ACD: show_text_highpriority "GROVE HOMIE NEAR - PRESS H" time 1600
+0051: return
+:SN_GEN
+0ACD: show_text_highpriority "COMPANION NEAR - PRESS H" time 1600
+0051: return
+
+:IS_STORY_CHAR
+0006: 7@ = 0
+00D6: if or
+0039:   6@ == 269
+0039:   6@ == 270
+0039:   6@ == 271
+0039:   6@ == 292
+0039:   6@ == 293
+0039:   6@ == 294
+0039:   6@ == 295
+0039:   6@ == 298
+004D: jf @STORY2
+0006: 7@ = 1
+0051: return
+:STORY2
+00D6: if or
+0039:   6@ == 80
+0039:   6@ == 300
+0039:   6@ == 265
+0039:   6@ == 266
+0039:   6@ == 267
+0039:   6@ == 268
+0039:   6@ == 296
+0039:   6@ == 297
+004D: jf @STORY3
+0006: 7@ = 1
+0051: return
+:STORY3
+00D6: if or
+0039:   6@ == 301
+0039:   6@ == 302
+0039:   6@ == 304
+0039:   6@ == 307
+0039:   6@ == 310
+0039:   6@ == 311
+0039:   6@ == 274
+0039:   6@ == 273
+004D: jf @STORY4
+0006: 7@ = 1
+0051: return
+:STORY4
+00D6: if or
+0039:   6@ == 105
+0039:   6@ == 106
+0039:   6@ == 107
+004D: jf @STORY_NO
+0006: 7@ = 1
+0051: return
+:STORY_NO
+0051: return
+
+:APPLY_WALKSTYLE
+00D6: if or
+0039:   22@ == 269
+0039:   22@ == 311
+004D: jf @WS_GANG
+0245: set_actor $PLAYER_ACTOR walk_style_to "FATMAN"
+0051: return
+:WS_GANG
+00D6: if or
+0039:   22@ == 270
+0039:   22@ == 271
+0039:   22@ == 300
+0039:   22@ == 301
+0039:   22@ == 293
+004D: jf @WS_GANG2
+0245: set_actor $PLAYER_ACTOR walk_style_to "GANG1"
+0051: return
+:WS_GANG2
+00D6: if or
+0039:   22@ == 292
+0039:   22@ == 307
+0039:   22@ == 296
+0039:   22@ == 105
+0039:   22@ == 106
+0039:   22@ == 107
+004D: jf @WS_WOMAN
+0245: set_actor $PLAYER_ACTOR walk_style_to "GANG2"
+0051: return
+:WS_WOMAN
+00D6: if or
+0039:   22@ == 80
+0039:   22@ == 298
+004D: jf @WS_PLAYER
+0245: set_actor $PLAYER_ACTOR walk_style_to "WOMAN"
+0051: return
+:WS_PLAYER
+0245: set_actor $PLAYER_ACTOR walk_style_to "PLAYER"
+0051: return
