@@ -19,10 +19,16 @@ That path is saved as GTA_DIR.txt so the next run is silent.
 IN GAME
   K     GroveLink phone
   H     become the companion next to you. CJ stays.
+  F6    same as H
+  T     call Sweet in if the street is empty, then press H
   G     next companion
   J     you are CJ again
+  U     hard reset  (NOT R — R is reload)
   N     send CJ away / call him back
   B     CJ hold / follow
+  L     switcher status line
+
+If H does nothing: look for SWITCHER ON at load. Press L. Press T then H.
 
 PHONE CHAT
   Desktop START_GROVELINK.bat
