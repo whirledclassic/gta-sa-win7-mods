@@ -10,6 +10,7 @@ help footer + empty-action disable + VERIFY VERSION + CHANGELOG + port-busy + RE
 1.8.2: Breaking News location tags — POST /news location in HTML; NEWS.make with zone in ini.
 1.9.0: CJ REPLY (OUTBOX→chat); /spectate snapshot live view; SPECTATE.frame copy (no NEWS).
 2.0.0: favorites API; /manifest.webmanifest; /api hud; spectate UX; share article; RESEARCH.md.
+2.1.0: chat nicknames; spectate watching count; Moments reel; wanted toasts; By place; docs.
 
 Run from repo root or anywhere:
   python tests/smoke_bridge.py
@@ -130,6 +131,8 @@ def main():
     gl.STATE["last_refresh_human"] = ""
     gl.STATE["phone_page_logged"] = False
     gl.STATE["gta_dir"] = tmp
+    gl.STATE["spectate_viewers"] = {}
+    gl.STATE["spectate_on"] = False
 
     try:
         from http.server import HTTPServer
@@ -401,7 +404,7 @@ def main():
         check("GET / has hero / LATEST", "LATEST" in html or 'class="hero"' in html or "sectionlab" in html)
         check("GET / has Breaking News", "Breaking News" in html)
         check("GET / has sticky composer", 'id="composer"' in html or "composer" in html)
-        check("GET / has From: field", 'id="from_name"' in html and "From:" in html)
+        check("GET / has From:/Nickname field", "from_name" in html and ("Nickname" in html or "From:" in html))
         check("GET / has chat thread", 'id="chat_thread"' in html or "TEXTS TO CJ" in html)
         check("GET / has Grove Street Herald link", "/news" in html and "Herald" in html)
         check("GET / has Share page / sharePhoto", "share_page" in html or "sharePhoto" in html)
@@ -766,6 +769,126 @@ def main():
     except Exception as exc:
         check("2.0.0 favorites/manifest/hud suite", False, "%s\n%s" % (exc, traceback.format_exc()[:500]))
 
+    # --- 2.1.0 nicknames + watching + Moments + wanted toast + By place ---
+    try:
+        try:
+            from urllib.request import Request, urlopen
+        except ImportError:
+            from urllib2 import Request, urlopen
+
+        # Nickname / name= alias on /send
+        req_nick = Request(
+            "http://127.0.0.1:%s/send" % port,
+            data=b"msg=Yo+CJ&name=SmokeNick",
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+        )
+        resp_nick = urlopen(req_nick, timeout=5)
+        jnick = json.loads(resp_nick.read().decode("utf-8"))
+        check("POST /send name= nickname", jnick.get("ok") is True and jnick.get("from") == "SmokeNick", jnick)
+        code_chat, raw_chat = http_get(port, "/api/chat")
+        jchat = json.loads(raw_chat.decode("utf-8") if isinstance(raw_chat, bytes) else raw_chat)
+        inbox = jchat.get("inbox") or []
+        nick_hit = any(
+            (isinstance(m, dict) and m.get("from") == "SmokeNick" and "Yo CJ" in (m.get("msg") or ""))
+            for m in inbox
+        )
+        check("chat thread shows nickname", nick_hit, inbox[:2] if inbox else inbox)
+
+        # Empty / missing from defaults to REAL PHONE
+        req_def = Request(
+            "http://127.0.0.1:%s/send" % port,
+            data=b"msg=Default+name+test",
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+        )
+        resp_def = urlopen(req_def, timeout=5)
+        jdef = json.loads(resp_def.read().decode("utf-8"))
+        check("POST /send default REAL PHONE", jdef.get("from") == "REAL PHONE", jdef)
+
+        # HTML nickname persistence hooks
+        code_h21, raw_h21 = http_get(port, "/")
+        html21 = raw_h21.decode("utf-8") if isinstance(raw_h21, bytes) else raw_h21
+        check("GET / nickname localStorage", "grovelink_nickname" in html21 or "LS_NICK" in html21)
+        check("GET / Nickname label", "Nickname" in html21)
+        check("GET / Moments reel", "moments_reel" in html21 and "renderMoments" in html21)
+        check("GET / By place tab", "tab_place" in html21 and "By place" in html21)
+        check("GET / wanted toast hook", "WANTED" in html21 and "maybeWantedToast" in html21 and "showToast" in html21)
+        check("GET / watching UI", "qa_watching" in html21 or "watching_note" in html21)
+
+        # Spectate watching count: poll /api/spectate then check field
+        code_w1, raw_w1 = http_get(port, "/api/spectate")
+        jw1 = json.loads(raw_w1.decode("utf-8") if isinstance(raw_w1, bytes) else raw_w1)
+        check("GET /api/spectate has watching", "watching" in jw1 and isinstance(jw1.get("watching"), int), jw1)
+        check("GET /api/spectate watching >= 1", int(jw1.get("watching") or 0) >= 1, jw1)
+        # /spectate page also counts
+        code_spw, raw_spw = http_get(port, "/spectate")
+        html_spw = raw_spw.decode("utf-8") if isinstance(raw_spw, bytes) else raw_spw
+        check("GET /spectate watching UI", "watching" in html_spw.lower())
+        code_apiw, raw_apiw = http_get(port, "/api")
+        japiw = json.loads(raw_apiw.decode("utf-8") if isinstance(raw_apiw, bytes) else raw_apiw)
+        check("GET /api has watching", "watching" in japiw, japiw)
+        check("GET /api has places list", isinstance(japiw.get("places"), list), japiw.get("places"))
+
+        # Location attach: caption tag + news location
+        loc_photo = "7777777777_place.jpg"
+        with open(os.path.join(photos, loc_photo), "wb") as f:
+            f.write(b"\xff\xd8\xff\xd9" + b"0" * 200)
+        gl.set_caption(loc_photo, "hanging at loc:Idlewood")
+        news_photo = "7777777778_newsplace.jpg"
+        with open(os.path.join(photos, news_photo), "wb") as f:
+            f.write(b"\xff\xd8\xff\xd9" + b"1" * 200)
+        now_ts = int(time.time())
+        gl.STATE["photos"] = [
+            {"file": news_photo, "mtime": now_ts, "when": "now", "size": 204, "size_h": "204 B"},
+            {"file": loc_photo, "mtime": now_ts - 10, "when": "now", "size": 204, "size_h": "204 B"},
+        ] + [p for p in (gl.STATE.get("photos") or []) if isinstance(p, dict) and p.get("file") not in (news_photo, loc_photo)]
+        req_np = Request(
+            "http://127.0.0.1:%s/news" % port,
+            data=("file=" + news_photo + "&location=Grove+Street").encode("utf-8"),
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+        )
+        resp_np = urlopen(req_np, timeout=5)
+        jnp = json.loads(resp_np.read().decode("utf-8"))
+        check("POST /news Grove Street for By place", jnp.get("ok") is True and jnp.get("location") == "Grove Street", jnp)
+
+        code_pl, raw_pl = http_get(port, "/api")
+        jpl = json.loads(raw_pl.decode("utf-8") if isinstance(raw_pl, bytes) else raw_pl)
+        photos_pl = jpl.get("photos") or []
+        loc_photo_meta = [p for p in photos_pl if p.get("file") == loc_photo]
+        news_photo_meta = [p for p in photos_pl if p.get("file") == news_photo]
+        check(
+            "GET /api photo location from caption",
+            loc_photo_meta and loc_photo_meta[0].get("location") == "Idlewood",
+            loc_photo_meta[:1],
+        )
+        check(
+            "GET /api photo location from news",
+            news_photo_meta and news_photo_meta[0].get("location") == "Grove Street",
+            news_photo_meta[:1],
+        )
+        places = jpl.get("places") or []
+        place_names = [x.get("place") for x in places if isinstance(x, dict)]
+        check("GET /api places includes Idlewood", "Idlewood" in place_names, places)
+        check("GET /api places includes Grove Street", "Grove Street" in place_names, places)
+
+        # Helper unit checks
+        check("location_from_caption hash", gl.location_from_caption("#Vinewood night") == "Vinewood")
+        check("note_spectate_viewer counts", gl.note_spectate_viewer("203.0.113.9") >= 1)
+
+        # FEATURES / RESEARCH / CHANGELOG mention 2.1.0
+        with open(os.path.join(REPO, "grovelink", "FEATURES.md"), "r") as f:
+            feat21 = f.read()
+        check("FEATURES.md 2.1.0", "2.1.0" in feat21 and "nickname" in feat21.lower())
+        check("FEATURES.md Moments / By place / watching", "Moments" in feat21 and "By place" in feat21 and "watching" in feat21.lower())
+        with open(os.path.join(REPO, "grovelink", "RESEARCH.md"), "r") as f:
+            res21 = f.read()
+        check("RESEARCH.md 2.1.0 one-liner", "2.1.0" in res21 or "nicknames" in res21.lower() or "Moments" in res21)
+        with open(os.path.join(REPO, "CHANGELOG.md"), "r") as f:
+            cl21 = f.read()
+        check("CHANGELOG.md has 2.1.0", "2.1.0" in cl21 and "watching" in cl21.lower())
+    except Exception as exc:
+        check("2.1.0 nicknames/watching/places suite", False, "%s\n%s" % (exc, traceback.format_exc()[:600]))
+
+
     try:
         server.shutdown()
     except Exception:
@@ -881,6 +1004,7 @@ def main():
         check("CHANGELOG.md has 1.8.2 location tags", "1.8.2" in cl and ("location" in cl.lower() or "NEWS.zone" in cl or "📍" in cl))
         check("CHANGELOG.md has 1.9.0 CJ reply + spectate", "1.9.0" in cl and ("OUTBOX" in cl or "REPLY" in cl) and ("spectate" in cl.lower() or "SPECTATE" in cl))
         check("CHANGELOG.md has 2.0.0 research pass", "2.0.0" in cl and ("favorite" in cl.lower() or "HUD" in cl or "manifest" in cl.lower()))
+        check("CHANGELOG.md has 2.1.0 features", "2.1.0" in cl and ("nickname" in cl.lower() or "watching" in cl.lower() or "Moments" in cl))
         check("CHANGELOG covers 1.0 foundation", "1.0" in cl and ("Foundation" in cl or "crash-safer" in cl))
     except Exception as exc:
         check("CHANGELOG.md", False, exc)
@@ -911,7 +1035,7 @@ def main():
     except Exception as exc:
         check("README polish", False, exc)
 
-    check("VERSION is 2.0.0", pack_ver == "2.0.0", pack_ver)
+    check("VERSION is 2.1.0", pack_ver == "2.1.0", pack_ver)
 
     # Runtime: after clear, HTML still disables; after photo, actions enabled via setCountActions path
     # (API count already covered; spot-check helper exists in page source above)

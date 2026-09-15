@@ -46,7 +46,9 @@ Until PR #1 merges, `update.ini` defaults to branch `fix/grovelink-camera-snapsh
 
 - **Quick Actions** bar (Camera tip / Spectate / Herald / Text CJ); second-screen **HUD** + optional SA time from CLEO `STATUS.*`
 - **Hero + grid** photo feed (latest large, grid below); ★ **favorites**; optional **caption** per shot; **Breaking News** → Grove Street Herald
-- Sticky **composer** with optional **From:**; chat thread shows **Delivered to CJ** for your texts and **CJ replied** bubbles when CJ uses in-game REPLY
+- Sticky **composer** with **Nickname** (localStorage; default REAL PHONE); chat thread shows your name + **Delivered to CJ** / **CJ replied**
+- **Moments** Today reel + **By place** tab (Herald location / caption tags); **WANTED ★ increased** toast when HUD wanted rises
+- Spectate **N watching** (recent polls, ~30s) on `/spectate` + Quick Actions
 - **LIVE SPECTATE** link → `GET /spectate` (full-viewport latest frame, auto-refresh; snapshot slideshow only — not H.264/WebRTC)
 - Header shows prominent **VERSION** + **PHOTOS** stats, **LIVE** pulse badge, **LAN** + **localhost** URLs, last poll time, unread count
 - **Grove Street Herald** link → `GET /news` (fake newspaper; articles embed `/photo/…`)
@@ -76,7 +78,7 @@ Until PR #1 merges, `update.ini` defaults to branch `fix/grovelink-camera-snapsh
 - `POST /caption`, `POST /news`, `GET /api/chat`, `GET /api/spectate`, `GET /spectate` for captions / Herald / chat / live snapshots
 - **Camera ≠ Breaking News:** no `news.auto`. Use CLEO **NEWS** or web **Breaking News** for Herald.
 - First load of `/` logs **Phone page opened** in the bridge window
-- **`GET /api`** → JSON with `photos`, `latest`, `count`, `bridge_ok`, `poll_ms`, `version`, **`last_error`**, **`hud`**, **`favorites`**, URLs, refresh time
+- **`GET /api`** → JSON with `photos`, `latest`, `count`, `bridge_ok`, `poll_ms`, `version`, **`last_error`**, **`hud`**, **`favorites`**, **`watching`**, **`places`**, URLs, refresh time
 - **`GET/POST /favorite`**, **`GET /manifest.webmanifest`**
 - **`GET /health`** → same core fields + `galleries`, `gta_dir`, **`last_error`**
 - **`POST /clear`** / **`GET /clear?confirm=1`** → wipe all `bridge/photos` copies (**confirm=1 required** on both)

@@ -11,6 +11,11 @@ CLEO mods for **GTA SA PC 1.0** on **Windows 7** (pack version: root **`VERSION`
 
 Docs: [FEATURES](grovelink/FEATURES.md) · [CHANGELOG](CHANGELOG.md) · [TROUBLESHOOTING](grovelink/TROUBLESHOOTING.md). Not affiliated with Rockstar. Single-player only.
 
+## Changelog — 2.1.0 (nicknames · watching · Moments · wanted · By place)
+
+- Chat **nicknames** (localStorage + `/send` `from=`/`name=`), spectate **N watching**, **Moments** Today reel, **WANTED ★** toasts, gallery **By place**
+- Camera ≠ NEWS kept; Win7 stdlib; crash-safer CLEO. Smoke + docs. VERSION **2.1.0**. Do not merge until review.
+
 ## Changelog — 2.0.0 (research-backed companion pass)
 
 - **Favorites** (★ + filter + localStorage/bridge JSON), chat unread + optional CJ **Notification**, spectate fullscreen/pause/age + snapshot banner

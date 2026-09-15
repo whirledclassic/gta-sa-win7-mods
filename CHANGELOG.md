@@ -1,6 +1,15 @@
 # GroveLink changelog
 
-Human-readable highlights from pack **1.0 → 2.0.0**. Full detail also lives in root `README.md` round notes and [grovelink/FEATURES.md](grovelink/FEATURES.md).
+Human-readable highlights from pack **1.0 → 2.1.0**. Full detail also lives in root `README.md` round notes and [grovelink/FEATURES.md](grovelink/FEATURES.md).
+
+## 2.1.0 — Nicknames, watching, Moments, wanted toasts, By place
+
+- **Chat nicknames:** web visitors set a display name (localStorage); sent with `/send` as `from=` / `name=`; shown in thread; default **REAL PHONE** if empty.
+- **Spectate viewer count:** track recent `/spectate` + `/api/spectate` polls (IP + ~30s) in STATE; show **N watching** on spectate page + Quick Actions.
+- **Moments reel:** story-style **Today** strip at top of gallery (today's photos by mtime); tap opens lightbox.
+- **Wanted toasts:** when `/api` `hud.wanted` increases → flash **WANTED ★ increased** (fail-soft).
+- **By place:** gallery tab listing zones (Herald `location` + caption tags) with counts; filter shots by place.
+- Docs: FEATURES / CHANGELOG / RESEARCH; smoke covers nicknames, watching, places, Moments, toast hooks; VERSION **2.1.0**.
 
 ## 2.0.0 — Research-backed phone companion pass
 

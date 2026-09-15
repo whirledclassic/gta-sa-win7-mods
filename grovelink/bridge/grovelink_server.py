@@ -109,7 +109,11 @@ STATE = {
     "last_error": "",
     "link_ini": "",
     "spectate_on": False,
+    # IP -> last_seen unix for /spectate + /api/spectate polls (~30s window)
+    "spectate_viewers": {},
 }
+
+SPECTATE_VIEWER_WINDOW = 30
 
 
 def read_cfg():
@@ -1277,6 +1281,138 @@ def attach_favorites_to_photos(photos):
     return out
 
 
+
+# --- 2.1.0 spectate viewers + photo locations ---
+
+def note_spectate_viewer(ip):
+    """Record a spectate poll from client IP; prune stale entries (~30s)."""
+    now = time.time()
+    viewers = STATE.get("spectate_viewers")
+    if not isinstance(viewers, dict):
+        viewers = {}
+    ip = (ip or "").strip()
+    if ip:
+        viewers[ip] = now
+    cutoff = now - SPECTATE_VIEWER_WINDOW
+    pruned = {}
+    for k, v in viewers.items():
+        try:
+            if float(v) >= cutoff:
+                pruned[k] = v
+        except Exception:
+            pass
+    STATE["spectate_viewers"] = pruned
+    return len(pruned)
+
+
+def spectate_watching_count():
+    """How many distinct IPs polled spectate within the window."""
+    return note_spectate_viewer("")
+
+
+_KNOWN_SA_PLACES = (
+    "Grove Street", "Ganton", "Idlewood", "LS Airport", "East Beach",
+    "Vinewood", "Los Santos", "San Fierro", "Las Venturas", "Mount Chiliad",
+    "Angel Pine", "Area 69", "Verdant Meadows", "Flint County", "Red County",
+    "Jefferson", "Willowfield", "Ocean Docks", "Doherty", "Garcia",
+    "Calton Heights", "Palomino Creek", "Blueberry", "Montgomery",
+)
+
+
+def location_from_caption(caption):
+    """Pull a place tag from caption: loc:/#/@/📍 or known SA place name."""
+    cap = (caption or "").strip()
+    if not cap:
+        return ""
+    low = cap.lower()
+
+    def _best_known(text):
+        best = ""
+        tlow = (text or "").lower()
+        for place in sorted(_KNOWN_SA_PLACES, key=len, reverse=True):
+            if place.lower() in tlow and len(place) > len(best):
+                best = place
+        return best
+
+    # Explicit prefixes: loc:Place  #Place  @Place  📍Place
+    for prefix in ("loc:", "location:", "#", "@", "📍"):
+        if prefix == "📍":
+            idx = cap.find("📍")
+        else:
+            idx = low.find(prefix)
+        if idx < 0:
+            continue
+        start_i = idx + len(prefix)
+        frag = cap[start_i:].strip()
+        for sep in (",", "|", ";", chr(10)):
+            if sep in frag:
+                frag = frag.split(sep, 1)[0]
+        frag = frag.strip().strip("#@").strip()[:48]
+        if not frag:
+            continue
+        known = _best_known(frag)
+        if known:
+            return normalize_location(known)
+        if " " not in frag:
+            return normalize_location(frag)
+        words = frag.split()
+        return normalize_location(" ".join(words[:3])[:48])
+    best = _best_known(cap)
+    return normalize_location(best) if best else ""
+
+
+def build_photo_location_map():
+    """photo basename -> location from Herald articles that tagged a place."""
+    locmap = {}
+    try:
+        arts = list_news_articles(100)
+    except Exception:
+        arts = []
+    for art in arts:
+        if not isinstance(art, dict):
+            continue
+        photo = _safe_basename(art.get("photo") or "")
+        loc = normalize_location(art.get("location") or "")
+        if photo and loc:
+            locmap[photo] = loc
+    return locmap
+
+
+def attach_locations_to_photos(photos):
+    """Enrich photos with location from news articles or caption tags."""
+    news_map = build_photo_location_map()
+    out = []
+    for p in photos or []:
+        if not isinstance(p, dict):
+            out.append(p)
+            continue
+        item = dict(p)
+        name = item.get("file") or ""
+        loc = ""
+        if name and name in news_map:
+            loc = news_map[name]
+        if not loc:
+            loc = location_from_caption(item.get("caption") or "")
+        item["location"] = loc or ""
+        out.append(item)
+    return out
+
+
+def places_summary(photos):
+    """List {place, count} for photos that have a location, sorted by count."""
+    counts = {}
+    for p in photos or []:
+        if not isinstance(p, dict):
+            continue
+        loc = (p.get("location") or "").strip()
+        if not loc:
+            continue
+        counts[loc] = counts.get(loc, 0) + 1
+    items = [{"place": k, "count": counts[k]} for k in counts]
+    items.sort(key=lambda x: (-int(x["count"]), x["place"].lower()))
+    return items
+
+
 def read_hud_from_ini(ini=None):
     """Read safe STATUS HUD fields written by CLEO (crash-safer ints/strings)."""
     ini = ini or STATE.get("link_ini") or ""
@@ -1669,6 +1805,56 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     display:inline-block; margin-top:8px; padding:8px 12px; border:1px solid #c4a35a;
     color:#f5e6c8; background:#2a1a08; text-decoration:none; font-size:12px; font-weight:bold;
   }
+  .toast {
+    display:none; position:fixed; top:18px; left:50%; transform:translateX(-50%);
+    z-index:200; background:#3a1212; color:#ffb0b0; border:2px solid #ff6a6a;
+    padding:12px 18px; font-size:14px; font-weight:bold; letter-spacing:1px;
+    box-shadow:0 6px 20px rgba(0,0,0,0.45); max-width:90%; text-align:center;
+  }
+  .toast.show { display:block; animation: toastIn 0.25s ease-out; }
+  @keyframes toastIn { from { opacity:0; transform:translateX(-50%) translateY(-8px);} to { opacity:1; transform:translateX(-50%) translateY(0);} }
+  .moments {
+    margin:10px 0 4px; padding:0 12px 8px; overflow-x:auto; -webkit-overflow-scrolling:touch;
+    display:none; white-space:nowrap;
+  }
+  .moments.show { display:block; }
+  .moments .mlab {
+    font-size:11px; letter-spacing:2px; color:#2cff6a; font-weight:bold; margin:0 0 8px; display:block;
+  }
+  .moments .mrow { display:inline-flex; gap:10px; }
+  .moments .mcell {
+    display:inline-block; width:72px; text-align:center; cursor:pointer; vertical-align:top;
+  }
+  .moments .mring {
+    width:68px; height:68px; border-radius:50%; border:3px solid #2cff6a;
+    overflow:hidden; margin:0 auto 4px; background:#000; box-sizing:border-box;
+    box-shadow:0 0 0 2px rgba(44,255,106,0.25);
+  }
+  .moments .mring img { width:100%; height:100%; object-fit:cover; display:block; }
+  .moments .mlabel { font-size:9px; color:#7aaa7a; overflow:hidden; text-overflow:ellipsis; max-width:72px; }
+  .watching {
+    display:none; margin:6px 12px 0; font-size:12px; color:#9cf; font-weight:bold; letter-spacing:0.5px;
+  }
+  .watching.show { display:block; }
+  .quickbar .qa-watch {
+    flex:0 0 auto; min-width:90px; border-color:#4af; color:#9cf; background:#1a2a40; pointer-events:none;
+  }
+  .placelist { margin:8px 12px 16px; }
+  .placeitem {
+    display:flex; align-items:center; justify-content:space-between; gap:10px;
+    padding:14px 12px; margin:6px 0; background:#0b0f0c; border:1px solid #1a4;
+    cursor:pointer; min-height:48px; font-size:14px; color:#d7ffd0;
+  }
+  .placeitem:hover { border-color:#2cff6a; }
+  .placeitem .pc { color:#2cff6a; font-weight:bold; }
+  .placeback {
+    margin:8px 12px; background:#143; color:#2cff6a; border:1px solid #2cff6a;
+    padding:10px 12px; font-size:12px; font-weight:bold; min-height:40px; cursor:pointer;
+  }
+  .locbadge-mini {
+    display:inline-block; margin-left:6px; padding:2px 6px; font-size:10px;
+    background:#2a1a08; border:1px solid #c4a35a; color:#f5e6c8; border-radius:2px;
+  }
 </style>
 </head>
 <body>
@@ -1728,7 +1914,9 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     <a class="qa-spec" href="/spectate">Spectate</a>
     <a class="qa-herald" href="/news">Herald</a>
     <button type="button" id="qa_text">Text CJ</button>
+    <span class="qa-watch" id="qa_watching" title="Spectate viewers (last ~30s)">0 watching</span>
   </div>
+  <div class="watching" id="watching_note"></div>
   <div class="chatbox" id="chatbox">
     <div class="chathead">
       <h3>TEXTS TO CJ</h3>
@@ -1754,9 +1942,12 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     <button type="button" class="tab on" id="tab_all" data-filter="all">All</button>
     <button type="button" class="tab" id="tab_today" data-filter="today">Today</button>
     <button type="button" class="tab" id="tab_fav" data-filter="favorites">Favorites</button>
+    <button type="button" class="tab" id="tab_place" data-filter="places">By place</button>
     <button type="button" class="tab" id="tab_sort" data-sort="newest" title="Client-side only — server always sends newest first">Newest</button>
   </div>
+  <div class="moments" id="moments_reel"></div>
   <div id="feed"></div>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
   <div class="helpfoot" id="help_foot">
     <div><strong>Shortcuts</strong> —
       <kbd>?</kbd> help ·
@@ -1772,8 +1963,8 @@ HTML_TEMPLATE = """<!DOCTYPE html>
   </div>
   <div class="composer" id="composer">
     <div class="fromrow">
-      <label for="from_name">From:</label>
-      <input id="from_name" type="text" maxlength="40" value="REAL PHONE" placeholder="REAL PHONE">
+      <label for="from_name">Nickname:</label>
+      <input id="from_name" type="text" maxlength="40" value="REAL PHONE" placeholder="REAL PHONE" autocomplete="nickname" title="Saved in this browser; sent as from= with texts">
     </div>
     <form id="f">
       <input id="msg" type="text" maxlength="80" placeholder="Message to CJ..." required>
@@ -1831,12 +2022,16 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 var LS_KEY = 'grovelink_last_visit';
 var LS_FAV = 'grovelink_favorites';
 var LS_CHAT_READ = 'grovelink_chat_read_ts';
+var LS_NICK = 'grovelink_nickname';
 var FILTER = 'all';
 var SEARCH_Q = '';
 var SORT_ORDER = 'newest'; // client-side only; server /api is always newest-first
+var PLACE_FILTER = '';
 var LAST_PHOTOS = [];
+var LAST_PLACES = [];
 var LAST_CHAT = [];
 var LAST_HUD = null;
+var LAST_WANTED = -1;
 var PENDING_ACTION = ''; // 'delete:NAME' or 'clear'
 var HERO_IDX = 0;
 var PULL_Y = 0;
@@ -2074,6 +2269,60 @@ function flashOk(msg) {
   okEl.textContent = msg || '';
   setTimeout(function(){ okEl.textContent = ''; }, 2800);
 }
+function showToast(msg) {
+  try {
+    var t = document.getElementById('toast');
+    if (!t) return;
+    t.textContent = msg || '';
+    t.className = 'toast show';
+    setTimeout(function(){ t.className = 'toast'; }, 3000);
+  } catch (e) { /* fail soft */ }
+}
+function loadNick() {
+  try {
+    var n = (localStorage.getItem(LS_NICK) || '').trim();
+    var el = document.getElementById('from_name');
+    if (el) el.value = n || 'REAL PHONE';
+  } catch (e) {}
+}
+function saveNick() {
+  try {
+    var el = document.getElementById('from_name');
+    var n = (el && el.value || '').trim();
+    if (!n) n = 'REAL PHONE';
+    if (el) el.value = n;
+    localStorage.setItem(LS_NICK, n);
+  } catch (e) {}
+}
+function maybeWantedToast(hud) {
+  try {
+    if (!hud) return;
+    var w = parseInt(hud.wanted || 0, 10) || 0;
+    if (LAST_WANTED >= 0 && w > LAST_WANTED) {
+      showToast('WANTED ★ increased');
+    }
+    LAST_WANTED = w;
+  } catch (e) { /* fail soft */ }
+}
+function paintWatching(n) {
+  n = parseInt(n, 10) || 0;
+  var qa = document.getElementById('qa_watching');
+  var note = document.getElementById('watching_note');
+  var label = n + ' watching';
+  if (qa) {
+    qa.textContent = label;
+    qa.style.display = (n > 0) ? '' : 'none';
+  }
+  if (note) {
+    if (n > 0) {
+      note.textContent = n + ' watching LIVE SPECTATE';
+      note.className = 'watching show';
+    } else {
+      note.textContent = '';
+      note.className = 'watching';
+    }
+  }
+}
 
 function openLb(src) {
   var box = document.getElementById('lightbox');
@@ -2169,7 +2418,9 @@ function doDeletePhoto(name) {
 function sendMsg(msg) {
   msg = (msg || '').trim();
   if (!msg) return;
+  saveNick();
   var frm = (document.getElementById('from_name').value || 'REAL PHONE').trim() || 'REAL PHONE';
+  if (!frm) frm = 'REAL PHONE';
   var body = 'msg=' + encodeURIComponent(msg) + '&from=' + encodeURIComponent(frm);
   var x = new XMLHttpRequest();
   x.open('POST', '/send', true);
@@ -2273,11 +2524,21 @@ function sharePhoto(name) {
 
 function setFilter(f) {
   FILTER = f;
+  if (f !== 'places') PLACE_FILTER = '';
   var all = document.getElementById('tab_all');
   var today = document.getElementById('tab_today');
+  var fav = document.getElementById('tab_fav');
+  var place = document.getElementById('tab_place');
   if (all) all.className = (f === 'all') ? 'tab on' : 'tab';
   if (today) today.className = (f === 'today') ? 'tab on' : 'tab';
+  if (fav) fav.className = (f === 'favorites') ? 'tab on' : 'tab';
+  if (place) place.className = (f === 'places') ? 'tab on' : 'tab';
   renderFeed(LAST_PHOTOS);
+}
+function setPlaceFilter(place) {
+  PLACE_FILTER = place || '';
+  FILTER = 'places';
+  setFilter('places');
 }
 
 function photoCard(p, isHero) {
@@ -2298,11 +2559,13 @@ function photoCard(p, isHero) {
   html += '<a class="imgwrap" href="' + href + '" target="_blank" rel="noopener" onclick="openLb(\\'' + href + '\\'); return false;">';
   html += '<img src="' + href + '" alt="shot">';
   html += '</a>';
+  var loc = p.location || '';
   var metaBits = [];
   if (when) metaBits.push(when);
   if (sizeH) metaBits.push(sizeH);
   metaBits.push(name);
   html += '<div class="meta"><span class="grow">' + escapeHtml(metaBits.join(' · ')) +
+          (loc ? (' <span class="locbadge-mini">📍 ' + escapeHtml(loc) + '</span>') : '') +
           ' · <a href="' + href + '" target="_blank" rel="noopener">full size</a></span></div>';
   html += '<div class="caprow"><input id="cap_' + cid + '" type="text" maxlength="200" placeholder="Optional caption…" value="' + escapeHtml(cap) + '">';
   html += '<button type="button" class="capbtn" onclick="saveCaption(\\'' + safe + '\\', document.getElementById(\\'' + 'cap_' + cid + '\\').value)">Save</button></div>';
@@ -2346,11 +2609,78 @@ function renderChat(inbox) {
   box.innerHTML = html;
 }
 
+function renderMoments(photos) {
+  var reel = document.getElementById('moments_reel');
+  if (!reel) return;
+  var today0 = startOfTodaySec();
+  var todays = [];
+  var list = photos || [];
+  for (var i = 0; i < list.length; i++) {
+    var mt = parseInt(list[i].mtime || 0, 10) || 0;
+    if (mt >= today0) todays.push(list[i]);
+  }
+  if (!todays.length || FILTER === 'places') {
+    reel.className = 'moments';
+    reel.innerHTML = '';
+    return;
+  }
+  var html = '<span class="mlab">TODAY</span><div class="mrow">';
+  for (var j = 0; j < todays.length && j < 24; j++) {
+    var p = todays[j];
+    var name = p.file || '';
+    var href = '/photo/' + name;
+    var safe = String(name).replace(/'/g, "\\'");
+    html += '<div class="mcell" onclick="openLb(\'' + href + '\')" title="' + escapeHtml(name) + '">';
+    html += '<div class="mring"><img src="' + href + '" alt=""></div>';
+    html += '<div class="mlabel">' + escapeHtml((p.when || 'today').split(' ').slice(-2).join(' ') || 'today') + '</div>';
+    html += '</div>';
+  }
+  html += '</div>';
+  reel.innerHTML = html;
+  reel.className = 'moments show';
+}
+function renderPlacesList() {
+  var feed = document.getElementById('feed');
+  var places = LAST_PLACES || [];
+  if (!places.length) {
+    // derive from photos client-side
+    var counts = {};
+    for (var i = 0; i < (LAST_PHOTOS || []).length; i++) {
+      var loc = (LAST_PHOTOS[i].location || '').trim();
+      if (loc) counts[loc] = (counts[loc] || 0) + 1;
+    }
+    places = [];
+    for (var k in counts) {
+      if (counts.hasOwnProperty(k)) places.push({place: k, count: counts[k]});
+    }
+    places.sort(function(a,b){ return (b.count - a.count) || String(a.place).localeCompare(b.place); });
+  }
+  if (!places.length) {
+    feed.innerHTML = '<div class="empty"><h2>NO PLACES YET</h2><p>File Breaking News with a location, or put <b>#Grove Street</b> / <b>loc:Idlewood</b> in a caption.</p></div>';
+    return;
+  }
+  var html = '<div class="sectionlab">BY PLACE</div><div class="placelist">';
+  for (var p = 0; p < places.length; p++) {
+    var pl = places[p].place;
+    var cn = places[p].count;
+    var safe = String(pl).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+    html += '<div class="placeitem" onclick="setPlaceFilter(\'' + safe + '\')"><span>📍 ' +
+            escapeHtml(pl) + '</span><span class="pc">' + cn + '</span></div>';
+  }
+  html += '</div>';
+  feed.innerHTML = html;
+}
 function renderFeed(photos) {
   var feed = document.getElementById('feed');
   var unread = 0;
   var today0 = startOfTodaySec();
   var list = photos || [];
+  renderMoments(photos);
+  if (FILTER === 'places' && !PLACE_FILTER) {
+    document.getElementById('unread_count').textContent = '0';
+    renderPlacesList();
+    return;
+  }
   if (FILTER === 'today') {
     var filtered = [];
     for (var j = 0; j < list.length; j++) {
@@ -2367,13 +2697,21 @@ function renderFeed(photos) {
     }
     list = filteredF;
   }
+  if (FILTER === 'places' && PLACE_FILTER) {
+    var filteredP = [];
+    for (var jp = 0; jp < list.length; jp++) {
+      if ((list[jp].location || '') === PLACE_FILTER) filteredP.push(list[jp]);
+    }
+    list = filteredP;
+  }
   if (SEARCH_Q) {
     var q = SEARCH_Q.toLowerCase();
     var filtered2 = [];
     for (var k = 0; k < list.length; k++) {
       var nm = String(list[k].file || list[k] || '').toLowerCase();
       var cp = String(list[k].caption || '').toLowerCase();
-      if (nm.indexOf(q) >= 0 || cp.indexOf(q) >= 0) filtered2.push(list[k]);
+      var lc = String(list[k].location || '').toLowerCase();
+      if (nm.indexOf(q) >= 0 || cp.indexOf(q) >= 0 || lc.indexOf(q) >= 0) filtered2.push(list[k]);
     }
     list = filtered2;
   }
@@ -2393,6 +2731,8 @@ function renderFeed(photos) {
       feed.innerHTML = '<div class="empty"><h2>NO MATCHES</h2><p>No filenames match <b>' + escapeHtml(SEARCH_Q) + '</b>. Clear the search box.</p></div>';
     } else if (FILTER === 'favorites') {
       feed.innerHTML = '<div class="empty"><h2>NO FAVORITES</h2><p>Tap ★ on a shot to star it. Favorites sync in this browser + optional bridge JSON.</p></div>';
+    } else if (FILTER === 'places') {
+      feed.innerHTML = '<button type="button" class="placeback" onclick="setPlaceFilter(\'\')">← All places</button><div class="empty"><h2>NO SHOTS HERE</h2><p>No photos tagged <b>' + escapeHtml(PLACE_FILTER) + '</b>.</p></div>';
     } else {
       feed.innerHTML = EMPTY_TODAY;
     }
@@ -2404,6 +2744,10 @@ function renderFeed(photos) {
     if (mt2 > lastVisit) unread++;
   }
   var html = '';
+  if (FILTER === 'places' && PLACE_FILTER) {
+    html += '<button type="button" class="placeback" onclick="setPlaceFilter(\'\')">← All places</button>';
+    html += '<div class="sectionlab">📍 ' + escapeHtml(PLACE_FILTER) + '</div>';
+  }
   var hero = list[0];
   var card0 = photoCard(hero, true);
   html += '<div class="sectionlab">LATEST</div>' + card0.html;
@@ -2491,6 +2835,9 @@ function paint(data) {
     saveLocalFavs(LOCAL_FAVS);
   }
   paintHud(data.hud || null);
+  maybeWantedToast(data.hud || null);
+  paintWatching(data.watching);
+  LAST_PLACES = data.places || [];
   renderChat(data.inbox || []);
   updateChatBadge(data.inbox || []);
   maybeNotifyCj(data.inbox || []);
@@ -2604,6 +2951,14 @@ document.getElementById('share_page').onclick = function() {
 document.getElementById('tab_all').onclick = function() { setFilter('all'); };
 document.getElementById('tab_today').onclick = function() { setFilter('today'); };
 (function(){ var t=document.getElementById('tab_fav'); if(t) t.onclick=function(){ setFilter('favorites'); }; })();
+(function(){ var t=document.getElementById('tab_place'); if(t) t.onclick=function(){ PLACE_FILTER=''; setFilter('places'); }; })();
+(function(){
+  var el = document.getElementById('from_name');
+  if (!el) return;
+  el.onchange = saveNick;
+  el.onblur = saveNick;
+})();
+loadNick();
 (function() {
   var btn = document.getElementById('tab_sort');
   if (!btn) return;
@@ -2848,7 +3203,7 @@ def render_spectate_html():
         "text-align:center;text-shadow:0 1px 3px #000}"
         "</style></head><body>"
         "<div class=\"badge\" id=\"badge\">LIVE SPECTATE</div>"
-        "<div class=\"banner\" id=\"banner\"><b>Snapshot live — not video</b> · slideshow of camera stills · same Wi-Fi + bridge</div>"
+        "<div class=\"banner\" id=\"banner\"><b>Snapshot live — not video</b> · slideshow of camera stills · same Wi-Fi + bridge · <span id=\"watching\">0 watching</span></div>"
         "<div class=\"controls\">"
         "<button type=\"button\" id=\"btn_pause\">Pause</button>"
         "<button type=\"button\" id=\"btn_fs\">Fullscreen</button>"
@@ -2894,10 +3249,14 @@ def render_spectate_html():
         "      } else {"
         "        img.style.display='none'; wait.style.display='flex';"
         "      }"
+        "      var w=parseInt(j.watching||0,10)||0;"
+        "      var wel=document.getElementById('watching');"
+        "      if(wel) wel.textContent=w+' watching';"
         "      meta.textContent='GroveLink '+ (j.version||'') +"
         "        (on?' · SPECTATE ON':' · SPECTATE off in-game') +"
         "        (name?' · '+name:'') +"
         "        ' · frame '+ ageLabel(j.age_sec) +"
+        "        ' · '+w+' watching' +"
         "        ' · snapshot live — not video';"
         "      schedule();"
         "    }catch(e){ schedule(); }"
@@ -2963,6 +3322,7 @@ def spectate_payload():
         "last_refresh": last_ref,
         "age_sec": age_sec,
         "poll_ms": poll_ms,
+        "watching": spectate_watching_count(),
         "version": STATE.get("version", "unknown") or "unknown",
         "note": "snapshot live — not video",
     }
@@ -2979,6 +3339,10 @@ def api_payload():
         pass
     try:
         photos = attach_favorites_to_photos(photos)
+    except Exception:
+        pass
+    try:
+        photos = attach_locations_to_photos(photos)
     except Exception:
         pass
     latest = ""
@@ -3024,6 +3388,8 @@ def api_payload():
         "news_count": len(list_news_articles(5)),
         "favorites": sorted(load_favorites()),
         "hud": read_hud_from_ini(),
+        "watching": spectate_watching_count(),
+        "places": places_summary(photos),
     }
 
 
@@ -3313,9 +3679,19 @@ class Handler(BaseHTTPRequestHandler):
             self._json({"ok": True, "inbox": load_chat_log()})
             return
         if path == "/api/spectate":
+            try:
+                cip = self.client_address[0] if self.client_address else ""
+                note_spectate_viewer(cip)
+            except Exception:
+                pass
             self._json(spectate_payload())
             return
         if path == "/spectate" or path == "/spectate/":
+            try:
+                cip = self.client_address[0] if self.client_address else ""
+                note_spectate_viewer(cip)
+            except Exception:
+                pass
             self._html(render_spectate_html())
             return
         if path == "/manifest.webmanifest" or path == "/manifest.json":
@@ -3504,7 +3880,7 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 obj = json.loads(text_body)
                 msg = obj.get("msg") or ""
-                frm = obj.get("from") or frm
+                frm = obj.get("from") or obj.get("name") or frm
             except Exception:
                 msg = ""
         else:
@@ -3513,6 +3889,8 @@ class Handler(BaseHTTPRequestHandler):
                 msg = fields["msg"][0]
             if "from" in fields and fields["from"]:
                 frm = fields["from"][0]
+            elif "name" in fields and fields["name"]:
+                frm = fields["name"][0]
         msg = (msg or "").strip().replace("\r", " ").replace("\n", " ")[:80]
         frm = (frm or "REAL PHONE").strip().replace("\r", " ").replace("\n", " ")[:40] or "REAL PHONE"
         if msg:

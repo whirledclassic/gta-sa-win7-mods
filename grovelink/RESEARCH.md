@@ -1,4 +1,4 @@
-# GroveLink research → features (v2.0.0)
+# GroveLink research → features (v2.1.0)
 
 Short summary of companion-phone / gallery UX we studied and why we shipped these enhancements (not a full taxi/homie phone clone).
 
@@ -13,7 +13,7 @@ Short summary of companion-phone / gallery UX we studied and why we shipped thes
 
 ## What we implemented
 
-| Research cue | GroveLink 2.0.0 feature |
+| Research cue | GroveLink 2.x feature |
 |--------------|-------------------------|
 | Gallery favorites | ★ star + **Favorites** tab; `localStorage` + optional `POST /favorite` → `photos_favorites.json` |
 | Share photos / stories | Existing photo **Web Share** / copy; Herald **Share article** on `/news/<id>` |
@@ -24,6 +24,7 @@ Short summary of companion-phone / gallery UX we studied and why we shipped thes
 | Live status HUD | CLEO writes safe `STATUS.wanted/money/zone/hour/spectate`; bridge `/api` **`hud`**; header strip + optional SA time |
 | Installable phone page | **`/manifest.webmanifest`** + apple meta (Add to Home Screen) |
 | Companion quick access | **Quick Actions**: Camera tip, Spectate, Herald, Text CJ |
+| Social nick / live crowd / stories | **Chat nicknames**, spectate **N watching**, **Moments** Today reel, wanted toasts, **By place** gallery |
 
 ## Out of scope (vs Ultimate Interactive Phone)
 
