@@ -28,3 +28,179 @@ end
 29@ = 0
 30@ = 0
 31@ = 0
+
+:MAIN
+0001: wait 0
+00D6: if
+0256:   player $PLAYER_CHAR defined
+004D: jf @MAIN
+00D6: if
+8118:   not actor $PLAYER_ACTOR dead
+004D: jf @DIED
+00D6: if
+0039:   25@ == 0
+004D: jf @KEYS
+0006: 25@ = -1
+0ACD: show_text_highpriority "SWITCHER V8  H BECOME  Y FIGHT  M MARKER  I BIKE" time 4500
+
+:KEYS
+00D6: if
+0039:   20@ == 1
+004D: jf @RADAR
+0050: gosub @WATCH
+0002: jump @DEBOUNCE
+:RADAR
+0050: gosub @NEAR_HINT
+:DEBOUNCE
+00D6: if
+0019:   24@ > 0
+004D: jf @KEY_H
+000E: 24@ -= 1
+0002: jump @MAIN
+
+:KEY_H
+00D6: if
+0AB0:   key_pressed 72
+004D: jf @KEY_F6
+0006: 24@ = 14
+0006: 26@ = -1
+0002: jump @TRY_SWITCH
+:KEY_F6
+00D6: if
+0AB0:   key_pressed 117
+004D: jf @KEY_G
+0006: 24@ = 14
+0006: 26@ = -1
+0002: jump @TRY_SWITCH
+:KEY_G
+00D6: if
+0AB0:   key_pressed 71
+004D: jf @KEY_J
+0006: 24@ = 14
+0002: jump @TRY_SWITCH
+:KEY_J
+00D6: if
+0AB0:   key_pressed 74
+004D: jf @KEY_U
+0006: 24@ = 14
+0002: jump @RESTORE_CJ
+:KEY_U
+00D6: if
+0AB0:   key_pressed 85
+004D: jf @KEY_N
+0006: 24@ = 14
+0002: jump @HARD_RESET
+:KEY_N
+00D6: if
+0AB0:   key_pressed 78
+004D: jf @KEY_B
+0006: 24@ = 14
+0002: jump @TOGGLE_BOT
+:KEY_B
+00D6: if
+0AB0:   key_pressed 66
+004D: jf @KEY_T
+0006: 24@ = 14
+0002: jump @TOGGLE_WAIT
+:KEY_T
+00D6: if
+0AB0:   key_pressed 84
+004D: jf @KEY_I
+0006: 24@ = 14
+0002: jump @SUMMON
+:KEY_I
+00D6: if
+0AB0:   key_pressed 73
+004D: jf @KEY_Y
+0006: 24@ = 14
+0002: jump @FORCE_BIKE
+:KEY_Y
+00D6: if
+0AB0:   key_pressed 89
+004D: jf @KEY_M
+0006: 24@ = 14
+0002: jump @TOGGLE_HUNT
+:KEY_M
+00D6: if
+0AB0:   key_pressed 77
+004D: jf @KEY_L
+0006: 24@ = 14
+0002: jump @GOTO_MARK
+:KEY_L
+00D6: if
+0AB0:   key_pressed 76
+004D: jf @MAIN
+0006: 24@ = 14
+0002: jump @STATUS
+
+:DIED
+00D6: if
+0039:   20@ == 1
+004D: jf @MAIN
+0050: gosub @RESTORE_BODY
+0002: jump @MAIN
+
+:TRY_SWITCH
+00D6: if
+03EE:   player $PLAYER_CHAR controllable
+004D: jf @BUSY
+0002: jump @FIND_NEAR
+:BUSY
+0ACD: show_text_highpriority "WAIT FOR THE CUTSCENE" time 1800
+0002: jump @MAIN
+
+:FIND_NEAR
+00A0: store_actor $PLAYER_ACTOR position_to 1@ 2@ 3@
+0006: 4@ = -1
+0006: 5@ = 0
+0007: 11@ = 9999.0
+00D6: if
+0AE1: 10@ = random_actor_near_point 1@ 2@ 3@ radius 45.0 find_next 0 pass_deads 1
+004D: jf @NONE_FOUND
+:SCAN_LOOP
+00D6: if
+803C:   not $PLAYER_ACTOR == 10@
+004D: jf @SCAN_NEXT
+00D6: if
+803C:   not 23@ == 10@
+004D: jf @SCAN_NEXT
+00D6: if
+803C:   not 21@ == 10@
+004D: jf @SCAN_NEXT
+00D6: if
+8118:   not actor 10@ dead
+004D: jf @SCAN_NEXT
+00D6: if
+8039:   not 26@ == 10@
+004D: jf @SCAN_NEXT
+0665: get_actor 10@ model_to 6@
+0006: 7@ = 0
+0050: gosub @IS_STORY_CHAR
+00D6: if
+0039:   7@ == 1
+004D: jf @SCAN_NEXT
+00A0: store_actor 10@ position_to 13@ 14@ 15@
+050A: 8@ = distance_between_XYZ 1@ 2@ 3@ and_XYZ 13@ 14@ 15@
+00D6: if
+0025:   11@ > 8@
+004D: jf @SCAN_NEXT
+0087: 11@ = 8@
+0085: 4@ = 10@
+0085: 5@ = 6@
+:SCAN_NEXT
+00D6: if
+0AE1: 10@ = random_actor_near_point 1@ 2@ 3@ radius 45.0 find_next 1 pass_deads 1
+004D: jf @AFTER_SCAN
+0002: jump @SCAN_LOOP
+:AFTER_SCAN
+00D6: if
+0039:   4@ == -1
+004D: jf @DO_BECOME
+00D6: if
+8039:   not 26@ == -1
+004D: jf @NONE_FOUND
+0006: 26@ = -1
+0002: jump @FIND_NEAR
+:NONE_FOUND
+0ACD: show_text_highpriority "NOBODY NEAR - RIDE WITH A HOMIE OR PRESS T" time 2200
+0002: jump @MAIN
