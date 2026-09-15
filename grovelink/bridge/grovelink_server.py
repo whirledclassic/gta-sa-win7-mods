@@ -1,24 +1,14 @@
 # GroveLink bridge — Windows 7, Python 2.7 or 3.4-3.8, stdlib only
 from __future__ import print_function
-
-import json
-import os
-import shutil
-import socket
-import sys
-import threading
-import time
-
+import json, os, shutil, socket, sys, threading, time
 try:
     from configparser import ConfigParser
 except ImportError:
     from ConfigParser import SafeConfigParser as ConfigParser
-
 try:
     from http.server import BaseHTTPRequestHandler, HTTPServer
 except ImportError:
     from BaseHTTPServer import BaseHTTPRequestHandler, HTTPServer
-
 try:
     from urllib.parse import parse_qs, unquote
 except ImportError:
@@ -32,7 +22,6 @@ CHAT_PATH = os.path.join(HERE, "chat.json")
 STATE = {"photos": [], "chat": [], "sent": 0}
 LOCK = threading.Lock()
 
-
 def read_cfg():
     cfg = ConfigParser()
     if os.path.isfile(CFG_PATH):
@@ -42,7 +31,6 @@ def read_cfg():
             pass
     return cfg
 
-
 def cfg_get(cfg, section, key, default=""):
     try:
         if cfg.has_option(section, key):
@@ -51,58 +39,39 @@ def cfg_get(cfg, section, key, default=""):
         pass
     return default
 
-
 def detect_gta_dir(cfg):
     hinted = cfg_get(cfg, "paths", "gta_dir")
-    candidates = [
-        hinted,
-        r"E:\\GTA San Andreas",
-        r"D:\\GTA San Andreas",
-        r"C:\\GTA San Andreas",
-        r"C:\\Program Files (x86)\\Rockstar Games\\GTA San Andreas",
-        r"C:\\Program Files\\Rockstar Games\\GTA San Andreas",
-        r"C:\\Games\\GTA San Andreas",
-        r"D:\\Games\\GTA San Andreas",
-        r"E:\\Games\\GTA San Andreas",
-    ]
+    candidates = [hinted, r"E:\GTA San Andreas", r"D:\GTA San Andreas", r"C:\GTA San Andreas",
+        r"C:\Program Files (x86)\Rockstar Games\GTA San Andreas",
+        r"C:\Program Files\Rockstar Games\GTA San Andreas",
+        r"C:\Games\GTA San Andreas", r"D:\Games\GTA San Andreas", r"E:\Games\GTA San Andreas"]
     for path in candidates:
-        if not path:
-            continue
-        if os.path.isfile(os.path.join(path, "gta_sa.exe")):
+        if path and os.path.isfile(os.path.join(path, "gta_sa.exe")):
             return path
-        if os.path.isdir(os.path.join(path, "CLEO")):
+        if path and os.path.isdir(os.path.join(path, "CLEO")):
             return path
     return hinted
-
 
 def detect_gallery(cfg, gta_dir):
     home = os.path.expanduser("~")
     user = os.environ.get("USERPROFILE", home)
-    public = os.environ.get("PUBLIC", r"C:\\Users\\Public")
-    candidates = [
-        cfg_get(cfg, "paths", "gallery_dir"),
-        cfg_get(cfg, "paths", "gallery_dir_alt"),
+    public = os.environ.get("PUBLIC", r"C:\Users\Public")
+    candidates = [cfg_get(cfg, "paths", "gallery_dir"), cfg_get(cfg, "paths", "gallery_dir_alt"),
         os.path.join(user, "Documents", "GTA San Andreas User Files", "Gallery"),
         os.path.join(user, "My Documents", "GTA San Andreas User Files", "Gallery"),
         os.path.join(home, "Documents", "GTA San Andreas User Files", "Gallery"),
         os.path.join(public, "Documents", "GTA San Andreas User Files", "Gallery"),
-        os.path.join(gta_dir or "", "Gallery"),
-        os.path.join(gta_dir or "", "User Files", "Gallery"),
-    ]
-    found = []
-    seen = set()
+        os.path.join(gta_dir or "", "Gallery"), os.path.join(gta_dir or "", "User Files", "Gallery")]
+    found, seen = [], set()
     for path in candidates:
         if path and os.path.isdir(path) and path not in seen:
-            seen.add(path)
-            found.append(path)
+            seen.add(path); found.append(path)
     return found
-
 
 def link_ini_path(gta_dir):
     if not gta_dir:
         return os.path.join(HERE, "link.ini")
     return os.path.join(gta_dir, "CLEO", "GroveLink", "link.ini")
-
 
 def load_chat():
     if not os.path.isfile(CHAT_PATH):
@@ -116,14 +85,12 @@ def load_chat():
         return []
     return []
 
-
 def save_chat(rows):
     try:
         with open(CHAT_PATH, "w") as f:
             f.write(json.dumps(rows[-80:]))
     except Exception:
         pass
-
 
 def add_chat(who, text):
     text = (text or "").strip()
@@ -133,7 +100,6 @@ def add_chat(who, text):
         STATE["chat"].append({"from": who, "text": text[:120], "t": int(time.time())})
         STATE["chat"] = STATE["chat"][-80:]
         save_chat(STATE["chat"])
-
 
 def ensure_dirs(gta_dir):
     if not os.path.isdir(WEB_PHOTOS):
@@ -154,10 +120,8 @@ def ensure_dirs(gta_dir):
         except Exception:
             pass
 
-
 def list_images(folders):
-    out = []
-    seen = set()
+    out, seen = [], set()
     for folder in folders:
         if not folder or not os.path.isdir(folder):
             continue
@@ -174,8 +138,7 @@ def list_images(folders):
                 continue
             seen.add(full)
             try:
-                mtime = os.path.getmtime(full)
-                size = os.path.getsize(full)
+                mtime, size = os.path.getmtime(full), os.path.getsize(full)
             except Exception:
                 continue
             if size < 100:
@@ -184,11 +147,9 @@ def list_images(folders):
     out.sort(key=lambda x: x[0], reverse=True)
     return out
 
-
 def copy_latest(folders):
-    images = list_images(folders)
     copied = []
-    for mtime, full, name in images[:40]:
+    for mtime, full, name in list_images(folders)[:40]:
         dest_name = "%d_%s" % (int(mtime), name.replace(" ", "_"))
         dest = os.path.join(WEB_PHOTOS, dest_name)
         if not os.path.isfile(dest):
@@ -200,10 +161,8 @@ def copy_latest(folders):
     STATE["photos"] = copied
     return copied
 
-
 def write_ini_kv(path, section, data):
-    sections = {}
-    current = None
+    sections, current = {}, None
     if os.path.isfile(path):
         try:
             with open(path, "r") as f:
@@ -217,15 +176,12 @@ def write_ini_kv(path, section, data):
         except Exception:
             sections = {}
     sections.setdefault(section, [])
-    keys_written = set()
-    new_lines = []
+    keys_written, new_lines = set(), []
     for raw in sections[section]:
         if "=" in raw and not raw.strip().startswith(";"):
             k = raw.split("=", 1)[0].strip()
             if k in data:
-                new_lines.append("%s=%s" % (k, data[k]))
-                keys_written.add(k)
-                continue
+                new_lines.append("%s=%s" % (k, data[k])); keys_written.add(k); continue
         new_lines.append(raw)
     for k, v in data.items():
         if k not in keys_written:
@@ -255,7 +211,6 @@ def write_ini_kv(path, section, data):
     except Exception as exc:
         print("Could not write ini:", exc)
 
-
 def read_ini_key(path, section, key, default="0"):
     current = None
     if not os.path.isfile(path):
@@ -264,7 +219,7 @@ def read_ini_key(path, section, key, default="0"):
         with open(path, "r") as f:
             for raw in f:
                 line = raw.strip()
-                    if line.startswith("[") and line.endswith("]"):
+                if line.startswith("[") and line.endswith("]"):
                     current = line[1:-1]
                 elif current == section and "=" in line:
                     k, v = line.split("=", 1)
@@ -274,10 +229,8 @@ def read_ini_key(path, section, key, default="0"):
         return default
     return default
 
-
 def lan_ip():
-    ip = "127.0.0.1"
-    sock = None
+    ip, sock = "127.0.0.1", None
     try:
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         sock.connect(("8.8.8.8", 80))
@@ -295,7 +248,13 @@ def lan_ip():
                 pass
     return ip
 
-HTML = "CHAT_PAGE_PLACEHOLDER"
+def page_html():
+    path = os.path.join(HERE, "index.html")
+    try:
+        with open(path, "r") as f:
+            return f.read()
+    except Exception:
+        return "<html><body>Missing index.html next to grovelink_server.py</body></html>"
 
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
@@ -315,8 +274,7 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         path = self.path.split("?", 1)[0]
         if path == "/" or path == "/index.html":
-            self._html(HTML)
-            return
+            self._html(page_html()); return
         if path == "/api":
             with LOCK:
                 payload = json.dumps({"photos": STATE.get("photos", []), "chat": STATE.get("chat", [])})
@@ -326,33 +284,28 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header("Cache-Control", "no-store")
             self.send_header("Content-Length", str(len(data)))
             self.end_headers()
-            self.wfile.write(data)
-            return
+            self.wfile.write(data); return
         if path.startswith("/photo/"):
             name = os.path.basename(unquote(path[len("/photo/"):]))
             full = os.path.join(WEB_PHOTOS, name)
             if not os.path.isfile(full):
-                self.send_error(404)
-                return
+                self.send_error(404); return
             ext = name.lower().rsplit(".", 1)[-1]
             mime = {"jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png", "bmp": "image/bmp"}.get(ext, "application/octet-stream")
             try:
                 with open(full, "rb") as f:
                     data = f.read()
             except Exception:
-                self.send_error(500)
-                return
+                self.send_error(500); return
             self.send_response(200)
             self.send_header("Content-Type", mime)
             self.send_header("Content-Length", str(len(data)))
             self.end_headers()
-            self.wfile.write(data)
-            return
+            self.wfile.write(data); return
         self.send_error(404)
     def do_POST(self):
         if self.path.split("?", 1)[0] != "/send":
-            self.send_error(404)
-            return
+            self.send_error(404); return
         length = int(self.headers.get("Content-Length", "0") or 0)
         raw = self.rfile.read(length) if length else b""
         try:
@@ -360,7 +313,7 @@ class Handler(BaseHTTPRequestHandler):
         except Exception:
             text = raw.decode("latin-1")
         msg = ""
-        if text.lstrip().startswith("{ "):
+        if text.lstrip().startswith("{"):
             try:
                 msg = json.loads(text).get("msg") or ""
             except Exception:
@@ -386,8 +339,7 @@ def watcher(galleries, ini):
     while True:
         try:
             copy_latest(galleries)
-            take = read_ini_key(ini, "PHOTO", "take", "0")
-            if take == "1":
+            if read_ini_key(ini, "PHOTO", "take", "0") == "1":
                 write_ini_kv(ini, "PHOTO", {"take": "0"})
                 time.sleep(0.4)
                 copy_latest(galleries)
