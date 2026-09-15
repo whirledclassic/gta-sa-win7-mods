@@ -2,6 +2,7 @@
 // Mission Companion Switcher v6.2
 // Play as them. CJ stays. Grove FAM + story peds. T summons Sweet.
 // H/F6 nearest | G next | J you are CJ | U reset | N CJ leave | B hold | T call Sweet | L status
+// CLEO scripts cannot use #MODEL names (Sanny error 0083). Use numeric IDs. FAM1 = 105.
 0000: NOP
 03A4: name_thread 'MSWITCH'
 
@@ -348,17 +349,17 @@
 00D6: if
 0019:   27@ > 30
 004D: jf @WAIT_CJ
-0247: load_model #FAM1
+0247: load_model 105
 038B: load_requested_models
 0006: 27@ = 0
 :WAIT_FAM
 0001: wait 0
 000A: 27@ += 1
 00D6: if
-0248:   model #FAM1 available
+0248:   model 105 available
 004D: jf @FAM_TO
-009A: 23@ = create_actor_pedtype 8 model #FAM1 at 13@ 14@ 3@
-0249: release_model #FAM1
+009A: 23@ = create_actor_pedtype 8 model 105 at 13@ 14@ 3@
+0249: release_model 105
 0002: jump @BOT_READY
 :FAM_TO
 00D6: if
