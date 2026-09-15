@@ -1,0 +1,34 @@
+GROVELINK + COMPANION SWITCHER
+================================
+Windows 7 / GTA SA PC 1.0 / CLEO 4.3 or 4.4
+
+FIRST TIME
+1. Install CLEO so CLEO.asi sits next to gta_sa.exe
+   https://cleo.li
+2. Install Sanny Builder 3 or 4
+   https://sannybuilder.com
+3. Right-click INSTALL.bat  ->  Run as administrator
+
+That finds the game (or asks you for the folder), compiles the
+phone and the switcher, writes Desktop launchers, and opens
+firewall port 8088.
+
+If it cannot find GTA, paste the folder that contains gta_sa.exe.
+That path is saved as GTA_DIR.txt so the next run is silent.
+
+IN GAME
+  K     GroveLink phone
+  H     become the companion next to you. CJ stays.
+  G     next companion
+  J     you are CJ again
+  N     send CJ away / call him back
+  B     CJ hold / follow
+
+PHONE CHAT
+  Desktop START_GROVELINK.bat
+  open the URL it prints  http://LAN-IP:8088
+
+LATER
+  Desktop CHECK_GROVELINK.bat   refresh / missed update
+  Desktop PATCH_GROVELINK.bat   same
+  UPDATE.bat                    git pull then patch

@@ -1,16 +1,7 @@
-# Mission Companion Switcher v3
+# Mission Companion Switcher v6.1
 
-| Key | Action |
-|-----|--------|
-| **H** | Nearest companion |
-| **G** | Next in 22 m |
-| **J** | Restore CJ |
-| **R** | Reset |
-| **N** | Toggle CJ-bot |
+Play as them. **CJ stays with you.**
 
-Full notes: [docs/SWITCHER.md](../docs/SWITCHER.md).
+H become · G next · J you are CJ · R reset · N send CJ · B hold/follow
 
-Compile **one**:
-
-- `MissionSwitcher.txt` — hide original + optional CJ-bot (default)
-- `MissionSwitcher_SkinOnly.txt` — skin only
+See [docs/SWITCHER.md](../docs/SWITCHER.md).

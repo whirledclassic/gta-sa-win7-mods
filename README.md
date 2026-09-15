@@ -5,9 +5,11 @@ Single-player CLEO mods for **GTA SA PC 1.0**.
 | Mod | What it does |
 |-----|----------------|
 | [GroveLink Phone](grovelink/) | On-screen cellphone: contacts, **game voice calls**, camera, **two-way browser texts**. |
-| [Mission Switcher](switcher/) | Stand next to Sweet/Smoke/Ryder/Cesar, press **H**. **J** back to CJ. |
+| [Mission Switcher](switcher/) | **H** become them, **CJ stays**. **G** next, **J** you are CJ, **N** send CJ, **B** hold. |
 
 Not affiliated with Rockstar Games.
+
+Read **START_HERE.txt**. Then:
 
 ## Auto install / auto patch / missed update
 
@@ -21,9 +23,10 @@ Not affiliated with Rockstar Games.
 Full steps: [docs/INSTALL.md](docs/INSTALL.md)  
 Phone keys and screens: [docs/PHONE.md](docs/PHONE.md)  
 If the screen is blank: [docs/TROUBLESHOOT.md](docs/TROUBLESHOOT.md)  
+Switcher: [docs/SWITCHER.md](docs/SWITCHER.md)  
 History: [CHANGELOG.md](CHANGELOG.md)
 
-Current pack version is in `VERSION.txt` (**9**). After a successful install the same number is in `[GTA]\CLEO\GroveLink\installed.txt`.
+Current pack version is in `VERSION.txt` (**15**). After a successful install the same number is in `[GTA]\CLEO\GroveLink\installed.txt`.
 
 Missed a week of updates? Run **UPDATE.bat**. No Git? Download a fresh zip, extract over this folder, run **PATCH.bat** or **CHECK.bat**.
 
