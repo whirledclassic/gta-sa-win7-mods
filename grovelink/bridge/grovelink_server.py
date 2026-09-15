@@ -35,7 +35,22 @@ CFG_PATH = os.path.join(HERE, "config.ini")
 WEB_PHOTOS = os.path.join(HERE, "photos")
 OPEN_PHONE_TXT = os.path.join(HERE, "OPEN_ON_PHONE.txt")
 DELETED_PATH = os.path.join(HERE, "photos_deleted.txt")
+# Repo-root VERSION (bridge is grovelink/bridge → ../..)
+VERSION_PATH = os.path.normpath(os.path.join(HERE, "..", "..", "VERSION"))
 DELETED = set()  # basenames in bridge/photos the user removed from the phone UI
+
+
+def read_pack_version():
+    """Plain-text semver from repo-root VERSION (best-effort)."""
+    try:
+        if os.path.isfile(VERSION_PATH):
+            with open(VERSION_PATH, "r") as f:
+                line = f.readline().strip()
+                if line:
+                    return line
+    except Exception:
+        pass
+    return "unknown"
 
 
 def load_deleted():
@@ -78,6 +93,7 @@ STATE = {
     "shutter_burst_until": 0,
     "max_photos": 40,
     "phone_page_logged": False,
+    "version": "unknown",
 }
 
 
@@ -646,7 +662,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 <div class=\"shell\">
   <header>
     <h1>GROVELINK</h1>
-    <div class=\"sub\">Live from GTA San Andreas &nbsp;·&nbsp; <span id=\"count\">0</span> shots</div>
+    <div class=\"sub\">Live from GTA San Andreas &nbsp;·&nbsp; v<span id=\"ver\">?</span> &nbsp;·&nbsp; <span id=\"count\">0</span> shots</div>
     <div class=\"urls\">
       <div class=\"urlrow\">
         <span><strong>Phone (LAN):</strong> <span id=\"lan_url\">__LAN_URL__</span></span>
@@ -877,6 +893,10 @@ function paint(data) {
   count.textContent = (typeof data.count === 'number') ? data.count : photos.length;
   var lr = data.last_refresh_human || data.last_refresh || '—';
   document.getElementById('last_refresh').textContent = lr;
+  if (data.version) {
+    var verEl = document.getElementById('ver');
+    if (verEl) verEl.textContent = data.version;
+  }
   var st = document.getElementById('bridge_status');
   var pulse = document.getElementById('pulse');
   var bridgeOk = (data.bridge_ok !== false) && (data.ok !== false);
@@ -1058,6 +1078,7 @@ def api_payload():
         "ip": ip,
         "port": port,
         "max_photos": int(STATE.get("max_photos") or 40),
+        "version": STATE.get("version", "unknown") or "unknown",
     }
 
 
@@ -1076,6 +1097,7 @@ def health_payload():
         "ip": STATE.get("ip", "127.0.0.1"),
         "port": STATE.get("port", 8088),
         "gta_dir": STATE.get("gta_dir", "") or "",
+        "version": STATE.get("version", "unknown") or "unknown",
     }
 
 
@@ -1325,9 +1347,11 @@ def main():
     STATE["galleries"] = list(galleries)
     STATE["bridge_ok"] = True
     STATE["phone_page_logged"] = False
+    STATE["version"] = read_pack_version()
 
     print("================================================")
     print("  GROVELINK PHONE BRIDGE")
+    print("  Version    :", STATE["version"])
     print("================================================")
     print("GTA folder :", gta_dir or "(not found — edit config.ini)")
     print("link.ini   :", ini)

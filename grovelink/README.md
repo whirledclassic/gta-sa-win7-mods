@@ -10,9 +10,16 @@ Crash-safer CLEO: no `hold_cellphone`, no custom GXT `033E` draws. Labels use `0
 2. Wait for the green SUCCESS screen.
 3. Desktop → **GroveLink Phone** → launch GTA → **K** → Camera → **Enter** / **Space**.
 
-INSTALL finds GTA, copies support files, compiles with Sanny when available, creates Gallery folders, opens firewall **8088**, and places Desktop shortcuts + **`VERIFY_GROVELINK.bat`** + **`GroveLink_README.txt`** (same 3 steps + link to TROUBLESHOOTING) + `GroveLink_PHONE_URL.txt`. If Sanny is missing it prints exact F7 steps and **keeps** any existing `.cs`.
+INSTALL finds GTA, copies support files, compiles with Sanny when available, creates Gallery folders, opens firewall **8088**, and places Desktop shortcuts + **`VERIFY_GROVELINK.bat`** + **`UPDATE_GROVELINK.bat`** + **`GroveLink_README.txt`** (same 3 steps + link to TROUBLESHOOTING) + `GroveLink_PHONE_URL.txt`. If Sanny is missing it prints exact F7 steps and **keeps** any existing `.cs`.
 
 Double-click **VERIFY_GROVELINK.bat** (Desktop or repo root) anytime for an OK/MISSING checklist: `gta_sa.exe`, CLEO, `GroveLinkPhone.cs`, `link.ini`, Python, `config.ini`, `GroveLinkPhone.txt`, writable `bridge/photos`, firewall note, and the URLs to try.
+
+
+## Already installed? Update in one click
+
+Double-click Desktop (or repo-root) **`UPDATE_GROVELINK.bat`**. It downloads the latest zip from GitHub (no Git), overlays your install, and re-runs **INSTALL.bat**. See root README + [TROUBLESHOOTING.md](TROUBLESHOOTING.md) → **Updating / outdated version**.
+
+Until PR #1 merges, `update.ini` defaults to branch `fix/grovelink-camera-snapshots` so the patcher gets this camera work; after merge set `branch=main`.
 
 ## In GTA
 
@@ -30,7 +37,7 @@ Double-click **VERIFY_GROVELINK.bat** (Desktop or repo root) anytime for an OK/M
 
 ## Bridge page (phone / PC browser)
 
-- Header shows **LAN URL** + **localhost URL**, bridge online, last refresh time, unread count
+- Header shows **LAN URL** + **localhost URL**, pack **version**, bridge online, last refresh time, unread count
 - **Copy** buttons for URLs; large **tap-to-copy IP:port** block + `sms:` note (no QR library); **`GET /qr`** share page with the same
 - **Download latest** opens newest `/photo/…`; **Mark all read** clears NEW badges
 - **All / Today** album tabs (pure JS filter by photo `mtime`)
@@ -46,8 +53,8 @@ Double-click **VERIFY_GROVELINK.bat** (Desktop or repo root) anytime for an OK/M
 - Auto-refresh about every 2 seconds (indicator in header)
 - SMS box still posts to `/send` → `link.ini` INBOX for the in-game phone
 - First load of `/` logs **Phone page opened** in the bridge window
-- **`GET /api`** → JSON with `photos` (incl. `size` / `size_h`), `latest`, `count` / `photo_count`, `bridge_ok`, URLs, `max_photos`, refresh time
-- **`GET /health`** → JSON `{ok, bridge_ok, photo_count, count, latest, galleries, ip, port, gta_dir}`
+- **`GET /api`** → JSON with `photos` (incl. `size` / `size_h`), `latest`, `count` / `photo_count`, `bridge_ok`, URLs, `max_photos`, `version`, refresh time
+- **`GET /health`** → JSON `{ok, bridge_ok, photo_count, count, latest, galleries, ip, port, gta_dir, version}`
 - **`POST /delete`** (or careful `GET /delete?file=…`) → remove from bridge cache only
 - On start: writes `bridge/OPEN_ON_PHONE.txt`, sets `STATUS.bridge=1`, optional browser open (`server.open_browser=1` default)
 - After shutter (`PHOTO.take=1`), gallery is polled aggressively for a few seconds

@@ -236,7 +236,9 @@ copy /Y "%~dp0grovelink\bridge\START_GROVELINK.bat" "%USERPROFILE%\Desktop\START
 copy /Y "%~dp0grovelink\bridge\START_GROVELINK.bat" "%PUBLIC%\Desktop\START_GROVELINK.bat" >nul 2>&1
 copy /Y "%~dp0VERIFY_GROVELINK.bat" "%USERPROFILE%\Desktop\VERIFY_GROVELINK.bat" >nul
 copy /Y "%~dp0VERIFY_GROVELINK.bat" "%PUBLIC%\Desktop\VERIFY_GROVELINK.bat" >nul 2>&1
-REM So Desktop VERIFY can find bridge files even when not run from the zip folder
+copy /Y "%~dp0UPDATE_GROVELINK.bat" "%USERPROFILE%\Desktop\UPDATE_GROVELINK.bat" >nul
+copy /Y "%~dp0UPDATE_GROVELINK.bat" "%PUBLIC%\Desktop\UPDATE_GROVELINK.bat" >nul 2>&1
+REM So Desktop VERIFY / UPDATE can find bridge files even when not run from the zip folder
 > "%USERPROFILE%\Desktop\GroveLink_REPO.txt" echo %~dp0
 if exist "%PUBLIC%\Desktop\" > "%PUBLIC%\Desktop\GroveLink_REPO.txt" echo %~dp0
 
@@ -277,6 +279,7 @@ powershell -NoProfile -Command ^
   echo         Camera: Enter or Space to snap
   echo.
   echo Stuck? Double-click VERIFY_GROVELINK.bat on the Desktop.
+  echo Outdated? Double-click UPDATE_GROVELINK.bat on the Desktop.
 ) > "%USERPROFILE%\Desktop\GroveLink_PHONE_URL.txt"
 
 (
@@ -300,10 +303,13 @@ powershell -NoProfile -Command ^
   echo   %~dp0grovelink\TROUBLESHOOTING.md
   echo.
   echo Or run Desktop VERIFY_GROVELINK.bat for an OK/MISSING checklist.
+  echo.
+  echo Already installed / outdated?
+  echo   Double-click Desktop UPDATE_GROVELINK.bat for a one-click patch.
 ) > "%USERPROFILE%\Desktop\GroveLink_README.txt"
 if exist "%PUBLIC%\Desktop\" copy /Y "%USERPROFILE%\Desktop\GroveLink_README.txt" "%PUBLIC%\Desktop\GroveLink_README.txt" >nul 2>&1
 
-echo    Desktop: GroveLink Phone, START_GROVELINK, VERIFY_GROVELINK, README, PHONE_URL + REPO pointer
+echo    Desktop: GroveLink Phone, START_GROVELINK, VERIFY_GROVELINK, UPDATE_GROVELINK, README, PHONE_URL + REPO pointer
 
 echo.
 echo [8/8] Done
@@ -325,7 +331,7 @@ echo.
 echo   3. Press K → Camera → Enter ^(or Space^)
 echo      Shot appears on the phone page in a couple seconds.
 echo.
-echo   Optional: VERIFY_GROVELINK.bat on Desktop checks everything.
+echo   Optional: VERIFY_GROVELINK.bat checks everything; UPDATE_GROVELINK.bat patches to latest.
 echo   Readme   : Desktop GroveLink_README.txt  ^(same 3 steps + TROUBLESHOOTING^)
 echo.
 echo ------------------------------------------------

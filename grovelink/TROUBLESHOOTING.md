@@ -11,6 +11,39 @@ Double-click **`VERIFY_GROVELINK.bat`** (Desktop after INSTALL, or repo root). I
 
 Fix anything marked MISSING, then run VERIFY again.
 
+
+## Updating / outdated version
+
+### One-click patch (preferred)
+
+1. Double-click Desktop **`UPDATE_GROVELINK.bat`** (or the copy next to `INSTALL.bat` in your zip/repo folder).
+2. Accept Administrator if asked.
+3. Wait for **SUCCESS — Updated to version X**.
+4. Start GroveLink → Launch GTA → **K** Camera.
+
+The updater:
+- Reads `update.ini` (`branch=…`, optional `release=latest`) or env `UPDATE_BRANCH`
+- Downloads a GitHub zip with Win7-safe PowerShell `WebClient` (bitsadmin fallback) — **no Git**
+- Unzips with Shell.Application COM (no `Expand-Archive` required)
+- Copies files over your existing install (uses `GroveLink_REPO.txt` if the bat is on the Desktop)
+- Re-runs **INSTALL.bat** so CLEO / firewall / Desktop shortcuts refresh
+
+Pack version: root **`VERSION`** file; also on the phone page header and **`/health`** → `version`.
+
+**Note:** While PR #1 is open, `update.ini` defaults to `branch=fix/grovelink-camera-snapshots` so beginners get the camera fixes before merge. After merge, edit `update.ini` to `branch=main`.
+
+### Offline / download failed — manual zip
+
+1. On any PC with internet, download:
+   - Current PR branch: https://github.com/whirledclassic/gta-sa-win7-mods/archive/refs/heads/fix/grovelink-camera-snapshots.zip  
+   - After merge: https://github.com/whirledclassic/gta-sa-win7-mods/archive/refs/heads/main.zip
+2. Copy the zip to the Win7 PC (USB is fine).
+3. Extract (right-click → Extract All).
+4. Run **`INSTALL.bat`** as administrator from the new folder.
+5. Optional: replace your old folder, or keep using the new extract path (INSTALL writes a fresh `GroveLink_REPO.txt` on the Desktop).
+
+If unzip inside the updater fails: delete `%TEMP%\GroveLinkUpdate` and retry, or use the manual steps above.
+
 ## No `GroveLinkPhone.cs` after install
 
 INSTALL only replaces the `.cs` when Sanny successfully compiles a new one. It never deletes a working script without a replacement.
