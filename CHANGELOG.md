@@ -1,11 +1,18 @@
 # GroveLink changelog
 
-Human-readable highlights from pack **1.0 → 1.8.0**. Full detail also lives in root `README.md` round notes and [grovelink/FEATURES.md](grovelink/FEATURES.md).
+Human-readable highlights from pack **1.0 → 1.8.1**. Full detail also lives in root `README.md` round notes and [grovelink/FEATURES.md](grovelink/FEATURES.md).
+
+## 1.8.1 — Camera ≠ Breaking News
+
+- **Camera stays gallery-only:** CLEO CAMERA writes `PHOTO.take` + count only — never news. Shutter burst copies to phone/PC page; **never** creates Herald articles (removed `news.auto` entirely from watcher / config / STATE / prints / docs).
+- **NEWS menu (separate):** CLEO slot **NEWS** (order CAMERA / INBOX / NEWS / CONTACTS / STATUS / HELP / CLOSE) snaps + sets `NEWS.make=1`; bridge burst-copies then `create_news_from_photo` on newest bridge shot; `NEWS.new=1` → **NEWS FILED** toast. Web **Breaking News** button / `POST /news` unchanged (no retake).
+- HELP text: Camera = pics to phone; NEWS = snap + Grove Street Herald.
+- Smoke: PHOTO.take alone must not create news; `NEWS.make=1` creates article; POST /news still PASS; no `news_auto` tests.
 
 ## 1.8.0 — Gallery + Breaking News + SMS→CJ
 
 - **Phone gallery:** hero/latest shot, grid feed, optional per-photo **caption** (JSON index + sidecar `.txt`), sticky composer, Share (Web Share / copy), search/sort/tabs/delete/clear/export kept
-- **Breaking News:** per-photo button → offline satirical **Grove Street Herald** article (templates + filename/time keywords; no AI APIs); `GET /news`, `GET /news/<id>`, `POST /news`; articles under `bridge/news/*.json`; optional `news.auto=1` auto-draft on shutter; CLEO **NEWS FILED** via `NEWS.new=1`
+- **Breaking News:** per-photo button → offline satirical **Grove Street Herald** article (templates + filename/time keywords; no AI APIs); `GET /news`, `GET /news/<id>`, `POST /news`; articles under `bridge/news/*.json`; CLEO **NEWS FILED** via `NEWS.new=1` (1.8.1: NEWS menu / web only — no auto-on-shutter)
 - **Text CJ:** `POST /send` writes INBOX (`new=1`, `from=`, `msg=`); optional **From:** field; chat thread shows **Delivered to CJ**; CLEO notifies **SMS FROM REAL PHONE** even when phone closed (once per new)
 - **Docs / smoke:** FEATURES, README, TROUBLESHOOTING, CHANGELOG; smoke covers `/news`, create article, `/send` ini, `/api/chat`
 

@@ -24,16 +24,17 @@ Until PR #1 merges, `update.ini` defaults to branch `fix/grovelink-camera-snapsh
 ## In GTA
 
 - **K** — open / close the phone
-- **Up / Down** — menu wraps: **CAMERA / INBOX / CONTACTS / STATUS / HELP / CLOSE**
-- **Enter** or **Space** — select / snap (Camera), read INBOX, cycle contacts, show status, show HELP
+- **Up / Down** — menu wraps: **CAMERA / INBOX / NEWS / CONTACTS / STATUS / HELP / CLOSE**
+- **Enter** or **Space** — select / snap (Camera or NEWS), read INBOX, cycle contacts, show status, show HELP
 - **Backspace** — close
-- **CAMERA** — snap; shutter sound (`018C`); shows **PHOTO TAKEN #N** (count from `link.ini`)
+- **CAMERA** — snap to phone/PC gallery only; shutter sound (`018C`); **PHOTO TAKEN #N**; **never** files news
 - **INBOX** — when `new=1` shows SMS + sound; otherwise **NO NEW TEXTS**
+- **NEWS** — **separate** from Camera: snap + `NEWS.make=1` → bridge files Grove Street Herald; **BREAKING NEWS SNAP**
 - **Closed phone** — new SMS still shows **SMS FROM REAL PHONE** (once) so you open **K**
-- **NEWS FILED** — optional toast when bridge auto-drafts Breaking News (`NEWS.new=1`)
+- **NEWS FILED** — toast when bridge sets `NEWS.new=1` (after NEWS menu or web Breaking News)
 - **CONTACTS** — flavor only: cycles Sweet / Smoke / Ryder / Cesar / **Catalina** lines via `0ACD` (static text, no ped models; advances each select)
 - **STATUS** — **LIVE N  PHONE PAGE ON PC** / **NO BRIDGE** + shot count from `link.ini` when readable
-- **HELP** — K / Camera tips, **OPEN START GROVELINK ON PC**, and **Outdated? UPDATE_GROVELINK**
+- **HELP** — Camera = pics to phone; NEWS = snap + Herald; **OPEN START GROVELINK ON PC**; **Outdated? UPDATE_GROVELINK**
 - **CLOSE** — put the phone away
 - If the bridge is not running (`STATUS.bridge=0`), opening the phone reminds you once: **START GROVELINK BRIDGE**
 
@@ -65,7 +66,7 @@ Until PR #1 merges, `update.ini` defaults to branch `fix/grovelink-camera-snapsh
 - Auto-refresh interval from `server.poll_ms` (default **2000** ms), exposed in `/api` as `poll_ms`
 - SMS box posts to `/send` → `link.ini` INBOX (`new=1`, `from=`, `msg=`) for the in-game phone — **same Wi-Fi, bridge running, CJ gets texts**
 - `POST /caption`, `POST /news`, `GET /api/chat` for captions / Herald / delivered thread
-- Config `[news] auto=0` (default off); `auto=1` auto-drafts Herald story after shutter burst
+- **Camera ≠ Breaking News:** no `news.auto`. Use CLEO **NEWS** or web **Breaking News** for Herald.
 - First load of `/` logs **Phone page opened** in the bridge window
 - **`GET /api`** → JSON with `photos`, `latest`, `count`, `bridge_ok`, `poll_ms`, `version`, **`last_error`**, URLs, refresh time
 - **`GET /health`** → same core fields + `galleries`, `gta_dir`, **`last_error`**

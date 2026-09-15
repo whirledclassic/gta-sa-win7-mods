@@ -11,10 +11,16 @@ CLEO mods for **GTA SA PC 1.0** on **Windows 7** (pack version: root **`VERSION`
 
 Docs: [FEATURES](grovelink/FEATURES.md) · [CHANGELOG](CHANGELOG.md) · [TROUBLESHOOTING](grovelink/TROUBLESHOOTING.md). Not affiliated with Rockstar. Single-player only.
 
+## Changelog — 1.8.1 (Camera ≠ Breaking News)
+
+- **Camera ≠ Breaking News:** CAMERA only snaps to phone/PC gallery. Separate CLEO **NEWS** menu snaps + files Grove Street Herald (`NEWS.make=1`). Removed `news.auto` entirely — Camera can never trigger news.
+- Web **Breaking News** button / `POST /news` still files from an existing photo (no retake). HELP explains both.
+- Smoke: take-alone no news; `NEWS.make` creates article; POST /news PASS.
+
 ## Changelog — 1.8.0 (gallery + Breaking News + SMS→CJ)
 
 - **Phone gallery:** hero/latest + grid; optional captions; sticky composer; Share improved
-- **Breaking News / Grove Street Herald:** offline satirical articles at `/news` + `/news/<id>`; `POST /news`; optional `news.auto=1`
+- **Breaking News / Grove Street Herald:** offline satirical articles at `/news` + `/news/<id>`; `POST /news` (1.8.1: no `news.auto`)
 - **Text CJ:** From: field; chat **Delivered to CJ**; CLEO **SMS FROM REAL PHONE** even if phone closed; **NEWS FILED** toast
 - Smoke extended; FEATURES / TROUBLESHOOTING / CHANGELOG synced
 

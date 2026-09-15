@@ -1,6 +1,6 @@
 # GroveLink — current features
 
-Pack version: see root **`VERSION`** (`1.8.0`). Crash-safer CLEO (no `hold_cellphone`, no custom GXT `033E`). Bridge is **stdlib-only** (Win7 Python 2.7 / 3.4–3.8).
+Pack version: see root **`VERSION`** (`1.8.1`). Crash-safer CLEO (no `hold_cellphone`, no custom GXT `033E`). Bridge is **stdlib-only** (Win7 Python 2.7 / 3.4–3.8).
 
 ## Install / update / verify / test
 
@@ -20,15 +20,16 @@ Pack version: see root **`VERSION`** (`1.8.0`). Crash-safer CLEO (no `hold_cellp
 
 | Menu | Behavior |
 |------|----------|
-| **CAMERA** | Snap (Enter/Space); shutter sound; `PHOTO.take` + count; **PHOTO TAKEN #N** |
+| **CAMERA** | Snap (Enter/Space); shutter sound; `PHOTO.take` + count; **PHOTO TAKEN #N**. **Gallery only — never writes NEWS keys / never files Herald** |
 | **INBOX** | Shows SMS when `new=1`; otherwise **NO NEW TEXTS**; sound when new |
+| **NEWS** | **Separate feature:** snap + `PHOTO.take` + count + `NEWS.make=1` → bridge files Grove Street Herald; shows **BREAKING NEWS SNAP** |
 | **Closed-phone SMS** | If `INBOX.new=1`, once: **SMS FROM REAL PHONE** (0ACD + sound) so you open **K** |
-| **NEWS toast** | If `NEWS.new=1` (auto Breaking News): **NEWS FILED** once, then clears flag |
+| **NEWS toast** | If `NEWS.new=1` (after NEWS menu or web Breaking News): **NEWS FILED** once, then clears flag |
 | **CONTACTS** | Cycles Sweet / Smoke / Ryder / Cesar / **Catalina** flavor lines (static text; advances each select) |
 | **STATUS** | **LIVE N  PHONE PAGE ON PC** / **NO BRIDGE** + shot count from `link.ini` |
-| **HELP** | K / Camera tips, START GROVELINK on PC, **UPDATE_GROVELINK** if outdated |
+| **HELP** | Camera = pics to phone only; NEWS = snap + Herald; START GROVELINK; **UPDATE_GROVELINK** if outdated |
 | **CLOSE** | Put phone away |
-| Keys | **K** toggle · Up/Down wrap (0–5 incl. HELP) · Enter/Space select · Backspace close |
+| Keys | **K** toggle · Up/Down wrap (0–6: CAMERA/INBOX/NEWS/CONTACTS/STATUS/HELP/CLOSE) · Enter/Space select · Backspace close |
 | Bridge-down | Once per open: **START GROVELINK BRIDGE** if `STATUS.bridge=0` |
 
 ## Bridge / phone page tools
@@ -57,7 +58,7 @@ Pack version: see root **`VERSION`** (`1.8.0`). Crash-safer CLEO (no `hold_cellp
 | **Prune** | `server.max_photos` (default 40) — oldest under `bridge/photos` only |
 | **Poll interval** | `server.poll_ms` (default **2000**) exposed to the page via `/api` |
 | **last_error** | `/api` + `/health` include `last_error` when Gallery / bridge photos are unreadable (empty string when OK) |
-| **Shutter burst** | After `PHOTO.take=1`, aggressive Gallery poll for a few seconds |
+| **Shutter burst** | After `PHOTO.take=1` or `NEWS.make=1`, aggressive Gallery poll; **only** `NEWS.make` then creates Herald (Camera never does) |
 | **Gallery watch** | Re-detects Gallery dirs every second |
 | **Endpoints** | `/`, `/api`, `/api/chat`, `/health`, `/send`, `/caption`, `/news`, `/news/<id>`, `/delete`, `/clear`, `/photo/…`, `/qr`, `/export.zip` |
 
@@ -70,10 +71,9 @@ port = 8088
 open_browser = 1
 max_photos = 40
 poll_ms = 2000
-
-[news]
-auto = 0
 ```
+
+**Camera ≠ Breaking News:** there is **no** `news.auto` (removed in 1.8.1). Camera snaps stay on the phone page; use CLEO **NEWS** or the web **Breaking News** button for Herald articles.
 
 Paths: `gta_dir`, `gallery_dir`, `gallery_dir_alt` (INSTALL overwrites these).
 

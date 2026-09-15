@@ -1,19 +1,21 @@
 {$USE ini}
 {$USE CLEO}
 {$CLEO .cs}
-// GroveLink Phone v10 — crash-safer. No #model names, no 033E GXT, no hold_cellphone.
+// GroveLink Phone v11 — crash-safer. No #model names, no 033E GXT, no hold_cellphone.
 // K toggle | UP/DOWN wrap | ENTER or SPACE select | BACKSPACE close
-// Menu: CAMERA / INBOX / CONTACTS / STATUS / HELP / CLOSE — labels via 0ACD only.
+// Menu: CAMERA / INBOX / NEWS / CONTACTS / STATUS / HELP / CLOSE — labels via 0ACD only.
+// CAMERA = pics to phone/PC gallery ONLY (never writes NEWS keys / never triggers Herald).
+// NEWS = snap + NEWS.make=1 so bridge files Grove Street Herald article (separate feature).
 // INBOX plays 018C when new=1. CONTACTS cycles static flavor lines (no models).
 // STATUS LIVE flashes photo count + PHONE PAGE ON PC; INBOX shows NO NEW TEXTS when empty.
-// Closed-phone: SMS FROM REAL PHONE notify (once per new) + optional NEWS FILED toast.
-// HELP mentions UPDATE_GROVELINK for outdated installs.
+// Closed-phone: SMS FROM REAL PHONE notify (once per new) + NEWS FILED toast after bridge files.
+// HELP: Camera = pics; NEWS = snap + Herald. Mentions UPDATE_GROVELINK for outdated installs.
 0000: NOP
 03A4: name_thread 'GROVELNK'
 
 20@ = 0 // phone open
 21@ = 0
-22@ = 0 // menu index 0=CAMERA 1=INBOX 2=CONTACTS 3=STATUS 4=HELP 5=CLOSE
+22@ = 0 // menu index 0=CAMERA 1=INBOX 2=NEWS 3=CONTACTS 4=STATUS 5=HELP 6=CLOSE
 23@ = 0 // K debounce
 24@ = 0 // temp int (INBOX.new / STATUS.bridge / NEWS.new)
 25@ = 0 // PHOTO.count
@@ -44,7 +46,7 @@
 0006: 21@ = 0
 0006: 22@ = 0
 0006: 27@ = 1
-0ACD: show_text_highpriority "CAM INBOX CONTACTS STATUS HELP CLOSE" time 1800
+0ACD: show_text_highpriority "CAM INBOX NEWS CONTACTS STATUS HELP CLOSE" time 1800
 018C: play_sound 1138 at 0.0 0.0 0.0
 0002: jump @AFTER_TOGGLE
 
@@ -97,7 +99,7 @@
 0006: 28@ = 0
 
 :NEWS_CHECK
-// Optional one-shot NEWS FILED when bridge sets NEWS.new=1 (auto Breaking News)
+// One-shot NEWS FILED when bridge sets NEWS.new=1 (after NEWS menu or web Breaking News)
 0AF0: 24@ = read_int_from_ini_file "cleo\GroveLink\link.ini" section "NEWS" key "new"
 00D6: if
 0039:   24@ == 1
@@ -139,7 +141,7 @@
 0001: wait 160
 000A: 22@ += 1
 00D6: if
-0019:   22@ > 5
+0019:   22@ > 6
 004D: jf @SHOW_SEL
 0006: 22@ = 0
 0002: jump @SHOW_SEL
@@ -152,7 +154,7 @@
 00D6: if
 001B:   0 > 22@
 004D: jf @SHOW_SEL
-0006: 22@ = 5
+0006: 22@ = 6
 
 :SHOW_SEL
 00D6: if
@@ -170,21 +172,27 @@
 00D6: if
 0039:   22@ == 2
 004D: jf @SHOW_SEL4
-0ACD: show_text_highpriority "CONTACTS" time 1200
+0ACD: show_text_highpriority "NEWS  snap + Herald" time 1200
 0002: jump @PHONE_LOGIC2
 :SHOW_SEL4
 00D6: if
 0039:   22@ == 3
 004D: jf @SHOW_SEL5
-0ACD: show_text_highpriority "STATUS" time 1200
+0ACD: show_text_highpriority "CONTACTS" time 1200
 0002: jump @PHONE_LOGIC2
 :SHOW_SEL5
 00D6: if
 0039:   22@ == 4
 004D: jf @SHOW_SEL6
-0ACD: show_text_highpriority "HELP" time 1200
+0ACD: show_text_highpriority "STATUS" time 1200
 0002: jump @PHONE_LOGIC2
 :SHOW_SEL6
+00D6: if
+0039:   22@ == 5
+004D: jf @SHOW_SEL7
+0ACD: show_text_highpriority "HELP" time 1200
+0002: jump @PHONE_LOGIC2
+:SHOW_SEL7
 0ACD: show_text_highpriority "CLOSE" time 1200
 
 :PHONE_LOGIC2
@@ -197,6 +205,7 @@
 00D6: if
 0039:   22@ == 0
 004D: jf @SEL_INBOX
+// CAMERA: gallery only — PHOTO.take + count. Never write NEWS keys.
 0A2F: set_photo_camera_effect 1
 0001: wait 80
 0A1E: take_photo 1
@@ -219,7 +228,7 @@
 :SEL_INBOX
 00D6: if
 0039:   22@ == 1
-004D: jf @SEL_CONTACTS
+004D: jf @SEL_NEWS
 // INBOX: only show text when new=1; otherwise say NO NEW TEXTS clearly
 00D6: if
 0AAB:   file_exists "cleo\GroveLink\link.ini"
@@ -240,9 +249,34 @@
 0ACD: show_text_highpriority "NO NEW TEXTS" time 2000
 0002: jump @KEY_BACK
 
-:SEL_CONTACTS
+:SEL_NEWS
 00D6: if
 0039:   22@ == 2
+004D: jf @SEL_CONTACTS
+// NEWS: snap + PHOTO.take + count + NEWS.make=1 (bridge files Herald). Separate from Camera.
+0A2F: set_photo_camera_effect 1
+0001: wait 80
+0A1E: take_photo 1
+0001: wait 200
+0A2F: set_photo_camera_effect 0
+018C: play_sound 1132 at 0.0 0.0 0.0
+00D6: if
+0AAB:   file_exists "cleo\GroveLink\link.ini"
+004D: jf @NEWS_NOINI
+0AF1: write_int 1 to_ini_file "cleo\GroveLink\link.ini" section "PHOTO" key "take"
+0AF0: 25@ = read_int_from_ini_file "cleo\GroveLink\link.ini" section "PHOTO" key "count"
+000A: 25@ += 1
+0AF1: write_int 25@ to_ini_file "cleo\GroveLink\link.ini" section "PHOTO" key "count"
+0AF1: write_int 1 to_ini_file "cleo\GroveLink\link.ini" section "NEWS" key "make"
+0ACD: show_text_highpriority "BREAKING NEWS SNAP" time 2200
+0002: jump @KEY_BACK
+:NEWS_NOINI
+0ACD: show_text_highpriority "BREAKING NEWS SNAP" time 2000
+0002: jump @KEY_BACK
+
+:SEL_CONTACTS
+00D6: if
+0039:   22@ == 3
 004D: jf @SEL_STATUS
 // Flavor contacts — static 0ACD lines only, no ped models
 00D6: if
@@ -279,7 +313,7 @@
 
 :SEL_STATUS
 00D6: if
-0039:   22@ == 3
+0039:   22@ == 4
 004D: jf @SEL_HELP
 00D6: if
 0AAB:   file_exists "cleo\GroveLink\link.ini"
@@ -300,13 +334,15 @@
 
 :SEL_HELP
 00D6: if
-0039:   22@ == 4
+0039:   22@ == 5
 004D: jf @SEL_CLOSE
-// HELP: short 0ACD tips — K, Camera, START bridge, UPDATE if outdated
+// HELP: Camera = pics to phone; NEWS = snap + Herald article
 0ACD: show_text_highpriority "HELP: K opens phone" time 1800
 0001: wait 1900
-0ACD: show_text_highpriority "Camera: Enter or Space" time 1800
-0001: wait 1900
+0ACD: show_text_highpriority "Camera: pics to phone only" time 2000
+0001: wait 2100
+0ACD: show_text_highpriority "NEWS: snap + Herald article" time 2000
+0001: wait 2100
 0ACD: show_text_highpriority "OPEN START GROVELINK ON PC" time 2200
 0001: wait 2300
 0ACD: show_text_highpriority "Outdated? UPDATE_GROVELINK" time 2500

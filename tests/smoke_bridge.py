@@ -6,7 +6,7 @@ Starts the bridge HTTP server on an ephemeral port, asserts:
   GET /health, GET /api, GET /export.zip, GET /
 Optional: gallery copy + last_error + skipped_deleted + sort HTML + clear confirm +
 help footer + empty-action disable + VERIFY VERSION + CHANGELOG + port-busy + README polish.
-1.8.0: /news index + POST /news + /news/id + /send ini + /api/chat + gallery hero HTML.
+1.8.1: Camera≠NEWS — PHOTO.take alone no news; NEWS.make creates article; POST /news; no news_auto.
 
 Run from repo root or anywhere:
   python tests/smoke_bridge.py
@@ -109,7 +109,6 @@ def main():
     os.makedirs(gl.WEB_NEWS)
     gl.CAPTIONS_PATH = os.path.join(tmp, "photos_captions.json")
     gl.CHAT_LOG_PATH = os.path.join(tmp, "chat_delivered.json")
-    gl.STATE["news_auto"] = False
     gl.STATE["link_ini"] = os.path.join(tmp, "link.ini")
 
     port = free_port()
@@ -141,7 +140,7 @@ def main():
             "[INBOX]\nnew=0\nfrom=\nmsg=\n"
             "[PHOTO]\ntake=0\n"
             "[STATUS]\nbridge=1\n"
-            "[NEWS]\nnew=0\n"
+            "[NEWS]\nnew=0\nmake=0\n"
         )
 
     t = threading.Thread(target=server.serve_forever)
@@ -460,6 +459,71 @@ def main():
     except Exception as exc:
         check("news/caption suite", False, exc)
 
+    # --- 1.8.1 Camera ≠ Breaking News ---
+    try:
+        before_arts = len(gl.list_news_articles(100))
+        # Ensure a photo exists in bridge cache for make→create_news
+        cam_name = "5555555555_camera_only.jpg"
+        cam_path = os.path.join(photos, cam_name)
+        with open(cam_path, "wb") as f:
+            f.write(b"\xff\xd8\xff\xe0" + b"\x00" * 200)
+        gl.copy_latest([])
+        # Camera path: PHOTO.take alone must NOT create news
+        with open(server.link_ini, "w") as f:
+            f.write(
+                "[INBOX]\nnew=0\nfrom=\nmsg=\n"
+                "[PHOTO]\ntake=1\ncount=1\n"
+                "[STATUS]\nbridge=1\n"
+                "[NEWS]\nnew=0\nmake=0\n"
+            )
+        gl.STATE["link_ini"] = server.link_ini
+        # Short burst so smoke stays fast
+        try:
+            from configparser import ConfigParser
+        except ImportError:
+            from ConfigParser import ConfigParser
+        empty_cfg = ConfigParser()
+        handled = gl.process_photo_and_news_flags(
+            empty_cfg, tmp, server.link_ini, burst_seconds=0.05, burst_interval=0.02
+        )
+        after_take = len(gl.list_news_articles(100))
+        with open(server.link_ini, "r") as f:
+            ini_take = f.read()
+        check("Camera PHOTO.take handled", handled is True)
+        check("Camera PHOTO.take cleared", "take=0" in ini_take.split("[PHOTO]")[-1].split("[")[0])
+        check("Camera PHOTO.take alone creates NO news", after_take == before_arts,
+              "before=%s after=%s" % (before_arts, after_take))
+        check("no news_auto in STATE", "news_auto" not in gl.STATE)
+
+        # NEWS.make=1 → article created + NEWS.new=1
+        before_make = len(gl.list_news_articles(100))
+        with open(server.link_ini, "w") as f:
+            f.write(
+                "[INBOX]\nnew=0\nfrom=\nmsg=\n"
+                "[PHOTO]\ntake=1\ncount=2\n"
+                "[STATUS]\nbridge=1\n"
+                "[NEWS]\nnew=0\nmake=1\n"
+            )
+        handled2 = gl.process_photo_and_news_flags(
+            empty_cfg, tmp, server.link_ini, burst_seconds=0.05, burst_interval=0.02
+        )
+        after_make = len(gl.list_news_articles(100))
+        with open(server.link_ini, "r") as f:
+            ini_make = f.read()
+        check("NEWS.make handled", handled2 is True)
+        check("NEWS.make cleared to 0", "make=0" in ini_make.split("[NEWS]")[-1] if "[NEWS]" in ini_make else False, ini_make[-200:])
+        check("NEWS.make creates article", after_make == before_make + 1,
+              "before=%s after=%s" % (before_make, after_make))
+        check("NEWS.make sets NEWS.new=1", "new=1" in ini_make.split("[NEWS]")[-1] if "[NEWS]" in ini_make else False, ini_make[-200:])
+        # shutter_burst source must not mention news_auto
+        with open(os.path.join(BRIDGE, "grovelink_server.py"), "r") as f:
+            srv_src = f.read()
+        check("bridge has no news_auto", "news_auto" not in srv_src)
+        check("bridge has no news.auto print", "news.auto" not in srv_src)
+        check("bridge has NEWS.make handler", "NEWS" in srv_src and "make" in srv_src and "process_photo_and_news_flags" in srv_src)
+    except Exception as exc:
+        check("Camera vs NEWS.make suite", False, "%s\n%s" % (exc, traceback.format_exc()[:400]))
+
     try:
         server.shutdown()
     except Exception:
@@ -487,11 +551,25 @@ def main():
         check("CLEO no 033E GXT draw", not bad_033e)
         full = "".join(cleo_lines)
         check("CLEO has HELP / STATUS", "HELP" in full and "STATUS" in full)
-        check("CLEO menu wrap 0-5", "0@" in full)  # soft presence
+        check("CLEO menu wrap 0-6", "NEWS" in full and "CLOSE" in full)  # soft presence
         check("CLEO NO NEW TEXTS", "NO NEW TEXTS" in full)
         check("CLEO PHONE PAGE ON PC", "PHONE PAGE ON PC" in full)
         # wrap bounds: index > 5 resets to 0; 0 > index sets 5
-        check("CLEO wrap high bound", "22@ > 5" in full or "0019:   22@ > 5" in full)
+        check("CLEO wrap high bound", "22@ > 6" in full or "0019:   22@ > 6" in full)
+        check("CLEO NEWS menu slot", "BREAKING NEWS SNAP" in full and ":SEL_NEWS" in full)
+        check("CLEO NEWS.make write", 'section "NEWS" key "make"' in full or "key \"make\"" in full)
+        check("CLEO HELP Camera vs NEWS", "Camera: pics to phone only" in full and "NEWS: snap + Herald" in full)
+        cam_to_inbox = full.split(":SEL_INBOX")[0]
+        # From first camera effect to SEL_INBOX — Camera select only
+        if "0A2F: set_photo_camera_effect 1" in cam_to_inbox:
+            cam_sel = cam_to_inbox.split("0A2F: set_photo_camera_effect 1", 1)[1]
+        else:
+            cam_sel = ""
+        check("CLEO CAMERA select omits NEWS.make", 'key "make"' not in cam_sel)
+        news_sel = ""
+        if ":SEL_NEWS" in full and ":SEL_CONTACTS" in full:
+            news_sel = full.split(":SEL_NEWS", 1)[1].split(":SEL_CONTACTS", 1)[0]
+        check("CLEO NEWS select writes NEWS.make", 'key "make"' in news_sel)
         check("CLEO CONTACTS Catalina flavor", "CATALINA" in full)
         check("CLEO contacts cycle advances", "26@ = 4" in full and ":CONTACT4" in full)
         check("CLEO SMS FROM REAL PHONE notify", "SMS FROM REAL PHONE" in full)
@@ -545,6 +623,7 @@ def main():
         with open(os.path.join(REPO, "CHANGELOG.md"), "r") as f:
             cl = f.read()
         check("CHANGELOG.md exists with 1.8.0", "1.8.0" in cl and ("Breaking News" in cl or "Herald" in cl or "gallery" in cl.lower()))
+        check("CHANGELOG.md has 1.8.1 Camera vs NEWS", "1.8.1" in cl and ("Camera" in cl) and ("news.auto" in cl or "NEWS.make" in cl))
         check("CHANGELOG covers 1.0 foundation", "1.0" in cl and ("Foundation" in cl or "crash-safer" in cl))
     except Exception as exc:
         check("CHANGELOG.md", False, exc)
@@ -575,7 +654,7 @@ def main():
     except Exception as exc:
         check("README polish", False, exc)
 
-    check("VERSION is 1.8.0", pack_ver == "1.8.0", pack_ver)
+    check("VERSION is 1.8.1", pack_ver == "1.8.1", pack_ver)
 
     # Runtime: after clear, HTML still disables; after photo, actions enabled via setCountActions path
     # (API count already covered; spot-check helper exists in page source above)

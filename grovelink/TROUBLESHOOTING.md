@@ -130,7 +130,7 @@ Deleted names are remembered in `bridge\photos_deleted.txt` so the watcher does 
 3. **F7** Compile. Fix any opcode/plugin errors (IniFiles.cleo / CLEO must match).  
 4. Output `.cs` → copy to `[GTA]\CLEO\GroveLinkPhone.cs`.
 
-Menu after compile: **CAMERA / INBOX / CONTACTS / STATUS / HELP / CLOSE** (Up/Down wrap, K toggle). **HELP** shows tips + START GROVELINK + **UPDATE_GROVELINK**. **STATUS** shows **BRIDGE LIVE** / **NO BRIDGE** + shot count. Camera snap plays a short shutter sound (`018C`).
+Menu after compile: **CAMERA / INBOX / NEWS / CONTACTS / STATUS / HELP / CLOSE** (Up/Down wrap, K toggle). **CAMERA** = pics to phone only (never news). **NEWS** = snap + Grove Street Herald. **HELP** explains both + START GROVELINK + **UPDATE_GROVELINK**. **STATUS** shows **BRIDGE LIVE** / **NO BRIDGE** + shot count. Snap plays shutter sound (`018C`).
 
 Mission Switcher (optional): compile **one** of `switcher\MissionSwitcher_SkinOnly.txt` (safer) or `MissionSwitcher.txt`, copy `.cs` to CLEO. INSTALL auto-compiles SkinOnly when Sanny is found (SUCCESS mentions it only if installed).
 
@@ -173,10 +173,13 @@ If CJ never sees it: VERIFY `link.ini` path, confirm bridge `STATUS.bridge=1`, a
 
 ## Breaking News / Grove Street Herald
 
-1. On the phone page, open a shot → optional caption → **Breaking News**.
-2. Browser opens `/news/<id>` (Grove Street Herald styling). Index: `/news`.
-3. Articles are JSON under `grovelink/bridge/news/` (stdlib only; no cloud AI).
-4. Optional auto-draft: set `[news] auto=1` in `bridge/config.ini`, restart bridge; after a Camera snap the bridge may file a story and CLEO can flash **NEWS FILED**.
+**Camera ≠ Breaking News.** Camera snaps only land on the phone/PC gallery. News is a separate feature.
+
+1. **In GTA:** **K** → **NEWS** → Enter/Space → **BREAKING NEWS SNAP**. Bridge burst-copies the shot then files a Herald article (`NEWS.make=1`). CLEO may flash **NEWS FILED** when `NEWS.new=1`.
+2. **On the phone page (no retake):** open an existing shot → optional caption → **Breaking News** (`POST /news`).
+3. Browser opens `/news/<id>` (Grove Street Herald styling). Index: `/news`.
+4. Articles are JSON under `grovelink/bridge/news/` (stdlib only; no cloud AI).
+5. There is **no** `news.auto` / auto-on-shutter (removed in 1.8.1) — Camera can never trigger news.
 
 ## Captions missing after update
 

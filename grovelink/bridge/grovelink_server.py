@@ -106,7 +106,6 @@ STATE = {
     "phone_page_logged": False,
     "version": "unknown",
     "last_error": "",
-    "news_auto": False,
     "link_ini": "",
 }
 
@@ -264,7 +263,7 @@ def ensure_dirs(cfg, gta_dir):
                     "[PHOTO]\ntake=0\ncount=0\n\n"
                     "[INBOX]\nnew=0\nfrom=REAL PHONE\nmsg=\n\n"
                     "[STATUS]\nbridge=1\nip=0.0.0.0\n\n"
-                    "[NEWS]\nnew=0\n"
+                    "[NEWS]\nnew=0\nmake=0\n"
                 )
         except Exception:
             pass
@@ -2217,7 +2216,6 @@ def api_payload():
         "version": STATE.get("version", "unknown") or "unknown",
         "last_error": STATE.get("last_error", "") or "",
         "skipped_deleted": len(DELETED),
-        "news_auto": bool(STATE.get("news_auto")),
         "news_count": len(list_news_articles(5)),
     }
 
@@ -2655,14 +2653,11 @@ class Handler(BaseHTTPRequestHandler):
 
 
 
-def shutter_burst(cfg, gta_dir, seconds=3.0, interval=0.25, link_ini=None):
-    """After PHOTO.take flips, poll/copy aggressively for a few seconds."""
+def shutter_burst(cfg, gta_dir, seconds=3.0, interval=0.25):
+    """After PHOTO.take / NEWS.make flips, poll/copy aggressively for a few seconds.
+    Never creates news — Camera gallery path stays news-free."""
     deadline = time.time() + seconds
     STATE["shutter_burst_until"] = deadline
-    before = set()
-    for p in STATE.get("photos") or []:
-        if isinstance(p, dict) and p.get("file"):
-            before.add(p["file"])
     while time.time() < deadline:
         try:
             ensure_gallery_dirs(cfg, gta_dir)
@@ -2673,28 +2668,59 @@ def shutter_burst(cfg, gta_dir, seconds=3.0, interval=0.25, link_ini=None):
             print("burst error:", exc)
         time.sleep(interval)
     STATE["shutter_burst_until"] = 0
-    # Optional auto Breaking News draft for newly arrived bridge photos
-    if STATE.get("news_auto"):
-        after = []
-        for p in STATE.get("photos") or []:
-            if isinstance(p, dict) and p.get("file") and p["file"] not in before:
-                after.append(p["file"])
-        ini = link_ini or STATE.get("link_ini") or ""
-        for name in after[:3]:
+
+
+def process_photo_and_news_flags(cfg, gta_dir, ini, burst_seconds=3.5, burst_interval=0.25):
+    """Handle CLEO flags in link.ini.
+
+    PHOTO.take alone (Camera): burst-copy gallery → phone page. Never creates news.
+    NEWS.make (NEWS menu): burst-copy like shutter, then create_news_from_photo on
+    newest bridge photo and set NEWS.new=1 for CLEO toast.
+    """
+    take = read_ini_key(ini, "PHOTO", "take", "0")
+    make = read_ini_key(ini, "NEWS", "make", "0")
+    if take != "1" and make != "1":
+        return False
+    if take == "1":
+        write_ini_kv(ini, "PHOTO", {"take": "0"})
+    if make == "1":
+        write_ini_kv(ini, "NEWS", {"make": "0"})
+    label = "News snap" if make == "1" else "Shutter"
+    print("%s — fast poll for new Gallery files..." % label)
+    shutter_burst(cfg, gta_dir, seconds=burst_seconds, interval=burst_interval)
+    if make == "1":
+        newest = None
+        photos = STATE.get("photos") or []
+        if photos and isinstance(photos[0], dict):
+            newest = photos[0].get("file")
+        if newest:
             try:
-                ok, art, _detail = create_news_from_photo(
-                    name, caption=get_caption(name), auto=True, link_ini=ini
+                ok, art, detail = create_news_from_photo(
+                    newest,
+                    caption=get_caption(newest),
+                    auto=False,
+                    link_ini=ini,
                 )
                 if ok and art:
-                    print("Auto news filed:", art.get("id"), art.get("headline", "")[:60])
+                    print(
+                        "Breaking News filed:",
+                        art.get("id"),
+                        (art.get("headline") or "")[:60],
+                    )
+                else:
+                    print("Breaking News failed:", detail)
             except Exception as exc:
-                print("auto news error:", exc)
+                print("news make error:", exc)
+        else:
+            print("Breaking News: no bridge photo yet after burst")
+    print("%s done. Phone page has" % label, len(STATE["photos"]), "shots")
+    return True
 
 
 def watcher(cfg, gta_dir, ini):
     """Poll Gallery folders forever. Re-detect dirs each loop so a folder
     created after the first in-game photo is picked up (startup may have
-    found none). When PHOTO.take=1, burst-poll for faster shutter react."""
+    found none). PHOTO.take / NEWS.make trigger burst; only NEWS.make files Herald."""
     last_galleries = []
     while True:
         try:
@@ -2710,14 +2736,12 @@ def watcher(cfg, gta_dir, ini):
                     print("Galleries  : still none — waiting for folder/photos")
                 last_galleries = list(galleries)
             copy_latest(galleries)
-            take = read_ini_key(ini, "PHOTO", "take", "0")
-            if take == "1":
-                write_ini_kv(ini, "PHOTO", {"take": "0"})
-                print("Shutter — fast poll for new Gallery files...")
-                shutter_burst(cfg, gta_dir, seconds=3.5, interval=0.25, link_ini=ini)
-                print("Shutter done. Phone page has", len(STATE["photos"]), "shots")
-                # Race fix: another snap may have set take=1 during burst — loop now
-                if read_ini_key(ini, "PHOTO", "take", "0") == "1":
+            if process_photo_and_news_flags(cfg, gta_dir, ini):
+                # Race fix: another snap/make may have arrived during burst — loop now
+                if (
+                    read_ini_key(ini, "PHOTO", "take", "0") == "1"
+                    or read_ini_key(ini, "NEWS", "make", "0") == "1"
+                ):
                     continue
         except Exception as exc:
             STATE["last_error"] = "watch error: %s" % exc
@@ -2758,7 +2782,6 @@ def main():
     STATE["phone_page_logged"] = False
     STATE["version"] = read_pack_version()
     STATE["last_error"] = ""
-    STATE["news_auto"] = cfg_flag(cfg, "news", "auto", False)
     STATE["link_ini"] = ini
     try:
         STATE["inbox"] = load_chat_log()
@@ -2793,7 +2816,7 @@ def main():
     print("      http://127.0.0.1:%s/export.zip" % port)
     print("  Grove Street Herald (fake news):")
     print("      http://127.0.0.1:%s/news" % port)
-    print("  news.auto (auto-draft on shutter):", 1 if STATE.get("news_auto") else 0)
+    print("  Camera = gallery only; NEWS menu / web Breaking News = Herald")
     print("")
     print("  Keep this window open while you play.")
     print("================================================")
