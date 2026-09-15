@@ -1,20 +1,21 @@
 {$USE ini}
 {$USE CLEO}
 {$CLEO .cs}
-// GroveLink Phone v5
-// HUD labels + contacts list + cellphone anim
-// K toggle | UP/DOWN | ENTER | BACKSPACE
+// GroveLink Phone v6 — real SA cellphone calls + two-way texts
+// K open/close | UP/DOWN | ENTER | BACKSPACE
 0000: NOP
 03A4: name_thread 'GROVELNK'
 
-20@ = 0 // phone open
-21@ = 0 // screen 0=home 1=contacts 2=camera 3=inbox
+20@ = 0 // open
+21@ = 0 // screen 0 home 1 contacts 2 camera 3 msgs 4 call 5 reply
 22@ = 0 // cursor
 23@ = 0 // K debounce
-24@ = 0 // phone anim attached
+24@ = 0 // phone in hand
 25@ = 0 // nav debounce
-26@ = 0 // home item count-1
-27@ = 0 // row highlight helper
+26@ = 0 // call who
+27@ = 0 // reserved
+30@ = 0 // sms poll
+31@ = 0 // unread sms
 
 :MAIN
 0001: wait 0
@@ -27,16 +28,18 @@
 
 00D6: if
 0019:   25@ > 0
-004D: jf @NO_NAVWAIT
+004D: jf @NO_NAV
 000E: 25@ -= 1
-:NO_NAVWAIT
+:NO_NAV
+
+0050: gosub @POLL_SMS
 
 00D6: if
 0AB0:   key_pressed 75
-004D: jf @AFTER_TOGGLE
+004D: jf @AFTER_K
 00D6: if
 0039:   23@ == 0
-004D: jf @AFTER_TOGGLE
+004D: jf @AFTER_K
 0006: 23@ = 1
 00D6: if
 0039:   20@ == 0
@@ -45,26 +48,19 @@
 0006: 21@ = 0
 0006: 22@ = 0
 0006: 25@ = 12
-0ACD: show_text_highpriority "GROVELINK  CONTACTS" time 1200
 018C: play_sound 1138 at 0.0 0.0 0.0
 00D6: if
 00DF:   actor $PLAYER_ACTOR driving
 004D: jf @OPEN_ANIM
-0002: jump @AFTER_TOGGLE
+0002: jump @AFTER_K
 :OPEN_ANIM
 0729: task_use_mobile_phone $PLAYER_ACTOR 1
 0006: 24@ = 1
-0002: jump @AFTER_TOGGLE
-
+0002: jump @AFTER_K
 :PUT_AWAY
 0050: gosub @CLOSE_PHONE
-0002: jump @AFTER_TOGGLE
 
-:FORCE_CLOSE
-0050: gosub @CLOSE_PHONE
-0002: jump @MAIN
-
-:AFTER_TOGGLE
+:AFTER_K
 00D6: if
 8039:   not 23@ == 0
 004D: jf @PHONE_LOGIC
@@ -79,10 +75,15 @@
 004D: jf @MAIN
 
 03F0: enable_text_draw 1
-038E: draw_box 548.0 248.0 132.0 292.0 20 22 24 255
+038E: draw_box 548.0 248.0 132.0 292.0 18 20 22 255
 038E: draw_box 548.0 248.0 120.0 278.0 8 10 12 255
 038E: draw_box 548.0 128.0 108.0 18.0 6 28 12 255
 038E: draw_box 548.0 372.0 16.0 16.0 50 50 54 255
+00D6: if
+0039:   31@ == 1
+004D: jf @NO_DOT
+038E: draw_box 590.0 128.0 10.0 10.0 40 220 70 255
+:NO_DOT
 
 033F: set_text_draw_letter_size 0.28 1.10
 0340: set_text_draw_rgba 80 255 120 255
@@ -93,28 +94,31 @@
 
 00D6: if
 0039:   21@ == 0
-004D: jf @SCR_CONTACTS
+004D: jf @S1
 0050: gosub @DRAW_HOME
-0002: jump @HANDLE_KEYS
-
-:SCR_CONTACTS
+0002: jump @KEYS
+:S1
 00D6: if
 0039:   21@ == 1
-004D: jf @SCR_CAMERA
+004D: jf @S2
 0050: gosub @DRAW_CONTACTS
-0002: jump @HANDLE_KEYS
-
-:SCR_CAMERA
+0002: jump @KEYS
+:S2
 00D6: if
 0039:   21@ == 2
-004D: jf @SCR_INBOX
+004D: jf @S3
 0050: gosub @DRAW_CAMERA
-0002: jump @HANDLE_KEYS
+0002: jump @KEYS
+:S3
+00D6: if
+0039:   21@ == 3
+004D: jf @S5
+0050: gosub @DRAW_MSGS
+0002: jump @KEYS
+:S5
+0050: gosub @DRAW_REPLY
 
-:SCR_INBOX
-0050: gosub @DRAW_INBOX
-
-:HANDLE_KEYS
+:KEYS
 00D6: if
 0039:   25@ == 0
 004D: jf @KEY_BACK
@@ -123,7 +127,7 @@
 004D: jf @KEY_UP
 0006: 25@ = 10
 000A: 22@ += 1
-0050: gosub @CLAMP_CURSOR
+0050: gosub @CLAMP
 018C: play_sound 1083 at 0.0 0.0 0.0
 0002: jump @KEY_BACK
 :KEY_UP
@@ -132,14 +136,14 @@
 004D: jf @KEY_ENTER
 0006: 25@ = 10
 000E: 22@ -= 1
-0050: gosub @CLAMP_CURSOR
+0050: gosub @CLAMP
 018C: play_sound 1083 at 0.0 0.0 0.0
 0002: jump @KEY_BACK
 :KEY_ENTER
 00D6: if
 0AB0:   key_pressed 13
 004D: jf @KEY_BACK
-0006: 25@ = 14
+0006: 25@ = 16
 018C: play_sound 1085 at 0.0 0.0 0.0
 0050: gosub @DO_SELECT
 
@@ -153,177 +157,154 @@
 0006: 25@ = 12
 00D6: if
 0039:   21@ == 0
-004D: jf @BACK_HOME
+004D: jf @TO_HOME
 0050: gosub @CLOSE_PHONE
 0002: jump @MAIN
-:BACK_HOME
+:TO_HOME
 0006: 21@ = 0
 0006: 22@ = 0
-0ACD: show_text_highpriority "GROVELINK HOME" time 800
 0002: jump @MAIN
 
-:CLAMP_CURSOR
+:CLAMP
 00D6: if
 0039:   21@ == 0
-004D: jf @CL_CON
+004D: jf @CL1
 00D6: if
 0019:   22@ > 3
-004D: jf @CL_UNDER
+004D: jf @CL0U
 0006: 22@ = 0
-:CL_UNDER
+:CL0U
 00D6: if
 001B:   0 > 22@
-004D: jf @CL_DONE
+004D: jf @CLX
 0006: 22@ = 3
-0002: jump @CL_DONE
-:CL_CON
+0002: jump @CLX
+:CL1
 00D6: if
 0039:   21@ == 1
-004D: jf @CL_CAM
+004D: jf @CL3
 00D6: if
 0019:   22@ > 5
-004D: jf @CL_CONU
+004D: jf @CL1U
 0006: 22@ = 0
-:CL_CONU
+:CL1U
 00D6: if
 001B:   0 > 22@
-004D: jf @CL_DONE
+004D: jf @CLX
 0006: 22@ = 5
-0002: jump @CL_DONE
-:CL_CAM
+0002: jump @CLX
+:CL3
+00D6: if
+0039:   21@ == 5
+004D: jf @CLZ
+00D6: if
+0019:   22@ > 3
+004D: jf @CL5U
 0006: 22@ = 0
-:CL_DONE
+:CL5U
+00D6: if
+001B:   0 > 22@
+004D: jf @CLX
+0006: 22@ = 3
+0002: jump @CLX
+:CLZ
+0006: 22@ = 0
+:CLX
+0051: return
+
+:ROW_Y
+27@ = 22@
+27@ *= 26
+27@ += 166
+008D: 8@ = integer 27@ to_float
 0051: return
 
 :DRAW_HOME
-// highlight selected row
-27@ = 22@
-27@ *= 28
-27@ += 168
-008D: 8@ = integer 27@ to_float
+0050: gosub @ROW_Y
 038E: draw_box 548.0 8@ 104.0 22.0 20 70 32 220
-
-033F: set_text_draw_letter_size 0.26 1.00
-0343: set_text_center 1
-0348: set_text_draw_proportional 1
-0349: set_font 1
-00D6: if
-0039:   22@ == 0
-004D: jf @H1
-0340: set_text_draw_rgba 180 255 180 255
-0002: jump @H1D
-:H1
-0340: set_text_draw_rgba 160 170 160 255
-:H1D
-033E: display_text 548.0 158.0 'GLCON0'
-00D6: if
-0039:   22@ == 0
-004D: jf @H1B
-033F: set_text_draw_letter_size 0.26 1.00
-0340: set_text_draw_rgba 180 255 180 255
-0343: set_text_center 1
-0348: set_text_draw_proportional 1
-0349: set_font 1
-033E: display_text 548.0 158.0 'GLCON1'
-:H1B
-
-00D6: if
-0039:   22@ == 1
-004D: jf @H2
-033F: set_text_draw_letter_size 0.26 1.00
-0340: set_text_draw_rgba 180 255 180 255
-0343: set_text_center 1
-0348: set_text_draw_proportional 1
-0349: set_font 1
-033E: display_text 548.0 186.0 'GLCAM1'
-0002: jump @H3P
-:H2
-033F: set_text_draw_letter_size 0.26 1.00
-0340: set_text_draw_rgba 160 170 160 255
-0343: set_text_center 1
-0348: set_text_draw_proportional 1
-0349: set_font 1
-033E: display_text 548.0 186.0 'GLCAM0'
-
-:H3P
-00D6: if
-0039:   22@ == 2
-004D: jf @H3
-033F: set_text_draw_letter_size 0.26 1.00
-0340: set_text_draw_rgba 180 255 180 255
-0343: set_text_center 1
-0348: set_text_draw_proportional 1
-0349: set_font 1
-033E: display_text 548.0 214.0 'GLINB1'
-0002: jump @H4P
-:H3
-033F: set_text_draw_letter_size 0.26 1.00
-0340: set_text_draw_rgba 160 170 160 255
-0343: set_text_center 1
-0348: set_text_draw_proportional 1
-0349: set_font 1
-033E: display_text 548.0 214.0 'GLINB0'
-
-:H4P
-00D6: if
-0039:   22@ == 3
-004D: jf @H4
-033F: set_text_draw_letter_size 0.26 1.00
-0340: set_text_draw_rgba 180 255 180 255
-0343: set_text_center 1
-0348: set_text_draw_proportional 1
-0349: set_font 1
-033E: display_text 548.0 242.0 'GLCLO1'
-0002: jump @HHINT
-:H4
-033F: set_text_draw_letter_size 0.26 1.00
-0340: set_text_draw_rgba 160 170 160 255
-0343: set_text_center 1
-0348: set_text_draw_proportional 1
-0349: set_font 1
-033E: display_text 548.0 242.0 'GLCLO0'
-
-:HHINT
-033F: set_text_draw_letter_size 0.18 0.80
-0340: set_text_draw_rgba 90 160 100 255
-0343: set_text_center 1
-0348: set_text_draw_proportional 1
-0349: set_font 1
-033E: display_text 548.0 330.0 'GLHINT'
-0051: return
-
-:DRAW_CONTACTS
-27@ = 22@
-27@ *= 24
-27@ += 160
-008D: 8@ = integer 27@ to_float
-038E: draw_box 548.0 8@ 104.0 20.0 20 70 32 220
-
-033F: set_text_draw_letter_size 0.22 0.90
-0340: set_text_draw_rgba 180 255 180 255
-0343: set_text_center 1
-0348: set_text_draw_proportional 1
-0349: set_font 1
-033E: display_text 548.0 142.0 'GLCTL'
-
-033F: set_text_draw_letter_size 0.24 0.92
+033F: set_text_draw_letter_size 0.24 0.96
 0343: set_text_center 1
 0348: set_text_draw_proportional 1
 0349: set_font 1
 0340: set_text_draw_rgba 200 220 200 255
-033E: display_text 548.0 152.0 'GLC0'
-033E: display_text 548.0 176.0 'GLC1'
-033E: display_text 548.0 200.0 'GLC2'
-033E: display_text 548.0 224.0 'GLC3'
-033E: display_text 548.0 248.0 'GLC4'
-033E: display_text 548.0 272.0 'GLC5'
-
-033F: set_text_draw_letter_size 0.18 0.80
+033E: display_text 548.0 156.0 'GLCON0'
+033E: display_text 548.0 182.0 'GLINB0'
+033E: display_text 548.0 208.0 'GLCAM0'
+033E: display_text 548.0 234.0 'GLCLO0'
+00D6: if
+0039:   22@ == 0
+004D: jf @DH1
+033F: set_text_draw_letter_size 0.24 0.96
+0340: set_text_draw_rgba 180 255 180 255
+0343: set_text_center 1
+0348: set_text_draw_proportional 1
+0349: set_font 1
+033E: display_text 548.0 156.0 'GLCON1'
+:DH1
+00D6: if
+0039:   22@ == 1
+004D: jf @DH2
+033F: set_text_draw_letter_size 0.24 0.96
+0340: set_text_draw_rgba 180 255 180 255
+0343: set_text_center 1
+0348: set_text_draw_proportional 1
+0349: set_font 1
+033E: display_text 548.0 182.0 'GLINB1'
+:DH2
+00D6: if
+0039:   22@ == 2
+004D: jf @DH3
+033F: set_text_draw_letter_size 0.24 0.96
+0340: set_text_draw_rgba 180 255 180 255
+0343: set_text_center 1
+0348: set_text_draw_proportional 1
+0349: set_font 1
+033E: display_text 548.0 208.0 'GLCAM1'
+:DH3
+00D6: if
+0039:   22@ == 3
+004D: jf @DHH
+033F: set_text_draw_letter_size 0.24 0.96
+0340: set_text_draw_rgba 180 255 180 255
+0343: set_text_center 1
+0348: set_text_draw_proportional 1
+0349: set_font 1
+033E: display_text 548.0 234.0 'GLCLO1'
+:DHH
+033F: set_text_draw_letter_size 0.18 0.78
 0340: set_text_draw_rgba 90 160 100 255
 0343: set_text_center 1
 0348: set_text_draw_proportional 1
 0349: set_font 1
-033E: display_text 548.0 330.0 'GLHINT'
+033E: display_text 548.0 328.0 'GLHINT'
+0051: return
+
+:DRAW_CONTACTS
+0050: gosub @ROW_Y
+038E: draw_box 548.0 8@ 104.0 20.0 20 70 32 220
+033F: set_text_draw_letter_size 0.22 0.88
+0340: set_text_draw_rgba 180 255 180 255
+0343: set_text_center 1
+0348: set_text_draw_proportional 1
+0349: set_font 1
+033E: display_text 548.0 140.0 'GLCTL'
+033F: set_text_draw_letter_size 0.23 0.90
+0340: set_text_draw_rgba 200 220 200 255
+0343: set_text_center 1
+0348: set_text_draw_proportional 1
+0349: set_font 1
+033E: display_text 548.0 154.0 'GLC0'
+033E: display_text 548.0 180.0 'GLC1'
+033E: display_text 548.0 206.0 'GLC2'
+033E: display_text 548.0 232.0 'GLC3'
+033E: display_text 548.0 258.0 'GLC4'
+033E: display_text 548.0 284.0 'GLC5'
+033F: set_text_draw_letter_size 0.18 0.78
+0340: set_text_draw_rgba 90 160 100 255
+0343: set_text_center 1
+0348: set_text_draw_proportional 1
+0349: set_font 1
+033E: display_text 548.0 328.0 'GLCALL'
 0051: return
 
 :DRAW_CAMERA
@@ -342,20 +323,47 @@
 033E: display_text 548.0 236.0 'GLBACK'
 0051: return
 
-:DRAW_INBOX
-033F: set_text_draw_letter_size 0.26 1.00
+:DRAW_MSGS
+033F: set_text_draw_letter_size 0.24 0.96
 0340: set_text_draw_rgba 180 255 180 255
 0343: set_text_center 1
 0348: set_text_draw_proportional 1
 0349: set_font 1
-033E: display_text 548.0 160.0 'GLINBT'
-033F: set_text_draw_letter_size 0.18 0.82
-0340: set_text_draw_rgba 180 200 180 255
+033E: display_text 548.0 154.0 'GLINBT'
+033F: set_text_draw_letter_size 0.18 0.80
+0340: set_text_draw_rgba 200 220 200 255
 0343: set_text_center 1
 0348: set_text_draw_proportional 1
 0349: set_font 1
-033E: display_text 548.0 200.0 'GLINST'
-033E: display_text 548.0 230.0 'GLURL'
+033E: display_text 548.0 190.0 'GLINST'
+033E: display_text 548.0 220.0 'GLREP'
+033E: display_text 548.0 250.0 'GLURL'
+0051: return
+
+:DRAW_REPLY
+0050: gosub @ROW_Y
+038E: draw_box 548.0 8@ 104.0 22.0 20 70 32 220
+033F: set_text_draw_letter_size 0.22 0.88
+0340: set_text_draw_rgba 180 255 180 255
+0343: set_text_center 1
+0348: set_text_draw_proportional 1
+0349: set_font 1
+033E: display_text 548.0 140.0 'GLRPT'
+033F: set_text_draw_letter_size 0.20 0.86
+0340: set_text_draw_rgba 200 220 200 255
+0343: set_text_center 1
+0348: set_text_draw_proportional 1
+0349: set_font 1
+033E: display_text 548.0 156.0 'GLR0'
+033E: display_text 548.0 182.0 'GLR1'
+033E: display_text 548.0 208.0 'GLR2'
+033E: display_text 548.0 234.0 'GLR3'
+033F: set_text_draw_letter_size 0.18 0.78
+0340: set_text_draw_rgba 90 160 100 255
+0343: set_text_center 1
+0348: set_text_draw_proportional 1
+0349: set_font 1
+033E: display_text 548.0 328.0 'GLHINT'
 0051: return
 
 :DO_SELECT
@@ -364,28 +372,27 @@
 004D: jf @SEL_CON
 00D6: if
 0039:   22@ == 0
-004D: jf @HOME_CAM
+004D: jf @H_MSG
 0006: 21@ = 1
 0006: 22@ = 0
-0ACD: show_text_highpriority "CONTACTS" time 900
 0051: return
-:HOME_CAM
+:H_MSG
 00D6: if
 0039:   22@ == 1
-004D: jf @HOME_INB
-0006: 21@ = 2
-0006: 22@ = 0
-0ACD: show_text_highpriority "CAMERA  ENTER = SNAP" time 1200
-0051: return
-:HOME_INB
-00D6: if
-0039:   22@ == 2
-004D: jf @HOME_CLOSE
+004D: jf @H_CAM
 0006: 21@ = 3
 0006: 22@ = 0
-0050: gosub @SHOW_INBOX_MSG
+0006: 31@ = 0
+0050: gosub @SHOW_INBOX
 0051: return
-:HOME_CLOSE
+:H_CAM
+00D6: if
+0039:   22@ == 2
+004D: jf @H_CLOSE
+0006: 21@ = 2
+0006: 22@ = 0
+0051: return
+:H_CLOSE
 0050: gosub @CLOSE_PHONE
 0051: return
 
@@ -393,80 +400,275 @@
 00D6: if
 0039:   21@ == 1
 004D: jf @SEL_CAM
-00D6: if
-0039:   22@ == 0
-004D: jf @CALL1
-0ACD: show_text_highpriority "CALLING SWEET..." time 2500
-018C: play_sound 2300 at 0.0 0.0 0.0
-0051: return
-:CALL1
-00D6: if
-0039:   22@ == 1
-004D: jf @CALL2
-0ACD: show_text_highpriority "CALLING SMOKE..." time 2500
-018C: play_sound 2300 at 0.0 0.0 0.0
-0051: return
-:CALL2
-00D6: if
-0039:   22@ == 2
-004D: jf @CALL3
-0ACD: show_text_highpriority "CALLING RYDER..." time 2500
-018C: play_sound 2300 at 0.0 0.0 0.0
-0051: return
-:CALL3
-00D6: if
-0039:   22@ == 3
-004D: jf @CALL4
-0ACD: show_text_highpriority "CALLING CESAR..." time 2500
-018C: play_sound 2300 at 0.0 0.0 0.0
-0051: return
-:CALL4
-00D6: if
-0039:   22@ == 4
-004D: jf @CALL5
-0ACD: show_text_highpriority "CALLING OG LOC..." time 2500
-018C: play_sound 2300 at 0.0 0.0 0.0
-0051: return
-:CALL5
-0ACD: show_text_highpriority "REAL PHONE  open GroveLink page" time 2500
+0085: 26@ = 22@
+0050: gosub @START_CALL
 0051: return
 
 :SEL_CAM
 00D6: if
 0039:   21@ == 2
-004D: jf @SEL_INB
+004D: jf @SEL_MSG
 0A2F: set_photo_camera_effect 1
 0001: wait 80
 0A1E: take_photo 1
 0001: wait 200
 0A2F: set_photo_camera_effect 0
-0ACD: show_text_highpriority "PHOTO TAKEN" time 2000
+0ACD: show_text_highpriority "PHOTO TAKEN" time 1800
 00D6: if
-0AAB:   file_exists "cleo\GroveLink\link.ini"
-004D: jf @SEL_DONE
-0AF1: write_int 1 to_ini_file "cleo\GroveLink\link.ini" section "PHOTO" key "take"
-0002: jump @SEL_DONE
-:SEL_INB
-0050: gosub @SHOW_INBOX_MSG
-:SEL_DONE
+0AAB:   file_exists "cleo\\GroveLink\\link.ini"
+004D: jf @SEL_X
+0AF1: write_int 1 to_ini_file "cleo\\GroveLink\\link.ini" section "PHOTO" key "take"
+0002: jump @SEL_X
+
+:SEL_MSG
+00D6: if
+0039:   21@ == 3
+004D: jf @SEL_REP
+0006: 21@ = 5
+0006: 22@ = 0
+0002: jump @SEL_X
+
+:SEL_REP
+00D6: if
+0039:   21@ == 5
+004D: jf @SEL_X
+0050: gosub @SEND_REPLY
+:SEL_X
 0051: return
 
-:SHOW_INBOX_MSG
+:SHOW_INBOX
 00D6: if
-0AAB:   file_exists "cleo\GroveLink\link.ini"
-004D: jf @INB_EMPTY
-0AF0: 9@ = read_int_from_ini_file "cleo\GroveLink\link.ini" section "INBOX" key "new"
+0AAB:   file_exists "cleo\\GroveLink\\link.ini"
+004D: jf @INB_NOFILE
+0AF4: 0@s = read_string_from_ini_file "cleo\\GroveLink\\link.ini" section "INBOX" key "msg"
+0AD1: show_formatted_text_highpriority "SMS: %s" time 4500 0@s
+0AF1: write_int 0 to_ini_file "cleo\\GroveLink\\link.ini" section "INBOX" key "new"
+0051: return
+:INB_NOFILE
+0ACD: show_text_highpriority "RUN START_GROVELINK.BAT" time 2200
+0051: return
+
+:SEND_REPLY
+00D6: if
+0AAB:   file_exists "cleo\\GroveLink\\link.ini"
+004D: jf @INB_NOFILE
+00D6: if
+0039:   22@ == 0
+004D: jf @RP1
+0AF2: write_string "On my way" to_ini_file "cleo\\GroveLink\\link.ini" section "OUTBOX" key "msg"
+0ACD: show_text_highpriority "CJ: On my way" time 2000
+0002: jump @RP_GO
+:RP1
+00D6: if
+0039:   22@ == 1
+004D: jf @RP2
+0AF2: write_string "Meet at Grove" to_ini_file "cleo\\GroveLink\\link.ini" section "OUTBOX" key "msg"
+0ACD: show_text_highpriority "CJ: Meet at Grove" time 2000
+0002: jump @RP_GO
+:RP2
+00D6: if
+0039:   22@ == 2
+004D: jf @RP3
+0AF2: write_string "Can't talk, busy" to_ini_file "cleo\\GroveLink\\link.ini" section "OUTBOX" key "msg"
+0ACD: show_text_highpriority "CJ: Can't talk, busy" time 2000
+0002: jump @RP_GO
+:RP3
+0AF2: write_string "Where you at?" to_ini_file "cleo\\GroveLink\\link.ini" section "OUTBOX" key "msg"
+0ACD: show_text_highpriority "CJ: Where you at?" time 2000
+:RP_GO
+0AF1: write_int 1 to_ini_file "cleo\\GroveLink\\link.ini" section "OUTBOX" key "new"
+018C: play_sound 1052 at 0.0 0.0 0.0
+0006: 21@ = 3
+0006: 22@ = 0
+0051: return
+
+:POLL_SMS
+000A: 30@ += 1
+00D6: if
+0019:   30@ > 55
+004D: jf @POLL_X
+0006: 30@ = 0
+00D6: if
+0AAB:   file_exists "cleo\\GroveLink\\link.ini"
+004D: jf @POLL_X
+0AF0: 9@ = read_int_from_ini_file "cleo\\GroveLink\\link.ini" section "INBOX" key "new"
 00D6: if
 0039:   9@ == 1
-004D: jf @INB_NONEW
-0ACD: show_text_highpriority "NEW TEXT ON REAL PHONE PAGE" time 2500
-0AF1: write_int 0 to_ini_file "cleo\GroveLink\link.ini" section "INBOX" key "new"
+004D: jf @POLL_X
+00D6: if
+0039:   31@ == 0
+004D: jf @POLL_X
+0006: 31@ = 1
+018C: play_sound 1138 at 0.0 0.0 0.0
+0ACD: show_text_highpriority "1 NEW TEXT  K then MESSAGES" time 2800
+:POLL_X
 0051: return
-:INB_NONEW
-0ACD: show_text_highpriority "INBOX EMPTY  use real phone page" time 2200
+
+:START_CALL
+0006: 21@ = 4
+00D6: if
+0039:   24@ == 0
+004D: jf @CALL_RING
+00D6: if
+00DF:   actor $PLAYER_ACTOR driving
+004D: jf @CALL_HAND
+0002: jump @CALL_RING
+:CALL_HAND
+0729: task_use_mobile_phone $PLAYER_ACTOR 1
+0006: 24@ = 1
+:CALL_RING
+00D6: if
+0039:   26@ == 0
+004D: jf @NM1
+0ACD: show_text_highpriority "CALLING SWEET..." time 1500
+0002: jump @DO_RING
+:NM1
+00D6: if
+0039:   26@ == 1
+004D: jf @NM2
+0ACD: show_text_highpriority "CALLING SMOKE..." time 1500
+0002: jump @DO_RING
+:NM2
+00D6: if
+0039:   26@ == 2
+004D: jf @NM3
+0ACD: show_text_highpriority "CALLING RYDER..." time 1500
+0002: jump @DO_RING
+:NM3
+00D6: if
+0039:   26@ == 3
+004D: jf @NM4
+0ACD: show_text_highpriority "CALLING CESAR..." time 1500
+0002: jump @DO_RING
+:NM4
+00D6: if
+0039:   26@ == 4
+004D: jf @NM5
+0ACD: show_text_highpriority "CALLING OG LOC..." time 1500
+0002: jump @DO_RING
+:NM5
+0ACD: show_text_highpriority "CALLING KENDL..." time 1500
+:DO_RING
+29@ = 23000
+0050: gosub @PLAY_WAV
+00D6: if
+0039:   26@ == 0
+004D: jf @CS1
+00BC: text_highpriority 'GLSW1' 4000 1
+29@ = 29000
+0050: gosub @PLAY_WAV
+00BC: text_highpriority 'GLSW2' 4000 1
+29@ = 29001
+0050: gosub @PLAY_WAV
+00BC: text_highpriority 'GLSW3' 4000 1
+29@ = 29002
+0050: gosub @PLAY_WAV
+0002: jump @CALL_END
+:CS1
+00D6: if
+0039:   26@ == 1
+004D: jf @CS2
+00BC: text_highpriority 'GLSM1' 4000 1
+29@ = 28800
+0050: gosub @PLAY_WAV
+00BC: text_highpriority 'GLSM2' 4000 1
+29@ = 28801
+0050: gosub @PLAY_WAV
+00BC: text_highpriority 'GLSM3' 4000 1
+29@ = 28802
+0050: gosub @PLAY_WAV
+0002: jump @CALL_END
+:CS2
+00D6: if
+0039:   26@ == 2
+004D: jf @CS3
+00BC: text_highpriority 'GLRY1' 4000 1
+29@ = 20200
+0050: gosub @PLAY_WAV
+00BC: text_highpriority 'GLRY2' 4000 1
+29@ = 20201
+0050: gosub @PLAY_WAV
+00BC: text_highpriority 'GLRY3' 4000 1
+29@ = 20202
+0050: gosub @PLAY_WAV
+0002: jump @CALL_END
+:CS3
+00D6: if
+0039:   26@ == 3
+004D: jf @CS4
+00BC: text_highpriority 'GLCE1' 4000 1
+29@ = 25200
+0050: gosub @PLAY_WAV
+00BC: text_highpriority 'GLCE2' 4000 1
+29@ = 25201
+0050: gosub @PLAY_WAV
+00BC: text_highpriority 'GLCE3' 4000 1
+29@ = 25202
+0050: gosub @PLAY_WAV
+0002: jump @CALL_END
+:CS4
+00D6: if
+0039:   26@ == 4
+004D: jf @CS5
+00BC: text_highpriority 'GLOG1' 4000 1
+29@ = 27400
+0050: gosub @PLAY_WAV
+00BC: text_highpriority 'GLOG2' 4000 1
+29@ = 27401
+0050: gosub @PLAY_WAV
+00BC: text_highpriority 'GLOG3' 4000 1
+29@ = 27402
+0050: gosub @PLAY_WAV
+0002: jump @CALL_END
+:CS5
+00BC: text_highpriority 'GLKE1' 4000 1
+29@ = 27000
+0050: gosub @PLAY_WAV
+00BC: text_highpriority 'GLKE2' 4000 1
+29@ = 27001
+0050: gosub @PLAY_WAV
+00BC: text_highpriority 'GLKE3' 4000 1
+29@ = 27002
+0050: gosub @PLAY_WAV
+:CALL_END
+00BE: text_clear_all
+0ACD: show_text_highpriority "CALL ENDED" time 1200
+018C: play_sound 1139 at 0.0 0.0 0.0
+0006: 21@ = 1
+0006: 22@ = 0
 0051: return
-:INB_EMPTY
-0ACD: show_text_highpriority "RUN START_GROVELINK.BAT" time 2200
+
+:PLAY_WAV
+040D: unload_wav 1
+03CF: load_wav 29@ as 1
+16@ = 0
+:PW_LOAD
+0001: wait 0
+000A: 16@ += 1
+00D6: if
+03D0:   wav 1 loaded
+004D: jf @PW_LTO
+0949: link_wav 1 to_actor $PLAYER_ACTOR
+03D1: play_wav 1
+16@ = 0
+:PW_PLAY
+0001: wait 0
+000A: 16@ += 1
+00D6: if
+03D2:   wav 1 ended
+004D: jf @PW_PTO
+0002: jump @PW_DONE
+:PW_LTO
+00D6: if
+0019:   16@ > 80
+004D: jf @PW_LOAD
+0002: jump @PW_DONE
+:PW_PTO
+00D6: if
+0019:   16@ > 360
+004D: jf @PW_PLAY
+:PW_DONE
+040D: unload_wav 1
 0051: return
 
 :CLOSE_PHONE
@@ -475,13 +677,15 @@
 0006: 22@ = 0
 00D6: if
 0039:   24@ == 1
-004D: jf @CLOSE_TXT
+004D: jf @CL_TXT
 00D6: if
 0256:   player $PLAYER_CHAR defined
-004D: jf @CLOSE_TXT
+004D: jf @CL_TXT
 0729: task_use_mobile_phone $PLAYER_ACTOR 0
 0006: 24@ = 0
-:CLOSE_TXT
-0ACD: show_text_highpriority "GROVELINK CLOSED" time 900
+:CL_TXT
+040D: unload_wav 1
+00BE: text_clear_all
+0ACD: show_text_highpriority "GROVELINK CLOSED" time 800
 018C: play_sound 1139 at 0.0 0.0 0.0
 0051: return
