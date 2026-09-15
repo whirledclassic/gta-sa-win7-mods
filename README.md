@@ -11,6 +11,13 @@ CLEO mods for **GTA SA PC 1.0** on **Windows 7** (pack version: root **`VERSION`
 
 Docs: [FEATURES](grovelink/FEATURES.md) · [CHANGELOG](CHANGELOG.md) · [TROUBLESHOOTING](grovelink/TROUBLESHOOTING.md). Not affiliated with Rockstar. Single-player only.
 
+## Changelog — 1.8.2 (Breaking News location tags)
+
+- Herald articles get optional **location** tags (📍 badge on `/news` + `/news/<id>`).
+- CLEO **NEWS** writes `NEWS.zone` (real zone key + coarse SA places); **CAMERA** still gallery-only (no NEWS keys).
+- Web Breaking News confirm: SA place dropdown / typed location → `POST /news` `location=`.
+- Smoke covers location in HTML + NEWS.make with zone.
+
 ## Changelog — 1.8.1 (Camera ≠ Breaking News)
 
 - **Camera ≠ Breaking News:** CAMERA only snaps to phone/PC gallery. Separate CLEO **NEWS** menu snaps + files Grove Street Herald (`NEWS.make=1`). Removed `news.auto` entirely — Camera can never trigger news.

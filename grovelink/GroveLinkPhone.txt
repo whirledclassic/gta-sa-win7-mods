@@ -5,7 +5,7 @@
 // K toggle | UP/DOWN wrap | ENTER or SPACE select | BACKSPACE close
 // Menu: CAMERA / INBOX / NEWS / CONTACTS / STATUS / HELP / CLOSE — labels via 0ACD only.
 // CAMERA = pics to phone/PC gallery ONLY (never writes NEWS keys / never triggers Herald).
-// NEWS = snap + NEWS.make=1 so bridge files Grove Street Herald article (separate feature).
+// NEWS = snap + NEWS.make=1 + NEWS.zone location tag so bridge files Herald (separate feature).
 // INBOX plays 018C when new=1. CONTACTS cycles static flavor lines (no models).
 // STATUS LIVE flashes photo count + PHONE PAGE ON PC; INBOX shows NO NEW TEXTS when empty.
 // Closed-phone: SMS FROM REAL PHONE notify (once per new) + NEWS FILED toast after bridge files.
@@ -253,7 +253,7 @@
 00D6: if
 0039:   22@ == 2
 004D: jf @SEL_CONTACTS
-// NEWS: snap + PHOTO.take + count + NEWS.make=1 (bridge files Herald). Separate from Camera.
+// NEWS: snap + PHOTO.take + count + NEWS.make=1 + NEWS.zone (location tag). Separate from Camera.
 0A2F: set_photo_camera_effect 1
 0001: wait 80
 0A1E: take_photo 1
@@ -268,6 +268,89 @@
 000A: 25@ += 1
 0AF1: write_int 25@ to_ini_file "cleo\GroveLink\link.ini" section "PHOTO" key "count"
 0AF1: write_int 1 to_ini_file "cleo\GroveLink\link.ini" section "NEWS" key "make"
+// Location tag for Herald (NEWS only — Camera never writes NEWS.zone)
+00A0: store_actor $PLAYER_ACTOR position_to 1@ 2@ 3@
+// Prefer real info-zone GXT key via 0843 (string only; no 033E draw)
+0843: get_name_of_zone 1@ 2@ 3@ store_to 0@s
+0AF5: write_string 0@s to_ini_file "cleo\GroveLink\link.ini" section "NEWS" key "zone"
+// Coarse friendly overrides (if-ladder). Falls through keeps 0843 key.
+00D6: if and
+0021:   1@ > 2420.0
+0023:   2560.0 > 1@
+0021:   2@ > -1750.0
+0023:   -1600.0 > 2@
+004D: jf @LOC_GANTON
+0AF5: write_string "Grove Street" to_ini_file "cleo\GroveLink\link.ini" section "NEWS" key "zone"
+0002: jump @LOC_DONE
+:LOC_GANTON
+00D6: if and
+0021:   1@ > 2440.0
+0023:   2620.0 > 1@
+0021:   2@ > -1900.0
+0023:   -1700.0 > 2@
+004D: jf @LOC_IDLE
+0AF5: write_string "Ganton" to_ini_file "cleo\GroveLink\link.ini" section "NEWS" key "zone"
+0002: jump @LOC_DONE
+:LOC_IDLE
+00D6: if and
+0021:   1@ > 1850.0
+0023:   2150.0 > 1@
+0021:   2@ > -1900.0
+0023:   -1550.0 > 2@
+004D: jf @LOC_AIR
+0AF5: write_string "Idlewood" to_ini_file "cleo\GroveLink\link.ini" section "NEWS" key "zone"
+0002: jump @LOC_DONE
+:LOC_AIR
+00D6: if and
+0021:   1@ > 1400.0
+0023:   2100.0 > 1@
+0021:   2@ > -2700.0
+0023:   -2100.0 > 2@
+004D: jf @LOC_EBEACH
+0AF5: write_string "LS Airport" to_ini_file "cleo\GroveLink\link.ini" section "NEWS" key "zone"
+0002: jump @LOC_DONE
+:LOC_EBEACH
+00D6: if and
+0021:   1@ > 2650.0
+0023:   2950.0 > 1@
+0021:   2@ > -1900.0
+0023:   -1300.0 > 2@
+004D: jf @LOC_VINE
+0AF5: write_string "East Beach" to_ini_file "cleo\GroveLink\link.ini" section "NEWS" key "zone"
+0002: jump @LOC_DONE
+:LOC_VINE
+00D6: if and
+0021:   1@ > 600.0
+0023:   1400.0 > 1@
+0021:   2@ > -1000.0
+0023:   -200.0 > 2@
+004D: jf @LOC_SF
+0AF5: write_string "Vinewood" to_ini_file "cleo\GroveLink\link.ini" section "NEWS" key "zone"
+0002: jump @LOC_DONE
+:LOC_SF
+00D6: if and
+0023:   -1000.0 > 1@
+0021:   2@ > -1500.0
+0023:   1200.0 > 2@
+004D: jf @LOC_LV
+0AF5: write_string "San Fierro" to_ini_file "cleo\GroveLink\link.ini" section "NEWS" key "zone"
+0002: jump @LOC_DONE
+:LOC_LV
+00D6: if and
+0021:   1@ > 1200.0
+0021:   2@ > 600.0
+004D: jf @LOC_CHILI
+0AF5: write_string "Las Venturas" to_ini_file "cleo\GroveLink\link.ini" section "NEWS" key "zone"
+0002: jump @LOC_DONE
+:LOC_CHILI
+00D6: if and
+0021:   1@ > -2900.0
+0023:   -2100.0 > 1@
+0021:   2@ > -2200.0
+0023:   -1400.0 > 2@
+004D: jf @LOC_DONE
+0AF5: write_string "Mount Chiliad" to_ini_file "cleo\GroveLink\link.ini" section "NEWS" key "zone"
+:LOC_DONE
 0ACD: show_text_highpriority "BREAKING NEWS SNAP" time 2200
 0002: jump @KEY_BACK
 :NEWS_NOINI

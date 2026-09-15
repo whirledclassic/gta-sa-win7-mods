@@ -29,7 +29,7 @@ Until PR #1 merges, `update.ini` defaults to branch `fix/grovelink-camera-snapsh
 - **Backspace** — close
 - **CAMERA** — snap to phone/PC gallery only; shutter sound (`018C`); **PHOTO TAKEN #N**; **never** files news
 - **INBOX** — when `new=1` shows SMS + sound; otherwise **NO NEW TEXTS**
-- **NEWS** — **separate** from Camera: snap + `NEWS.make=1` → bridge files Grove Street Herald; **BREAKING NEWS SNAP**
+- **NEWS** — **separate** from Camera: snap + `NEWS.make=1` + `NEWS.zone` location → Herald with 📍 badge; **BREAKING NEWS SNAP**
 - **Closed phone** — new SMS still shows **SMS FROM REAL PHONE** (once) so you open **K**
 - **NEWS FILED** — toast when bridge sets `NEWS.new=1` (after NEWS menu or web Breaking News)
 - **CONTACTS** — flavor only: cycles Sweet / Smoke / Ryder / Cesar / **Catalina** lines via `0ACD` (static text, no ped models; advances each select)

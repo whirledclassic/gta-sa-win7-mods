@@ -1,6 +1,6 @@
 # GroveLink — current features
 
-Pack version: see root **`VERSION`** (`1.8.1`). Crash-safer CLEO (no `hold_cellphone`, no custom GXT `033E`). Bridge is **stdlib-only** (Win7 Python 2.7 / 3.4–3.8).
+Pack version: see root **`VERSION`** (`1.8.2`). Crash-safer CLEO (no `hold_cellphone`, no custom GXT `033E`). Bridge is **stdlib-only** (Win7 Python 2.7 / 3.4–3.8).
 
 ## Install / update / verify / test
 
@@ -22,7 +22,7 @@ Pack version: see root **`VERSION`** (`1.8.1`). Crash-safer CLEO (no `hold_cellp
 |------|----------|
 | **CAMERA** | Snap (Enter/Space); shutter sound; `PHOTO.take` + count; **PHOTO TAKEN #N**. **Gallery only — never writes NEWS keys / never files Herald** |
 | **INBOX** | Shows SMS when `new=1`; otherwise **NO NEW TEXTS**; sound when new |
-| **NEWS** | **Separate feature:** snap + `PHOTO.take` + count + `NEWS.make=1` → bridge files Grove Street Herald; shows **BREAKING NEWS SNAP** |
+| **NEWS** | **Separate feature:** snap + `PHOTO.take` + count + `NEWS.make=1` + **`NEWS.zone` location tag** → bridge files Herald with 📍 badge; shows **BREAKING NEWS SNAP** |
 | **Closed-phone SMS** | If `INBOX.new=1`, once: **SMS FROM REAL PHONE** (0ACD + sound) so you open **K** |
 | **NEWS toast** | If `NEWS.new=1` (after NEWS menu or web Breaking News): **NEWS FILED** once, then clears flag |
 | **CONTACTS** | Cycles Sweet / Smoke / Ryder / Cesar / **Catalina** flavor lines (static text; advances each select) |

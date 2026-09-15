@@ -7,6 +7,7 @@ Starts the bridge HTTP server on an ephemeral port, asserts:
 Optional: gallery copy + last_error + skipped_deleted + sort HTML + clear confirm +
 help footer + empty-action disable + VERIFY VERSION + CHANGELOG + port-busy + README polish.
 1.8.1: Camera≠NEWS — PHOTO.take alone no news; NEWS.make creates article; POST /news; no news_auto.
+1.8.2: Breaking News location tags — POST /news location in HTML; NEWS.make with zone in ini.
 
 Run from repo root or anywhere:
   python tests/smoke_bridge.py
@@ -398,6 +399,7 @@ def main():
         check("GET / has chat thread", 'id="chat_thread"' in html or "TEXTS TO CJ" in html)
         check("GET / has Grove Street Herald link", "/news" in html and "Herald" in html)
         check("GET / has Share page / sharePhoto", "share_page" in html or "sharePhoto" in html)
+        check("GET / has Breaking News location dlg", "news_dlg" in html and "news_loc_sel" in html)
     except Exception as exc:
         check("gallery HTML 1.8.0", False, exc)
 
@@ -422,7 +424,7 @@ def main():
         check("GET /news Los Santos Weather", "Los Santos Weather" in html_n)
         req = Request(
             "http://127.0.0.1:%s/news" % port,
-            data=("file=" + latest + "&caption=Smoke+Herald+caption").encode("utf-8"),
+            data=("file=" + latest + "&caption=Smoke+Herald+caption&location=Grove+Street").encode("utf-8"),
             headers={"Content-Type": "application/x-www-form-urlencoded"},
         )
         resp = urlopen(req, timeout=5)
@@ -431,6 +433,7 @@ def main():
         jn = json.loads(body.decode("utf-8") if isinstance(body, bytes) else body)
         check("POST /news status 200", code == 200, code)
         check("POST /news ok + id", jn.get("ok") is True and bool(jn.get("id")), jn)
+        check("POST /news returns location", jn.get("location") == "Grove Street", jn)
         art_id = jn.get("id") or ""
         if art_id:
             code_a, raw_a = http_get(port, "/news/" + art_id)
@@ -438,10 +441,16 @@ def main():
             check("GET /news/<id> 200", code_a == 200, code_a)
             check("GET /news/<id> has headline", bool(jn.get("headline")) and (jn.get("headline") in html_a), jn.get("headline"))
             check("GET /news/<id> embeds photo img", ("/photo/" + latest) in html_a or 'src="/photo/' in html_a, html_a[:200])
+            check("GET /news/<id> location badge", "Grove Street" in html_a and ("📍" in html_a or "locbadge" in html_a), html_a[html_a.find("locbadge")-20:html_a.find("locbadge")+80] if "locbadge" in html_a else html_a[:300])
+            check("GET /news/<id> headline uses location", "Grove Street" in (jn.get("headline") or ""), jn.get("headline"))
             # NEWS.new flag in ini
             with open(server.link_ini, "r") as f:
                 ini2 = f.read()
             check("POST /news sets NEWS.new=1", "new=1" in ini2.split("[NEWS]")[-1] if "[NEWS]" in ini2 else False, ini2[-200:])
+            # Index also shows location
+            code_n2, raw_n2 = http_get(port, "/news")
+            html_n2 = raw_n2.decode("utf-8") if isinstance(raw_n2, bytes) else raw_n2
+            check("GET /news index shows location", "Grove Street" in html_n2 and ("📍" in html_n2 or "locbadge" in html_n2), html_n2[:400])
         # caption endpoint
         req_c = Request(
             "http://127.0.0.1:%s/caption" % port,
@@ -502,7 +511,7 @@ def main():
                 "[INBOX]\nnew=0\nfrom=\nmsg=\n"
                 "[PHOTO]\ntake=1\ncount=2\n"
                 "[STATUS]\nbridge=1\n"
-                "[NEWS]\nnew=0\nmake=1\n"
+                "[NEWS]\nnew=0\nmake=1\nzone=Idlewood\n"
             )
         handled2 = gl.process_photo_and_news_flags(
             empty_cfg, tmp, server.link_ini, burst_seconds=0.05, burst_interval=0.02
@@ -515,6 +524,20 @@ def main():
         check("NEWS.make creates article", after_make == before_make + 1,
               "before=%s after=%s" % (before_make, after_make))
         check("NEWS.make sets NEWS.new=1", "new=1" in ini_make.split("[NEWS]")[-1] if "[NEWS]" in ini_make else False, ini_make[-200:])
+        # Location from NEWS.zone on article + HTML (find Idlewood among recent; mtime sort may tie)
+        arts_make = gl.list_news_articles(10)
+        art_loc = None
+        for a in arts_make:
+            if (a.get("location") or "") == "Idlewood":
+                art_loc = a
+                break
+        check("NEWS.make article has location Idlewood", art_loc is not None, arts_make[:3] if arts_make else None)
+        if art_loc and art_loc.get("id"):
+            code_ml, raw_ml = http_get(port, "/news/" + art_loc["id"])
+            html_ml = raw_ml.decode("utf-8") if isinstance(raw_ml, bytes) else raw_ml
+            check("NEWS.make location appears in HTML", "Idlewood" in html_ml and ("📍" in html_ml or "locbadge" in html_ml), html_ml[:400])
+        else:
+            check("NEWS.make location appears in HTML", False, "no Idlewood article")
         # shutter_burst source must not mention news_auto
         with open(os.path.join(BRIDGE, "grovelink_server.py"), "r") as f:
             srv_src = f.read()
@@ -570,6 +593,9 @@ def main():
         if ":SEL_NEWS" in full and ":SEL_CONTACTS" in full:
             news_sel = full.split(":SEL_NEWS", 1)[1].split(":SEL_CONTACTS", 1)[0]
         check("CLEO NEWS select writes NEWS.make", 'key "make"' in news_sel)
+        check("CLEO NEWS writes NEWS.zone", 'key "zone"' in news_sel or 'section "NEWS" key "zone"' in news_sel)
+        check("CLEO NEWS uses 0843 or coord ladder", "0843" in news_sel or "Grove Street" in news_sel)
+        check("CLEO CAMERA select omits NEWS.zone", 'key "zone"' not in cam_sel)
         check("CLEO CONTACTS Catalina flavor", "CATALINA" in full)
         check("CLEO contacts cycle advances", "26@ = 4" in full and ":CONTACT4" in full)
         check("CLEO SMS FROM REAL PHONE notify", "SMS FROM REAL PHONE" in full)
@@ -624,6 +650,7 @@ def main():
             cl = f.read()
         check("CHANGELOG.md exists with 1.8.0", "1.8.0" in cl and ("Breaking News" in cl or "Herald" in cl or "gallery" in cl.lower()))
         check("CHANGELOG.md has 1.8.1 Camera vs NEWS", "1.8.1" in cl and ("Camera" in cl) and ("news.auto" in cl or "NEWS.make" in cl))
+        check("CHANGELOG.md has 1.8.2 location tags", "1.8.2" in cl and ("location" in cl.lower() or "NEWS.zone" in cl or "📍" in cl))
         check("CHANGELOG covers 1.0 foundation", "1.0" in cl and ("Foundation" in cl or "crash-safer" in cl))
     except Exception as exc:
         check("CHANGELOG.md", False, exc)
@@ -654,7 +681,7 @@ def main():
     except Exception as exc:
         check("README polish", False, exc)
 
-    check("VERSION is 1.8.1", pack_ver == "1.8.1", pack_ver)
+    check("VERSION is 1.8.2", pack_ver == "1.8.2", pack_ver)
 
     # Runtime: after clear, HTML still disables; after photo, actions enabled via setCountActions path
     # (API count already covered; spot-check helper exists in page source above)

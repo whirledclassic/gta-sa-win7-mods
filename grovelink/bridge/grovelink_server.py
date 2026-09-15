@@ -263,7 +263,7 @@ def ensure_dirs(cfg, gta_dir):
                     "[PHOTO]\ntake=0\ncount=0\n\n"
                     "[INBOX]\nnew=0\nfrom=REAL PHONE\nmsg=\n\n"
                     "[STATUS]\nbridge=1\nip=0.0.0.0\n\n"
-                    "[NEWS]\nnew=0\nmake=0\n"
+                    "[NEWS]\nnew=0\nmake=0\nzone=\n"
                 )
         except Exception:
             pass
@@ -654,6 +654,41 @@ _NEWS_WEATHER = (
     "Clear skies; keep your phone charged, CJ",
 )
 
+# Map common SA info-zone GXT keys (0843, max 8 chars) → Herald-friendly tags
+_ZONE_FRIENDLY = {
+    "GAN1": "Grove Street", "GAN2": "Ganton", "LAE": "East Los Santos",
+    "LAE2": "East Beach", "LAES": "Los Santos", "IDLE": "Idlewood",
+    "JEFF": "Jefferson", "GLN1": "Glen Park", "GLN2": "Glen Park",
+    "LMEX": "Little Mexico", "LIND": "Los Santos", "COM": "Commerce",
+    "IWD": "Idlewood", "ELS": "El Corona", "LDOC": "Ocean Docks",
+    "LSX": "LS Airport", "VEG": "Las Venturas", "VEGA": "Las Venturas",
+    "VEGE": "Las Venturas", "VEGS": "Las Venturas", "ROCE": "Rodeo",
+    "SUN1": "Santa Maria Beach", "SUN2": "Santa Maria Beach",
+    "VIN1": "Vinewood", "VIN2": "Vinewood", "VIN3": "Vinewood",
+    "SMB": "Santa Maria Beach", "MAR": "Marina", "LDT": "Downtown LS",
+    "LDS": "Los Santos", "BLUF": "Verdant Bluffs", "CHC": "Chinatown",
+    "SUNA": "San Fierro", "SFA": "San Fierro", "SFN": "San Fierro",
+    "SFE": "San Fierro", "SFW": "San Fierro", "SFS": "San Fierro",
+    "HYA": "Hunter Quarry", "BONE": "Bone County", "RED": "Red County",
+    "FLINT": "Flint County", "WHET": "Whetstone", "ANGP": "Angel Pine",
+    "MTCH": "Mount Chiliad", "AREA": "Area 69", "VERO": "Verdant Meadows",
+}
+
+
+def normalize_location(loc):
+    """Sanitize optional location tag from CLEO NEWS.zone / web POST."""
+    if loc is None:
+        return ""
+    s = str(loc).strip().replace("\r", " ").replace("\n", " ")
+    s = s.replace("=", "-")[:48]
+    if not s:
+        return ""
+    key = s.upper().replace(" ", "")
+    if key in _ZONE_FRIENDLY:
+        return _ZONE_FRIENDLY[key]
+    # Already a friendly place (spaces / long enough)
+    return s
+
 
 def _safe_basename(name):
     name = os.path.basename(name or "")
@@ -819,7 +854,7 @@ def _keywords_from_photo(photo_name, mtime=0):
     return bits[:6]
 
 
-def generate_news_article(photo_name, caption="", auto=False):
+def generate_news_article(photo_name, caption="", auto=False, location=""):
     """Build satirical Grove Street Herald article from templates + keywords."""
     photo_name = _safe_basename(photo_name)
     if not photo_name:
@@ -835,9 +870,10 @@ def generate_news_article(photo_name, caption="", auto=False):
         mtime = int(time.time())
     if not caption:
         caption = get_caption(photo_name)
+    location = normalize_location(location)
     kws = _keywords_from_photo(photo_name, mtime)
-    seed = mtime ^ (len(photo_name) * 17) ^ (len(caption) * 31)
-    place = _pick(_NEWS_PLACES, seed)
+    seed = mtime ^ (len(photo_name) * 17) ^ (len(caption) * 31) ^ (len(location) * 13)
+    place = location if location else _pick(_NEWS_PLACES, seed)
     verb = _pick(_NEWS_VERBS, seed // 3)
     subject = _pick(_NEWS_SUBJECTS, seed // 5)
     angle = _pick(_NEWS_ANGLES, seed // 7)
@@ -865,6 +901,9 @@ def generate_news_article(photo_name, caption="", auto=False):
         angle[0].upper() + angle[1:] + ".",
         "",
     ]
+    if location:
+        body_parts.append("Location desk tagged this filing: %s." % location)
+        body_parts.append("")
     if caption:
         body_parts.append('On-scene caption from the real-phone feed: "%s"' % caption[:160])
         body_parts.append("")
@@ -897,6 +936,7 @@ def generate_news_article(photo_name, caption="", auto=False):
         "mtime": mtime,
         "weather": weather,
         "place": place,
+        "location": location,
         "auto": bool(auto),
         "keywords": kws,
     }
@@ -947,8 +987,10 @@ def list_news_articles(limit=40):
     return out[:limit]
 
 
-def create_news_from_photo(photo_name, caption="", auto=False, link_ini=None):
-    article = generate_news_article(photo_name, caption=caption, auto=auto)
+def create_news_from_photo(photo_name, caption="", auto=False, link_ini=None, location=""):
+    article = generate_news_article(
+        photo_name, caption=caption, auto=auto, location=location
+    )
     if not article:
         return False, None, "bad photo"
     ok, art_id = save_news_article(article)
@@ -988,17 +1030,22 @@ def render_news_index():
         hl = _esc(a.get("headline") or "Untitled")
         when = _esc(a.get("filed") or a.get("timestamp") or "")
         photo = _esc(a.get("photo") or "")
+        loc = _esc(a.get("location") or a.get("place") or "")
         thumb = ""
         if photo:
             thumb = (
                 '<a href="/news/%s"><img class="thumb" src="/photo/%s" alt=""></a>'
                 % (aid, photo)
             )
+        loc_badge = ""
+        if loc:
+            loc_badge = '<div class="locbadge">📍 %s</div>' % loc
         rows.append(
             '<article class="card">%s<div class="body">'
             '<a class="hl" href="/news/%s">%s</a>'
+            '%s'
             '<div class="meta">%s · Grove Street Herald</div></div></article>'
-            % (thumb, aid, hl, when)
+            % (thumb, aid, hl, loc_badge, when)
         )
     weather = _pick(_NEWS_WEATHER, int(time.time()) // 3600)
     return (
@@ -1018,6 +1065,8 @@ def render_news_index():
         ".hl{color:#f5e6c8;font-size:18px;font-weight:bold;text-decoration:none;line-height:1.3;}"
         ".hl:hover{color:#c4a35a;}"
         ".meta{font-size:11px;color:#a89060;margin-top:6px;}"
+        ".locbadge{display:inline-block;margin-top:8px;padding:3px 10px;border:1px solid #c4a35a;"
+        "background:#2a1a08;color:#f5e6c8;font-size:12px;font-weight:bold;letter-spacing:0.5px;}"
         ".empty{color:#a89060;line-height:1.5;}"
         ".nav{text-align:center;margin:16px;font-size:13px;}"
         ".nav a{color:#c4a35a;}"
@@ -1043,6 +1092,10 @@ def render_news_article_page(art_id):
     when = _esc(art.get("filed") or art.get("timestamp") or "")
     weather = _esc(art.get("weather") or "")
     caption = _esc(art.get("caption") or "")
+    loc = _esc(art.get("location") or art.get("place") or "")
+    loc_html = ""
+    if loc:
+        loc_html = '<div class="locbadge">📍 %s</div>' % loc
     img = ""
     if photo:
         img = (
@@ -1060,7 +1113,9 @@ def render_news_article_page(art_id):
         ".mast h1{margin:0;font-size:22px;letter-spacing:2px;color:#c4a35a;font-variant:small-caps;}"
         ".wrap{max-width:680px;margin:0 auto;padding:18px 16px 48px;}"
         "h2{font-size:26px;line-height:1.25;margin:0 0 10px;color:#fff8e8;}"
-        ".by{font-size:13px;color:#a89060;margin-bottom:18px;}"
+        ".by{font-size:13px;color:#a89060;margin-bottom:12px;}"
+        ".locbadge{display:inline-block;margin:0 0 16px;padding:4px 12px;border:1px solid #c4a35a;"
+        "background:#2a1a08;color:#f5e6c8;font-size:13px;font-weight:bold;}"
         "figure{margin:0 0 18px;}"
         "figure img{width:100%%;display:block;border:3px solid #c4a35a;background:#000;}"
         "figcaption{font-size:12px;color:#a89060;margin-top:8px;font-style:italic;}"
@@ -1075,12 +1130,13 @@ def render_news_article_page(art_id):
         "<h2>%s</h2>"
         "<div class=\"by\">%s · Filed %s</div>"
         "%s"
+        "%s"
         "<div class=\"story\">%s</div>"
         "<div class=\"weather\"><b>Los Santos Weather:</b> %s</div>"
         "<div class=\"nav\"><a href=\"/news\">&larr; All stories</a> · "
         "<a href=\"/\">Phone feed</a></div>"
         "</div></body></html>"
-    ) % (hl, hl, byline, when, img, body, weather)
+    ) % (hl, hl, byline, when, loc_html, img, body, weather)
 
 
 def attach_captions_to_photos(photos):
@@ -1328,6 +1384,29 @@ HTML_TEMPLATE = """<!DOCTYPE html>
   }
   #confirm_dlg .btn-yes { background:#3a1212; color:#ffb0b0; border:2px solid #a44 !important; }
   #confirm_dlg .btn-no { background:#2cff6a; color:#041006; }
+  #news_dlg {
+    display:none; position:fixed; inset:0; background:rgba(0,0,0,0.82);
+    z-index:100; align-items:center; justify-content:center; padding:16px;
+  }
+  #news_dlg.show { display:flex; }
+  #news_dlg .panel {
+    width:100%; max-width:380px; background:#10180f; border:2px solid #c4a35a;
+    padding:22px 18px; text-align:center; box-sizing:border-box;
+  }
+  #news_dlg h2 { margin:0 0 8px; color:#c4a35a; font-size:18px; letter-spacing:1px; }
+  #news_dlg p { margin:0 0 12px; color:#7aaa7a; font-size:13px; line-height:1.45; }
+  #news_dlg label { display:block; text-align:left; font-size:11px; color:#a89060; margin:8px 0 4px; }
+  #news_dlg select, #news_dlg input {
+    width:100%; box-sizing:border-box; padding:12px; border:1px solid #c4a35a;
+    background:#0b0f0c; color:#f5e6c8; font-size:15px; min-height:44px;
+  }
+  #news_dlg .btns { display:flex; gap:12px; margin-top:16px; }
+  #news_dlg .btns button {
+    flex:1; min-height:56px; font-size:16px; font-weight:bold; border:0; cursor:pointer;
+    padding:14px 12px;
+  }
+  #news_dlg .btn-go { background:#c4a35a; color:#1a1510; }
+  #news_dlg .btn-cancel { background:#1a2a1a; color:#d7ffd0; border:1px solid #2cff6a; }
   .helpfoot {
     margin:8px 12px 20px; padding:12px 14px; background:#0b0f0c; border:1px solid #1a4;
     font-size:11px; color:#7aaa7a; line-height:1.55; border-radius:2px;
@@ -1448,6 +1527,38 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     <div class="btns">
       <button type="button" class="btn-no" id="confirm_no">Cancel</button>
       <button type="button" class="btn-yes" id="confirm_yes">Delete</button>
+    </div>
+  </div>
+</div>
+
+<div id="news_dlg" onclick="newsDlgCancel(event)">
+  <div class="panel" onclick="event.stopPropagation()">
+    <h2>File Breaking News?</h2>
+    <p>Optional San Andreas location tag for the Herald badge.</p>
+    <label for="news_loc_sel">Place</label>
+    <select id="news_loc_sel">
+      <option value="">(optional — pick or type)</option>
+      <option value="Grove Street">Grove Street</option>
+      <option value="Ganton">Ganton</option>
+      <option value="Idlewood">Idlewood</option>
+      <option value="LS Airport">LS Airport</option>
+      <option value="East Beach">East Beach</option>
+      <option value="Vinewood">Vinewood</option>
+      <option value="Los Santos">Los Santos</option>
+      <option value="San Fierro">San Fierro</option>
+      <option value="Las Venturas">Las Venturas</option>
+      <option value="Mount Chiliad">Mount Chiliad</option>
+      <option value="Angel Pine">Angel Pine</option>
+      <option value="Area 69">Area 69</option>
+      <option value="Verdant Meadows">Verdant Meadows</option>
+      <option value="Flint County">Flint County</option>
+      <option value="Red County">Red County</option>
+    </select>
+    <label for="news_loc_txt">Or type a location</label>
+    <input id="news_loc_txt" type="text" maxlength="48" placeholder="e.g. Grove Street">
+    <div class="btns">
+      <button type="button" class="btn-cancel" id="news_cancel">Cancel</button>
+      <button type="button" class="btn-go" id="news_go">File story</button>
     </div>
   </div>
 </div>
@@ -1691,11 +1802,40 @@ function saveCaption(name, val) {
   };
   x.send(body);
 }
+var PENDING_NEWS = '';
+function newsDlgCancel(ev) {
+  if (ev) ev.stopPropagation();
+  PENDING_NEWS = '';
+  var dlg = document.getElementById('news_dlg');
+  if (dlg) dlg.className = '';
+}
+function newsDlgFile() {
+  var name = PENDING_NEWS;
+  var sel = document.getElementById('news_loc_sel');
+  var txt = document.getElementById('news_loc_txt');
+  var loc = '';
+  if (txt && (txt.value || '').trim()) loc = (txt.value || '').trim();
+  else if (sel && sel.value) loc = sel.value;
+  newsDlgCancel();
+  if (!name) return;
+  doBreakingNews(name, loc);
+}
 function breakingNews(name) {
+  if (!name) return;
+  PENDING_NEWS = name;
+  var sel = document.getElementById('news_loc_sel');
+  var txt = document.getElementById('news_loc_txt');
+  if (sel) sel.value = '';
+  if (txt) txt.value = '';
+  var dlg = document.getElementById('news_dlg');
+  if (dlg) dlg.className = 'show';
+}
+function doBreakingNews(name, location) {
   if (!name) return;
   var capEl = document.getElementById('cap_' + cssId(name));
   var cap = capEl ? (capEl.value || '') : '';
   var body = 'file=' + encodeURIComponent(name) + '&caption=' + encodeURIComponent(cap);
+  if (location) body += '&location=' + encodeURIComponent(location);
   var x = new XMLHttpRequest();
   x.open('POST', '/news', true);
   x.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
@@ -2073,6 +2213,12 @@ if (!getLastVisit()) {
 }
 document.getElementById('confirm_yes').onclick = function(ev){ if(ev)ev.stopPropagation(); confirmYes(); };
 document.getElementById('confirm_no').onclick = function(ev){ if(ev)ev.stopPropagation(); confirmCancel(ev); };
+(function(){
+  var go = document.getElementById('news_go');
+  var cancel = document.getElementById('news_cancel');
+  if (go) go.onclick = function(ev){ if(ev)ev.stopPropagation(); newsDlgFile(); };
+  if (cancel) cancel.onclick = function(ev){ if(ev)ev.stopPropagation(); newsDlgCancel(ev); };
+})();
 function toggleHelpDetail(force) {
   var d = document.getElementById('help_detail');
   var t = document.getElementById('help_toggle');
@@ -2095,6 +2241,8 @@ document.addEventListener('keydown', function(ev) {
   if (code === 27 || key === 'Escape') {
     var lb = document.getElementById('lightbox');
     if (lb && lb.className === 'show') { closeLb(ev); return; }
+    var nd = document.getElementById('news_dlg');
+    if (nd && nd.className === 'show') { newsDlgCancel(ev); return; }
     var dlg = document.getElementById('confirm_dlg');
     if (dlg && dlg.className === 'show') { confirmCancel(ev); return; }
   }
@@ -2588,11 +2736,13 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/news":
             name = ""
             caption = ""
+            location = ""
             if text_body.lstrip().startswith("{"):
                 try:
                     obj = json.loads(text_body)
                     name = obj.get("file") or obj.get("photo") or ""
                     caption = obj.get("caption") or ""
+                    location = obj.get("location") or obj.get("zone") or obj.get("loc") or ""
                 except Exception:
                     name = ""
             else:
@@ -2603,9 +2753,15 @@ class Handler(BaseHTTPRequestHandler):
                     name = fields["photo"][0]
                 if "caption" in fields and fields["caption"]:
                     caption = fields["caption"][0]
+                if "location" in fields and fields["location"]:
+                    location = fields["location"][0]
+                elif "zone" in fields and fields["zone"]:
+                    location = fields["zone"][0]
+                elif "loc" in fields and fields["loc"]:
+                    location = fields["loc"][0]
             link = getattr(self.server, "link_ini", None) or STATE.get("link_ini") or ""
             ok, article, detail = create_news_from_photo(
-                name, caption=caption, auto=False, link_ini=link
+                name, caption=caption, auto=False, link_ini=link, location=location
             )
             if not ok or not article:
                 self._json({"ok": False, "detail": detail or "failed"}, code=400)
@@ -2614,6 +2770,7 @@ class Handler(BaseHTTPRequestHandler):
                 "ok": True,
                 "id": article.get("id"),
                 "headline": article.get("headline"),
+                "location": article.get("location") or "",
                 "url": "/news/%s" % article.get("id"),
             })
             return
@@ -2675,16 +2832,22 @@ def process_photo_and_news_flags(cfg, gta_dir, ini, burst_seconds=3.5, burst_int
 
     PHOTO.take alone (Camera): burst-copy gallery → phone page. Never creates news.
     NEWS.make (NEWS menu): burst-copy like shutter, then create_news_from_photo on
-    newest bridge photo and set NEWS.new=1 for CLEO toast.
+    newest bridge photo (with NEWS.zone/loc) and set NEWS.new=1 for CLEO toast.
     """
     take = read_ini_key(ini, "PHOTO", "take", "0")
     make = read_ini_key(ini, "NEWS", "make", "0")
     if take != "1" and make != "1":
         return False
+    news_location = ""
+    if make == "1":
+        news_location = (
+            read_ini_key(ini, "NEWS", "zone", "")
+            or read_ini_key(ini, "NEWS", "loc", "")
+        )
     if take == "1":
         write_ini_kv(ini, "PHOTO", {"take": "0"})
     if make == "1":
-        write_ini_kv(ini, "NEWS", {"make": "0"})
+        write_ini_kv(ini, "NEWS", {"make": "0", "zone": ""})
     label = "News snap" if make == "1" else "Shutter"
     print("%s — fast poll for new Gallery files..." % label)
     shutter_burst(cfg, gta_dir, seconds=burst_seconds, interval=burst_interval)
@@ -2700,12 +2863,14 @@ def process_photo_and_news_flags(cfg, gta_dir, ini, burst_seconds=3.5, burst_int
                     caption=get_caption(newest),
                     auto=False,
                     link_ini=ini,
+                    location=news_location,
                 )
                 if ok and art:
                     print(
                         "Breaking News filed:",
                         art.get("id"),
                         (art.get("headline") or "")[:60],
+                        ("@ " + (art.get("location") or "")) if art.get("location") else "",
                     )
                 else:
                     print("Breaking News failed:", detail)

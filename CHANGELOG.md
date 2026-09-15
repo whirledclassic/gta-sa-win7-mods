@@ -1,6 +1,14 @@
 # GroveLink changelog
 
-Human-readable highlights from pack **1.0 → 1.8.1**. Full detail also lives in root `README.md` round notes and [grovelink/FEATURES.md](grovelink/FEATURES.md).
+Human-readable highlights from pack **1.0 → 1.8.2**. Full detail also lives in root `README.md` round notes and [grovelink/FEATURES.md](grovelink/FEATURES.md).
+
+## 1.8.2 — Breaking News location tags
+
+- **Location tags:** Herald articles store optional `location` (San Andreas place/zone).
+- **CLEO NEWS only:** after snap + `NEWS.make=1`, writes `NEWS.zone` (0843 info-zone key + coarse if-ladder: Grove Street / Idlewood / LS Airport / …). **CAMERA never writes NEWS keys.**
+- **Bridge:** on `NEWS.make`, reads `NEWS.zone`/`loc` → `create_news_from_photo(..., location=)`; web `POST /news` accepts `location`; headlines use location when present; `/news` + `/news/<id>` show a 📍 location badge.
+- **Phone page:** Breaking News confirm dialog — SA place dropdown or typed location before filing.
+- Smoke: article with location in HTML; NEWS.make flow with zone in ini; VERSION **1.8.2**.
 
 ## 1.8.1 — Camera ≠ Breaking News
 

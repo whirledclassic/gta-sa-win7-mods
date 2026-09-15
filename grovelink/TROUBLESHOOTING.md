@@ -181,6 +181,8 @@ If CJ never sees it: VERIFY `link.ini` path, confirm bridge `STATUS.bridge=1`, a
 4. Articles are JSON under `grovelink/bridge/news/` (stdlib only; no cloud AI).
 5. There is **no** `news.auto` / auto-on-shutter (removed in 1.8.1) — Camera can never trigger news.
 
+6. **Location tag (1.8.2+):** in-game NEWS writes `NEWS.zone` (0843 + coarse place ladder). Web Breaking News asks for an optional place before `POST /news`. Herald shows 📍 badge. Camera never writes `NEWS.zone`. If location looks like a short code (e.g. `GAN1`), bridge maps common zone keys to friendly names.
+
 ## Captions missing after update
 
 Captions live in `bridge/photos_captions.json` and optional `bridge/photos/<file>.txt`. Clearing phone copies does not wipe the JSON index entries for deleted names (harmless). Re-save a caption from the page if needed.
