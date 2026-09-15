@@ -13,18 +13,24 @@ Not affiliated with Rockstar Games. Single-player only.
 
 1. Extract the zip to Desktop or Downloads.
 2. Right-click **`INSTALL.bat`** → **Run as administrator**.
-3. Accept UAC. It finds GTA, copies files, opens port 8088, and puts **GroveLink Phone** on the Desktop.
-4. Double-click that shortcut, launch GTA, press **K**.
+3. Accept UAC. It finds GTA, copies `GroveLink.fxt` + `link.ini`, tries to compile the phone script with Sanny Builder if `sanny.exe` is found, creates the Gallery folder, writes bridge `config.ini`, opens firewall TCP **8088**, and puts **START_GROVELINK** on the Desktop.
+4. Double-click **START_GROVELINK**, launch GTA, press **K**.
 
-If the game drive is dirty (`0x80071AC3`), the installer offers `chkdsk` and also builds `Desktop\GroveLink_READY`.
+If Sanny was not found, open `grovelink\GroveLinkPhone.txt` in Sanny Builder, press **F7**, and copy `GroveLinkPhone.cs` into `[GTA]\CLEO\`. INSTALL no longer deletes a working phone script when compile is skipped.
 
-Sanny Builder is still required **once** if it is missing. When `sanny.exe` is present, the installer compiles for you.
+## Verify GroveLink camera → phone page
+
+1. Keep the bridge window open (START_GROVELINK).
+2. On the PC open **http://127.0.0.1:8088**
+3. On your phone (same Wi-Fi) open **http://LAN-IP:8088** (IP is printed by the bridge).
+4. In GTA: **K** → Camera → **Enter** or **Space**.
+5. Within a couple of seconds the shot should appear on `/` and `/api`.
 
 ## Requirements
 
 - GTA San Andreas **PC 1.0**
 - **CLEO 4.3 or 4.4** from https://cleo.li including `IniFiles.cleo`
-- **Sanny Builder 3 or 4** from https://sannybuilder.com
+- **Sanny Builder 3 or 4** from https://sannybuilder.com (once, unless INSTALL finds and compiles with it)
 - GroveLink: **Python 2.7.18 or 3.8.10** on Windows 7
 
 ## License

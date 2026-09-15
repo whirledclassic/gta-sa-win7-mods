@@ -1,3 +1,3 @@
-GroveLinkPhone.cs.b64 is a compiled CLEO script.
-INSTALL.bat decodes it into [GTA]\CLEO\GroveLinkPhone.cs with certutil.
-This build: press K in-game to see GROVELINK OK.
+GroveLinkPhone.cs.b64 is an OLD minimal test build (shows GROVELINK OK only).
+Do NOT use it for the camera phone. Compile grovelink/GroveLinkPhone.txt in
+Sanny Builder (F7), or let INSTALL.bat compile when sanny.exe is found.

@@ -1,8 +1,9 @@
 {$USE ini}
 {$USE CLEO}
 {$CLEO .cs}
-// GroveLink Phone v4 — crash-safer. No #model names, no 033E GXT.
-// K toggle | UP/DOWN | ENTER | BACKSPACE
+// GroveLink Phone v5 — crash-safer. No #model names, no 033E GXT, no hold_cellphone.
+// K toggle | UP/DOWN | ENTER or SPACE select | BACKSPACE close
+// Menu labels via 0ACD highpriority (same pattern as existing prompts).
 0000: NOP
 03A4: name_thread 'GROVELNK'
 
@@ -35,7 +36,7 @@
 0006: 20@ = 1
 0006: 21@ = 0
 0006: 22@ = 0
-0ACD: show_text_highpriority "GROVELINK OPEN" time 1500
+0ACD: show_text_highpriority "CAMERA / INBOX / CLOSE" time 1800
 018C: play_sound 1138 at 0.0 0.0 0.0
 0002: jump @AFTER_TOGGLE
 
@@ -77,9 +78,9 @@
 000A: 22@ += 1
 00D6: if
 0019:   22@ > 2
-004D: jf @PHONE_LOGIC2
+004D: jf @SHOW_SEL
 0006: 22@ = 0
-0002: jump @PHONE_LOGIC2
+0002: jump @SHOW_SEL
 :KEY_UP
 00D6: if
 0AB0:   key_pressed 38
@@ -88,12 +89,29 @@
 000E: 22@ -= 1
 00D6: if
 001B:   0 > 22@
-004D: jf @PHONE_LOGIC2
+004D: jf @SHOW_SEL
 0006: 22@ = 2
 
-:PHONE_LOGIC2
+:SHOW_SEL
 00D6: if
+0039:   22@ == 0
+004D: jf @SHOW_SEL2
+0ACD: show_text_highpriority "CAMERA  Enter/Space snap" time 1200
+0002: jump @PHONE_LOGIC2
+:SHOW_SEL2
+00D6: if
+0039:   22@ == 1
+004D: jf @SHOW_SEL3
+0ACD: show_text_highpriority "INBOX" time 1200
+0002: jump @PHONE_LOGIC2
+:SHOW_SEL3
+0ACD: show_text_highpriority "CLOSE" time 1200
+
+:PHONE_LOGIC2
+// Enter (13) or Space (32) to activate
+00D6: if or
 0AB0:   key_pressed 13
+0AB0:   key_pressed 32
 004D: jf @KEY_BACK
 0001: wait 180
 00D6: if
@@ -109,6 +127,9 @@
 0AAB:   file_exists "cleo\GroveLink\link.ini"
 004D: jf @KEY_BACK
 0AF1: write_int 1 to_ini_file "cleo\GroveLink\link.ini" section "PHOTO" key "take"
+0AF0: 25@ = read_int_from_ini_file "cleo\GroveLink\link.ini" section "PHOTO" key "count"
+000A: 25@ += 1
+0AF1: write_int 25@ to_ini_file "cleo\GroveLink\link.ini" section "PHOTO" key "count"
 0002: jump @KEY_BACK
 :SEL2
 00D6: if

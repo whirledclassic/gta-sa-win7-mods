@@ -99,17 +99,45 @@ def link_ini_path(gta_dir):
     return os.path.join(gta_dir, "CLEO", "GroveLink", "link.ini")
 
 
-def ensure_dirs(gta_dir):
-    if not os.path.isdir(WEB_PHOTOS):
-        os.makedirs(WEB_PHOTOS)
+def _mkdir(path):
+    if not path or os.path.isdir(path):
+        return
+    try:
+        os.makedirs(path)
+    except Exception:
+        pass
+
+
+def ensure_gallery_dirs(cfg, gta_dir):
+    """Create expected Gallery folders so detect_gallery can find them later."""
+    home = os.path.expanduser("~")
+    user = os.environ.get("USERPROFILE", home)
+    public = os.environ.get("PUBLIC", r"C:\Users\Public")
+    candidates = [
+        cfg_get(cfg, "paths", "gallery_dir"),
+        cfg_get(cfg, "paths", "gallery_dir_alt"),
+        os.path.join(user, "Documents", "GTA San Andreas User Files", "Gallery"),
+        os.path.join(user, "My Documents", "GTA San Andreas User Files", "Gallery"),
+        os.path.join(home, "Documents", "GTA San Andreas User Files", "Gallery"),
+        os.path.join(public, "Documents", "GTA San Andreas User Files", "Gallery"),
+        os.path.join(gta_dir or "", "Gallery") if gta_dir else "",
+        os.path.join(gta_dir or "", "User Files", "Gallery") if gta_dir else "",
+    ]
+    for path in candidates:
+        if path:
+            parent = os.path.dirname(path)
+            if parent:
+                _mkdir(parent)
+            _mkdir(path)
+
+
+def ensure_dirs(cfg, gta_dir):
+    _mkdir(WEB_PHOTOS)
+    ensure_gallery_dirs(cfg, gta_dir)
     if not gta_dir:
         return
     folder = os.path.join(gta_dir, "CLEO", "GroveLink")
-    if not os.path.isdir(folder):
-        try:
-            os.makedirs(folder)
-        except Exception:
-            pass
+    _mkdir(folder)
     ini = link_ini_path(gta_dir)
     if not os.path.isfile(ini):
         try:
@@ -293,7 +321,7 @@ HTML = """<!DOCTYPE html>
     <button type=\"submit\">SEND</button>
   </form>
   <div class=\"ok\" id=\"ok\"></div>
-  <div id=\"feed\"><div class=\"empty\">Waiting for a photo. In GTA press K, CAMERA, ENTER.</div></div>
+  <div id=\"feed\"><div class=\"empty\">Waiting for a photo. In GTA press K, CAMERA, ENTER or SPACE.</div></div>
 </div>
 <script>
 function paint(data) {
@@ -302,7 +330,7 @@ function paint(data) {
   var photos = data.photos || [];
   count.textContent = photos.length;
   if (!photos.length) {
-    feed.innerHTML = '<div class=\"empty\">Waiting for a photo. In GTA press K, CAMERA, ENTER.</div>';
+    feed.innerHTML = '<div class=\"empty\">Waiting for a photo. In GTA press K, CAMERA, ENTER or SPACE.</div>';
     return;
   }
   var html = '';
@@ -441,14 +469,29 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(data)
 
 
-def watcher(galleries, ini):
+def watcher(cfg, gta_dir, ini):
+    """Poll Gallery folders forever. Re-detect dirs each loop so a folder
+    created after the first in-game photo is picked up (startup may have
+    found none)."""
+    last_galleries = []
     while True:
         try:
+            ensure_gallery_dirs(cfg, gta_dir)
+            galleries = detect_gallery(cfg, gta_dir)
+            if galleries != last_galleries:
+                if galleries:
+                    print("Galleries now:")
+                    for g in galleries:
+                        print("   ", g)
+                else:
+                    print("Galleries  : still none — waiting for folder/photos")
+                last_galleries = list(galleries)
             copy_latest(galleries)
             take = read_ini_key(ini, "PHOTO", "take", "0")
             if take == "1":
                 write_ini_kv(ini, "PHOTO", {"take": "0"})
                 time.sleep(0.4)
+                galleries = detect_gallery(cfg, gta_dir)
                 copy_latest(galleries)
                 print("Shutter. Phone page has", len(STATE["photos"]), "shots")
         except Exception as exc:
@@ -459,8 +502,8 @@ def watcher(galleries, ini):
 def main():
     cfg = read_cfg()
     gta_dir = detect_gta_dir(cfg)
+    ensure_dirs(cfg, gta_dir)
     galleries = detect_gallery(cfg, gta_dir)
-    ensure_dirs(gta_dir)
     ini = link_ini_path(gta_dir)
     port = 8088
     try:
@@ -478,8 +521,8 @@ def main():
         for g in galleries:
             print("   ", g)
     else:
-        print("Galleries  : NONE YET")
-        print("             Take one in-game photo, then set gallery_dir")
+        print("Galleries  : NONE YET (will re-check every second)")
+        print("             Expected under Documents\\...\\Gallery")
     ip = lan_ip()
     print("")
     print("  On your REAL PHONE open:")
@@ -494,7 +537,7 @@ def main():
     write_ini_kv(ini, "STATUS", {"bridge": "1", "ip": ip})
     copy_latest(galleries)
 
-    t = threading.Thread(target=watcher, args=(galleries, ini))
+    t = threading.Thread(target=watcher, args=(cfg, gta_dir, ini))
     t.daemon = True
     t.start()
 
