@@ -1,6 +1,6 @@
 # GroveLink — current features
 
-Pack version: see root **`VERSION`** (`1.8.2`). Crash-safer CLEO (no `hold_cellphone`, no custom GXT `033E`). Bridge is **stdlib-only** (Win7 Python 2.7 / 3.4–3.8).
+Pack version: see root **`VERSION`** (`1.9.0`). Crash-safer CLEO (no `hold_cellphone`, no custom GXT `033E`). Bridge is **stdlib-only** (Win7 Python 2.7 / 3.4–3.8).
 
 ## Install / update / verify / test
 
@@ -22,14 +22,16 @@ Pack version: see root **`VERSION`** (`1.8.2`). Crash-safer CLEO (no `hold_cellp
 |------|----------|
 | **CAMERA** | Snap (Enter/Space); shutter sound; `PHOTO.take` + count; **PHOTO TAKEN #N**. **Gallery only — never writes NEWS keys / never files Herald** |
 | **INBOX** | Shows SMS when `new=1`; otherwise **NO NEW TEXTS**; sound when new |
+| **REPLY** | Up/Down canned lines → Enter sends `[OUTBOX]` (`new=1`, `from=CJ`, `msg=…`) to web chat thread |
 | **NEWS** | **Separate feature:** snap + `PHOTO.take` + count + `NEWS.make=1` + **`NEWS.zone` location tag** → bridge files Herald with 📍 badge; shows **BREAKING NEWS SNAP** |
+| **SPECTATE** | Toggle `SPECTATE.on`; while on (phone open/closed) ~2.5s snap + `SPECTATE.frame=1` for `/spectate` (never NEWS) |
 | **Closed-phone SMS** | If `INBOX.new=1`, once: **SMS FROM REAL PHONE** (0ACD + sound) so you open **K** |
 | **NEWS toast** | If `NEWS.new=1` (after NEWS menu or web Breaking News): **NEWS FILED** once, then clears flag |
 | **CONTACTS** | Cycles Sweet / Smoke / Ryder / Cesar / **Catalina** flavor lines (static text; advances each select) |
 | **STATUS** | **LIVE N  PHONE PAGE ON PC** / **NO BRIDGE** + shot count from `link.ini` |
-| **HELP** | Camera = pics to phone only; NEWS = snap + Herald; START GROVELINK; **UPDATE_GROVELINK** if outdated |
+| **HELP** | Camera / REPLY / NEWS / SPECTATE; START GROVELINK; **UPDATE_GROVELINK** if outdated |
 | **CLOSE** | Put phone away |
-| Keys | **K** toggle · Up/Down wrap (0–6: CAMERA/INBOX/NEWS/CONTACTS/STATUS/HELP/CLOSE) · Enter/Space select · Backspace close |
+| Keys | **K** toggle · Up/Down wrap (0–8: CAMERA/INBOX/REPLY/NEWS/SPECTATE/CONTACTS/STATUS/HELP/CLOSE) · Enter/Space select · Backspace close |
 | Bridge-down | Once per open: **START GROVELINK BRIDGE** if `STATUS.bridge=0` |
 
 ## Bridge / phone page tools
@@ -50,6 +52,9 @@ Pack version: see root **`VERSION`** (`1.8.2`). Crash-safer CLEO (no `hold_cellp
 | **Export zip** | `GET /export.zip` — zip of `bridge/photos` only (+ button on page) |
 | **Album tabs** | All / Today (mtime filter in pure JS) |
 | **Quick replies** | Chips → `POST /send` |
+| **CJ reply bubbles** | Chat thread styles visitor (**Delivered to CJ**) vs CJ (`role=cj` from OUTBOX) |
+| **LIVE SPECTATE** | `GET /spectate` — full-viewport latest snapshot, ~750ms poll, badge + link back; **not** H.264/WebRTC |
+| **Spectate API** | `/api/spectate` + `/api` fields `spectate_on`, `latest_url` |
 | **Delete** | Removes bridge cache copy only (not GTA Gallery); remembered in `photos_deleted.txt` |
 | **Download latest** | Opens newest `/photo/…` |
 | **Share** | Tap-to-copy IP:port, `sms:` note, `GET /qr` (no QR library) |
@@ -58,9 +63,9 @@ Pack version: see root **`VERSION`** (`1.8.2`). Crash-safer CLEO (no `hold_cellp
 | **Prune** | `server.max_photos` (default 40) — oldest under `bridge/photos` only |
 | **Poll interval** | `server.poll_ms` (default **2000**) exposed to the page via `/api` |
 | **last_error** | `/api` + `/health` include `last_error` when Gallery / bridge photos are unreadable (empty string when OK) |
-| **Shutter burst** | After `PHOTO.take=1` or `NEWS.make=1`, aggressive Gallery poll; **only** `NEWS.make` then creates Herald (Camera never does) |
+| **Shutter burst** | After `PHOTO.take=1`, `NEWS.make=1`, or `SPECTATE.frame=1`, aggressive Gallery poll; **only** `NEWS.make` creates Herald (Camera / Spectate never do) |
 | **Gallery watch** | Re-detects Gallery dirs every second |
-| **Endpoints** | `/`, `/api`, `/api/chat`, `/health`, `/send`, `/caption`, `/news`, `/news/<id>`, `/delete`, `/clear`, `/photo/…`, `/qr`, `/export.zip` |
+| **Endpoints** | `/`, `/api`, `/api/chat`, `/api/spectate`, `/spectate`, `/health`, `/send`, `/caption`, `/news`, `/news/<id>`, `/delete`, `/clear`, `/photo/…`, `/qr`, `/export.zip` |
 
 ## Config (`grovelink/bridge/config.ini`)
 

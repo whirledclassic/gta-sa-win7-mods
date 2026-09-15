@@ -1,6 +1,14 @@
 # GroveLink changelog
 
-Human-readable highlights from pack **1.0 → 1.8.2**. Full detail also lives in root `README.md` round notes and [grovelink/FEATURES.md](grovelink/FEATURES.md).
+Human-readable highlights from pack **1.0 → 1.9.0**. Full detail also lives in root `README.md` round notes and [grovelink/FEATURES.md](grovelink/FEATURES.md).
+
+## 1.9.0 — CJ replies + LIVE SPECTATE
+
+- **CJ replies to web chats:** CLEO **REPLY** menu — Up/Down pick canned line ("On my way", "Who is this?", "Grove forever", "Busy rn", "Where you at?") → Enter writes `[OUTBOX] new=1` `msg=` `from=CJ`. Bridge clears flag, appends chat log as CJ; `/api` + `/api/chat` expose thread; web styles **CJ vs visitor** bubbles ("Delivered to CJ" / "CJ replied").
+- **LIVE SPECTATE (snapshots):** `GET /spectate` full-viewport latest frame, auto-refresh ~750ms, **LIVE SPECTATE** badge, link back to phone page. CLEO **SPECTATE** toggle → `SPECTATE.on`; while on (phone open or closed) every ~2.5s `take_photo` + `SPECTATE.frame=1` (not `PHOTO.take`). Bridge copies on `SPECTATE.frame` or `PHOTO.take`; **never** files Breaking News from spectate. `/api` + `/api/spectate`: `latest_url`, `spectate_on`.
+- **Camera stays gallery-only; NEWS stays separate** with location tags.
+- Docs: how to reply in-game; spectate limitation (slideshow, low FPS, same Wi-Fi, bridge must run).
+- Smoke: OUTBOX→chat; `/spectate` HTML; SPECTATE.frame copy no NEWS; VERSION **1.9.0**.
 
 ## 1.8.2 — Breaking News location tags
 

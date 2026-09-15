@@ -107,6 +107,7 @@ STATE = {
     "version": "unknown",
     "last_error": "",
     "link_ini": "",
+    "spectate_on": False,
 }
 
 
@@ -262,8 +263,10 @@ def ensure_dirs(cfg, gta_dir):
                 f.write(
                     "[PHOTO]\ntake=0\ncount=0\n\n"
                     "[INBOX]\nnew=0\nfrom=REAL PHONE\nmsg=\n\n"
+                    "[OUTBOX]\nnew=0\nfrom=CJ\nmsg=\n\n"
                     "[STATUS]\nbridge=1\nip=0.0.0.0\n\n"
-                    "[NEWS]\nnew=0\nmake=0\nzone=\n"
+                    "[NEWS]\nnew=0\nmake=0\nzone=\n\n"
+                    "[SPECTATE]\non=0\nframe=0\n"
                 )
         except Exception:
             pass
@@ -807,12 +810,51 @@ def append_chat_delivered(frm, msg):
         "ts": int(time.time()),
         "when": human_time(time.time()),
         "delivered": True,
+        "role": "visitor",
+        "side": "visitor",
     }
     log.insert(0, entry)
     log = log[:40]
     _save_json_file(CHAT_LOG_PATH, log)
     STATE["inbox"] = log
     return entry
+
+
+def append_chat_cj_reply(frm, msg):
+    """CJ reply from CLEO OUTBOX — show as CJ bubble on web thread."""
+    log = load_chat_log()
+    entry = {
+        "from": (frm or "CJ")[:40],
+        "msg": (msg or "")[:80],
+        "ts": int(time.time()),
+        "when": human_time(time.time()),
+        "delivered": False,
+        "role": "cj",
+        "side": "cj",
+    }
+    log.insert(0, entry)
+    log = log[:40]
+    _save_json_file(CHAT_LOG_PATH, log)
+    STATE["inbox"] = log
+    return entry
+
+
+def process_outbox_flag(ini):
+    """When OUTBOX.new=1, clear flag and append CJ reply to chat log."""
+    if not ini or not os.path.isfile(ini):
+        return False
+    new = read_ini_key(ini, "OUTBOX", "new", "0")
+    if new != "1":
+        return False
+    msg = read_ini_key(ini, "OUTBOX", "msg", "")
+    frm = read_ini_key(ini, "OUTBOX", "from", "CJ") or "CJ"
+    write_ini_kv(ini, "OUTBOX", {"new": "0"})
+    try:
+        entry = append_chat_cj_reply(frm, msg)
+        print("CJ reply → chat:", (entry.get("msg") or "")[:60])
+    except Exception as exc:
+        print("OUTBOX error:", exc)
+    return True
 
 
 def _pick(seq, seed):
@@ -1286,9 +1328,25 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     background:#143; border:1px solid #1a4; border-radius:12px 12px 4px 12px;
     padding:8px 12px; margin:6px 0; font-size:13px; line-height:1.4;
   }
+  .chatmsg.visitor {
+    background:#143; border:1px solid #1a4; border-radius:12px 12px 4px 12px;
+    margin-right:18%;
+  }
+  .chatmsg.cj {
+    background:#1a2a40; border:1px solid #4af; border-radius:12px 12px 12px 4px;
+    margin-left:18%; text-align:left;
+  }
+  .chatmsg.cj .who { color:#7abfff; }
   .chatmsg .who { font-size:10px; color:#7aaa7a; margin-bottom:2px; }
   .chatmsg .deliv { font-size:10px; color:#2cff6a; margin-top:4px; }
+  .chatmsg.cj .deliv { color:#7abfff; }
   .chatempty { font-size:12px; color:#7aaa7a; }
+  .spectate-link {
+    display:inline-block; margin:8px 12px; padding:8px 12px; background:#1a2a40;
+    border:1px solid #4af; color:#9cf; text-decoration:none; font-size:12px; font-weight:bold;
+    letter-spacing:1px; border-radius:2px;
+  }
+  .spectate-link:hover { background:#243550; color:#fff; }
   .hero {
     margin:12px; background:#000; border:2px solid #2cff6a; position:relative; border-radius:2px;
     overflow:hidden;
@@ -1475,8 +1533,9 @@ HTML_TEMPLATE = """<!DOCTYPE html>
   </header>
   <div class="chatbox" id="chatbox">
     <h3>TEXTS TO CJ</h3>
-    <div id="chat_thread"><div class="chatempty">Send a message below — delivered texts show here.</div></div>
+    <div id="chat_thread"><div class="chatempty">Send a message below — delivered texts show here. CJ replies appear on the right.</div></div>
   </div>
+  <a class="spectate-link" href="/spectate">LIVE SPECTATE — snapshot view</a>
   <div class="chips">
     <button type="button" class="chip" data-msg="Where you at?">Where you at?</button>
     <button type="button" class="chip" data-msg="Nice shot">Nice shot</button>
@@ -1916,18 +1975,25 @@ function renderChat(inbox) {
   var list = inbox || [];
   LAST_CHAT = list;
   if (!list.length) {
-    box.innerHTML = '<div class="chatempty">Send a message below — delivered texts show here.</div>';
+    box.innerHTML = '<div class="chatempty">Send a message below — delivered texts show here. CJ replies appear on the right.</div>';
     return;
   }
   var html = '';
-  for (var i = 0; i < list.length && i < 8; i++) {
+  for (var i = 0; i < list.length && i < 12; i++) {
     var m = list[i];
     var text = typeof m === 'string' ? m : (m.msg || '');
     var who = (typeof m === 'object' && m.from) ? m.from : 'REAL PHONE';
     var when = (typeof m === 'object' && m.when) ? m.when : '';
-    html += '<div class="chatmsg"><div class="who">' + escapeHtml(who) + (when ? ' · ' + escapeHtml(when) : '') + '</div>';
+    var role = (typeof m === 'object' && (m.role || m.side)) ? String(m.role || m.side).toLowerCase() : '';
+    var isCj = role === 'cj' || String(who).toUpperCase() === 'CJ';
+    var cls = isCj ? 'chatmsg cj' : 'chatmsg visitor';
+    html += '<div class="' + cls + '"><div class="who">' + escapeHtml(who) + (when ? ' · ' + escapeHtml(when) : '') + '</div>';
     html += escapeHtml(text);
-    html += '<div class="deliv">Delivered to CJ</div></div>';
+    if (isCj) {
+      html += '<div class="deliv">CJ replied</div></div>';
+    } else {
+      html += '<div class="deliv">Delivered to CJ</div></div>';
+    }
   }
   box.innerHTML = html;
 }
@@ -2327,6 +2393,101 @@ def render_qr_page():
     )
 
 
+def render_spectate_html():
+    """Snapshot-based live view — refreshes latest bridge photo (not H.264/WebRTC)."""
+    ver = STATE.get("version", "unknown") or "unknown"
+    return (
+        "<!DOCTYPE html><html><head><meta charset=\"utf-8\">"
+        "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1, viewport-fit=cover\">"
+        "<meta name=\"theme-color\" content=\"#041006\">"
+        "<title>GroveLink LIVE SPECTATE</title>"
+        "<style>"
+        "*{box-sizing:border-box;margin:0;padding:0}"
+        "html,body{height:100%;background:#000;color:#d7ffd0;font-family:system-ui,sans-serif;overflow:hidden}"
+        "#frame{position:fixed;inset:0;width:100%;height:100%;object-fit:contain;background:#000;display:none}"
+        "#wait{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;"
+        "flex-direction:column;gap:16px;padding:24px;text-align:center;background:#041006}"
+        "#wait h1{font-size:18px;letter-spacing:2px;color:#2cff6a}"
+        "#wait p{font-size:14px;color:#7aaa7a;line-height:1.5;max-width:420px}"
+        ".badge{position:fixed;top:14px;left:14px;z-index:5;background:#e22;color:#fff;"
+        "font-weight:bold;font-size:13px;letter-spacing:2px;padding:8px 14px;border-radius:2px;"
+        "box-shadow:0 0 12px rgba(255,40,40,0.55);animation:pulse 1.2s ease-in-out infinite}"
+        "@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.65}}"
+        ".back{position:fixed;top:14px;right:14px;z-index:5;background:#0b0f0c;color:#2cff6a;"
+        "border:1px solid #2cff6a;padding:8px 12px;text-decoration:none;font-size:12px;font-weight:bold}"
+        ".meta{position:fixed;bottom:12px;left:12px;right:12px;z-index:5;font-size:11px;color:#7aaa7a;"
+        "text-align:center;text-shadow:0 1px 3px #000}"
+        "</style></head><body>"
+        "<div class=\"badge\" id=\"badge\">LIVE SPECTATE</div>"
+        "<a class=\"back\" href=\"/\">← GroveLink phone</a>"
+        "<img id=\"frame\" alt=\"spectate frame\">"
+        "<div id=\"wait\">"
+        "<h1>WAITING FOR SPECTATE FRAMES</h1>"
+        "<p>Enable <b>SPECTATE</b> in-game (K → SPECTATE → Enter). "
+        "Snapshot slideshow only — not real video. Same Wi-Fi + bridge must run. Low FPS (~2–3s).</p>"
+        "</div>"
+        "<div class=\"meta\" id=\"meta\">GroveLink __VER__ · snapshot live view</div>"
+        "<script>"
+        "var img=document.getElementById('frame');"
+        "var wait=document.getElementById('wait');"
+        "var meta=document.getElementById('meta');"
+        "var last='';"
+        "function tick(){"
+        "  var x=new XMLHttpRequest();"
+        "  x.open('GET','/api/spectate',true);"
+        "  x.timeout=4000;"
+        "  x.onload=function(){"
+        "    try{"
+        "      var j=JSON.parse(x.responseText||'{}');"
+        "      var url=j.latest_url||'';"
+        "      var on=!!j.spectate_on;"
+        "      var name=j.latest||'';"
+        "      if(url){"
+        "        var bust=url+(url.indexOf('?')>=0?'&':'?')+'t='+(j.last_refresh||Date.now());"
+        "        if(bust!==last){ last=bust; img.src=bust; }"
+        "        img.style.display='block'; wait.style.display='none';"
+        "      } else {"
+        "        img.style.display='none'; wait.style.display='flex';"
+        "      }"
+        "      meta.textContent='GroveLink '+ (j.version||'') +"
+        "        (on?' · SPECTATE ON':' · SPECTATE off in-game') +"
+        "        (name?' · '+name:'') +"
+        "        ' · snapshots not video';"
+        "    }catch(e){}"
+        "  };"
+        "  x.onerror=function(){ meta.textContent='Bridge offline — run START_GROVELINK'; };"
+        "  x.send();"
+        "}"
+        "tick(); setInterval(tick, 750);"
+        "</script></body></html>"
+    ).replace('__VER__', _esc(ver))
+
+
+def spectate_payload():
+    photos = STATE.get("photos", [])
+    latest = ""
+    if photos:
+        latest = photos[0].get("file") or ""
+    spectate_on = bool(STATE.get("spectate_on"))
+    try:
+        ini = STATE.get("link_ini") or ""
+        if ini:
+            spectate_on = read_ini_key(ini, "SPECTATE", "on", "0") == "1"
+            STATE["spectate_on"] = spectate_on
+    except Exception:
+        pass
+    return {
+        "ok": True,
+        "spectate_on": spectate_on,
+        "latest": latest,
+        "latest_url": ("/photo/%s" % latest) if latest else "",
+        "last_refresh": STATE.get("last_refresh", 0),
+        "version": STATE.get("version", "unknown") or "unknown",
+        "note": "snapshot slideshow — not H.264/WebRTC",
+    }
+
+
+
 def api_payload():
     ip = STATE.get("ip", "127.0.0.1")
     port = STATE.get("port", 8088)
@@ -2345,6 +2506,15 @@ def api_payload():
             inbox = chat
     except Exception:
         pass
+    latest_url = ("/photo/%s" % latest) if latest else ""
+    spectate_on = bool(STATE.get("spectate_on"))
+    try:
+        ini = STATE.get("link_ini") or ""
+        if ini:
+            spectate_on = read_ini_key(ini, "SPECTATE", "on", "0") == "1"
+            STATE["spectate_on"] = spectate_on
+    except Exception:
+        pass
     return {
         "ok": True,
         "bridge_ok": bool(STATE.get("bridge_ok", True)),
@@ -2353,6 +2523,8 @@ def api_payload():
         "photo_count": len(photos),
         "count": len(photos),
         "latest": latest,
+        "latest_url": latest_url,
+        "spectate_on": spectate_on,
         "last_refresh": STATE.get("last_refresh", 0),
         "last_refresh_human": STATE.get("last_refresh_human", ""),
         "lan_url": "http://%s:%s" % (ip, port),
@@ -2379,6 +2551,8 @@ def health_payload():
         "photo_count": len(photos),
         "count": len(photos),
         "latest": latest,
+        "latest_url": ("/photo/%s" % latest) if latest else "",
+        "spectate_on": bool(STATE.get("spectate_on")),
         "galleries": list(STATE.get("galleries", [])),
         "ip": STATE.get("ip", "127.0.0.1"),
         "port": STATE.get("port", 8088),
@@ -2651,6 +2825,12 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/chat":
             self._json({"ok": True, "inbox": load_chat_log()})
             return
+        if path == "/api/spectate":
+            self._json(spectate_payload())
+            return
+        if path == "/spectate" or path == "/spectate/":
+            self._html(render_spectate_html())
+            return
         self.send_error(404)
 
     def do_POST(self):
@@ -2833,10 +3013,16 @@ def process_photo_and_news_flags(cfg, gta_dir, ini, burst_seconds=3.5, burst_int
     PHOTO.take alone (Camera): burst-copy gallery → phone page. Never creates news.
     NEWS.make (NEWS menu): burst-copy like shutter, then create_news_from_photo on
     newest bridge photo (with NEWS.zone/loc) and set NEWS.new=1 for CLEO toast.
+    SPECTATE.frame: burst-copy for /spectate live view. Never creates news.
     """
     take = read_ini_key(ini, "PHOTO", "take", "0")
     make = read_ini_key(ini, "NEWS", "make", "0")
-    if take != "1" and make != "1":
+    frame = read_ini_key(ini, "SPECTATE", "frame", "0")
+    try:
+        STATE["spectate_on"] = read_ini_key(ini, "SPECTATE", "on", "0") == "1"
+    except Exception:
+        pass
+    if take != "1" and make != "1" and frame != "1":
         return False
     news_location = ""
     if make == "1":
@@ -2848,7 +3034,16 @@ def process_photo_and_news_flags(cfg, gta_dir, ini, burst_seconds=3.5, burst_int
         write_ini_kv(ini, "PHOTO", {"take": "0"})
     if make == "1":
         write_ini_kv(ini, "NEWS", {"make": "0", "zone": ""})
-    label = "News snap" if make == "1" else "Shutter"
+    if frame == "1":
+        write_ini_kv(ini, "SPECTATE", {"frame": "0"})
+    if make == "1":
+        label = "News snap"
+    elif frame == "1" and take != "1":
+        label = "Spectate frame"
+        # Spectate frames: shorter burst — keep live view snappy, still no NEWS
+        burst_seconds = min(burst_seconds, 2.0)
+    else:
+        label = "Shutter"
     print("%s — fast poll for new Gallery files..." % label)
     shutter_burst(cfg, gta_dir, seconds=burst_seconds, interval=burst_interval)
     if make == "1":
@@ -2878,6 +3073,7 @@ def process_photo_and_news_flags(cfg, gta_dir, ini, burst_seconds=3.5, burst_int
                 print("news make error:", exc)
         else:
             print("Breaking News: no bridge photo yet after burst")
+    # SPECTATE.frame / PHOTO.take never create news
     print("%s done. Phone page has" % label, len(STATE["photos"]), "shots")
     return True
 
@@ -2901,11 +3097,16 @@ def watcher(cfg, gta_dir, ini):
                     print("Galleries  : still none — waiting for folder/photos")
                 last_galleries = list(galleries)
             copy_latest(galleries)
+            try:
+                process_outbox_flag(ini)
+            except Exception as exc:
+                print("outbox watch error:", exc)
             if process_photo_and_news_flags(cfg, gta_dir, ini):
-                # Race fix: another snap/make may have arrived during burst — loop now
+                # Race fix: another snap/make/frame may have arrived during burst — loop now
                 if (
                     read_ini_key(ini, "PHOTO", "take", "0") == "1"
                     or read_ini_key(ini, "NEWS", "make", "0") == "1"
+                    or read_ini_key(ini, "SPECTATE", "frame", "0") == "1"
                 ):
                     continue
         except Exception as exc:
@@ -2949,6 +3150,10 @@ def main():
     STATE["last_error"] = ""
     STATE["link_ini"] = ini
     try:
+        STATE["spectate_on"] = read_ini_key(ini, "SPECTATE", "on", "0") == "1"
+    except Exception:
+        STATE["spectate_on"] = False
+    try:
         STATE["inbox"] = load_chat_log()
     except Exception:
         STATE["inbox"] = []
@@ -2981,7 +3186,10 @@ def main():
     print("      http://127.0.0.1:%s/export.zip" % port)
     print("  Grove Street Herald (fake news):")
     print("      http://127.0.0.1:%s/news" % port)
+    print("  LIVE SPECTATE (snapshot slideshow):")
+    print("      http://127.0.0.1:%s/spectate" % port)
     print("  Camera = gallery only; NEWS menu / web Breaking News = Herald")
+    print("  CJ REPLY (OUTBOX) + SPECTATE.frame — never auto-news")
     print("")
     print("  Keep this window open while you play.")
     print("================================================")

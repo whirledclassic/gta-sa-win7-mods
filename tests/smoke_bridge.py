@@ -8,6 +8,7 @@ Optional: gallery copy + last_error + skipped_deleted + sort HTML + clear confir
 help footer + empty-action disable + VERIFY VERSION + CHANGELOG + port-busy + README polish.
 1.8.1: Camera≠NEWS — PHOTO.take alone no news; NEWS.make creates article; POST /news; no news_auto.
 1.8.2: Breaking News location tags — POST /news location in HTML; NEWS.make with zone in ini.
+1.9.0: CJ REPLY (OUTBOX→chat); /spectate snapshot live view; SPECTATE.frame copy (no NEWS).
 
 Run from repo root or anywhere:
   python tests/smoke_bridge.py
@@ -139,10 +140,13 @@ def main():
     with open(server.link_ini, "w") as f:
         f.write(
             "[INBOX]\nnew=0\nfrom=\nmsg=\n"
+            "[OUTBOX]\nnew=0\nfrom=CJ\nmsg=\n"
             "[PHOTO]\ntake=0\n"
             "[STATUS]\nbridge=1\n"
             "[NEWS]\nnew=0\nmake=0\n"
+            "[SPECTATE]\non=0\nframe=0\n"
         )
+    gl.STATE["link_ini"] = server.link_ini
 
     t = threading.Thread(target=server.serve_forever)
     t.daemon = True
@@ -547,6 +551,98 @@ def main():
     except Exception as exc:
         check("Camera vs NEWS.make suite", False, "%s\n%s" % (exc, traceback.format_exc()[:400]))
 
+    # --- 1.9.0 CJ REPLY (OUTBOX) + SPECTATE ---
+    try:
+        # OUTBOX.new=1 → chat log as CJ
+        with open(server.link_ini, "w") as f:
+            f.write(
+                "[INBOX]\nnew=0\nfrom=\nmsg=\n"
+                "[OUTBOX]\nnew=1\nfrom=CJ\nmsg=Grove forever\n"
+                "[PHOTO]\ntake=0\n"
+                "[STATUS]\nbridge=1\n"
+                "[NEWS]\nnew=0\nmake=0\n"
+                "[SPECTATE]\non=0\nframe=0\n"
+            )
+        gl.STATE["link_ini"] = server.link_ini
+        before_chat = len(gl.load_chat_log())
+        handled_ob = gl.process_outbox_flag(server.link_ini)
+        after_chat = gl.load_chat_log()
+        with open(server.link_ini, "r") as f:
+            ini_ob = f.read()
+        check("OUTBOX.new handled", handled_ob is True)
+        check("OUTBOX.new cleared", "new=0" in ini_ob.split("[OUTBOX]")[-1].split("[")[0], ini_ob)
+        check("OUTBOX appends chat", len(after_chat) == before_chat + 1,
+              "before=%s after=%s" % (before_chat, len(after_chat)))
+        top = after_chat[0] if after_chat else {}
+        check("OUTBOX chat from CJ", (top.get("from") or "").upper() == "CJ" or top.get("role") == "cj", top)
+        check("OUTBOX chat msg", "Grove forever" in (top.get("msg") or ""), top)
+        check("OUTBOX chat role cj", top.get("role") == "cj" or top.get("side") == "cj", top)
+        code_c2, raw_c2 = http_get(port, "/api/chat")
+        chat2 = json.loads(raw_c2.decode("utf-8") if isinstance(raw_c2, bytes) else raw_c2)
+        inbox2 = chat2.get("inbox") or []
+        has_cj = any(
+            (isinstance(m, dict) and ((m.get("from") or "").upper() == "CJ" or m.get("role") == "cj"))
+            for m in inbox2
+        )
+        check("GET /api/chat shows CJ reply", has_cj, inbox2[:2] if inbox2 else None)
+        code_a2, raw_a2 = http_get(port, "/api")
+        api2 = json.loads(raw_a2.decode("utf-8") if isinstance(raw_a2, bytes) else raw_a2)
+        check("GET /api has spectate_on field", "spectate_on" in api2, api2.get("spectate_on"))
+        check("GET /api has latest_url field", "latest_url" in api2)
+
+        # /spectate HTML
+        code_sp, raw_sp = http_get(port, "/spectate")
+        html_sp = raw_sp.decode("utf-8") if isinstance(raw_sp, bytes) else raw_sp
+        check("GET /spectate status 200", code_sp == 200, code_sp)
+        check("GET /spectate LIVE SPECTATE badge", "LIVE SPECTATE" in html_sp)
+        check("GET /spectate waiting copy", "Waiting for spectate frames" in html_sp or "WAITING FOR SPECTATE" in html_sp)
+        check("GET /spectate link back to phone", 'href="/"' in html_sp or "GroveLink phone" in html_sp)
+        check("GET /spectate polls /api/spectate", "/api/spectate" in html_sp)
+        code_as, raw_as = http_get(port, "/api/spectate")
+        spj = json.loads(raw_as.decode("utf-8") if isinstance(raw_as, bytes) else raw_as)
+        check("GET /api/spectate ok", code_as == 200 and spj.get("ok") is True, spj)
+        check("GET /api/spectate has latest_url", "latest_url" in spj)
+        code_home, raw_home = http_get(port, "/")
+        html_home = raw_home.decode("utf-8") if isinstance(raw_home, bytes) else raw_home
+        check("GET / has spectate link", "/spectate" in html_home and "SPECTATE" in html_home)
+        check("GET / chat styles CJ vs visitor", "chatmsg cj" in html_home or ".chatmsg.cj" in html_home)
+
+        # SPECTATE.frame → copy, NO news
+        before_sf = len(gl.list_news_articles(100))
+        spec_name = "6666666666_spectate.jpg"
+        with open(os.path.join(photos, spec_name), "wb") as f:
+            f.write(b"\xff\xd8\xff\xe0" + b"\x00" * 200)
+        gl.copy_latest([])
+        with open(server.link_ini, "w") as f:
+            f.write(
+                "[INBOX]\nnew=0\nfrom=\nmsg=\n"
+                "[OUTBOX]\nnew=0\nfrom=CJ\nmsg=\n"
+                "[PHOTO]\ntake=0\ncount=3\n"
+                "[STATUS]\nbridge=1\n"
+                "[NEWS]\nnew=0\nmake=0\n"
+                "[SPECTATE]\non=1\nframe=1\n"
+            )
+        try:
+            from configparser import ConfigParser
+        except ImportError:
+            from ConfigParser import ConfigParser
+        empty_cfg2 = ConfigParser()
+        handled_sf = gl.process_photo_and_news_flags(
+            empty_cfg2, tmp, server.link_ini, burst_seconds=0.05, burst_interval=0.02
+        )
+        after_sf = len(gl.list_news_articles(100))
+        with open(server.link_ini, "r") as f:
+            ini_sf = f.read()
+        check("SPECTATE.frame handled", handled_sf is True)
+        check("SPECTATE.frame cleared", "frame=0" in ini_sf.split("[SPECTATE]")[-1] if "[SPECTATE]" in ini_sf else False, ini_sf[-200:])
+        check("SPECTATE.frame creates NO news", after_sf == before_sf,
+              "before=%s after=%s" % (before_sf, after_sf))
+        check("SPECTATE.on reflected", gl.STATE.get("spectate_on") is True)
+        # Camera still no NEWS after spectate path (sanity)
+        check("Camera still separate from NEWS", "news_auto" not in open(os.path.join(BRIDGE, "grovelink_server.py")).read())
+    except Exception as exc:
+        check("1.9.0 OUTBOX+SPECTATE suite", False, "%s\n%s" % (exc, traceback.format_exc()[:500]))
+
     try:
         server.shutdown()
     except Exception:
@@ -574,14 +670,16 @@ def main():
         check("CLEO no 033E GXT draw", not bad_033e)
         full = "".join(cleo_lines)
         check("CLEO has HELP / STATUS", "HELP" in full and "STATUS" in full)
-        check("CLEO menu wrap 0-6", "NEWS" in full and "CLOSE" in full)  # soft presence
+        check("CLEO menu has REPLY + SPECTATE", "REPLY" in full and "SPECTATE" in full and "CLOSE" in full)
         check("CLEO NO NEW TEXTS", "NO NEW TEXTS" in full)
         check("CLEO PHONE PAGE ON PC", "PHONE PAGE ON PC" in full)
-        # wrap bounds: index > 5 resets to 0; 0 > index sets 5
-        check("CLEO wrap high bound", "22@ > 6" in full or "0019:   22@ > 6" in full)
+        # wrap bounds: index > 8 resets to 0; 0 > index sets 8 (9 slots)
+        check("CLEO wrap high bound", "22@ > 8" in full or "0019:   22@ > 8" in full)
         check("CLEO NEWS menu slot", "BREAKING NEWS SNAP" in full and ":SEL_NEWS" in full)
         check("CLEO NEWS.make write", 'section "NEWS" key "make"' in full or "key \"make\"" in full)
         check("CLEO HELP Camera vs NEWS", "Camera: pics to phone only" in full and "NEWS: snap + Herald" in full)
+        check("CLEO HELP mentions REPLY", "REPLY:" in full and "Enter send" in full)
+        check("CLEO HELP mentions SPECTATE", "SPECTATE:" in full and "/spectate" in full)
         cam_to_inbox = full.split(":SEL_INBOX")[0]
         # From first camera effect to SEL_INBOX — Camera select only
         if "0A2F: set_photo_camera_effect 1" in cam_to_inbox:
@@ -590,7 +688,9 @@ def main():
             cam_sel = ""
         check("CLEO CAMERA select omits NEWS.make", 'key "make"' not in cam_sel)
         news_sel = ""
-        if ":SEL_NEWS" in full and ":SEL_CONTACTS" in full:
+        if ":SEL_NEWS" in full and ":SEL_SPECTATE" in full:
+            news_sel = full.split(":SEL_NEWS", 1)[1].split(":SEL_SPECTATE", 1)[0]
+        elif ":SEL_NEWS" in full and ":SEL_CONTACTS" in full:
             news_sel = full.split(":SEL_NEWS", 1)[1].split(":SEL_CONTACTS", 1)[0]
         check("CLEO NEWS select writes NEWS.make", 'key "make"' in news_sel)
         check("CLEO NEWS writes NEWS.zone", 'key "zone"' in news_sel or 'section "NEWS" key "zone"' in news_sel)
@@ -600,6 +700,11 @@ def main():
         check("CLEO contacts cycle advances", "26@ = 4" in full and ":CONTACT4" in full)
         check("CLEO SMS FROM REAL PHONE notify", "SMS FROM REAL PHONE" in full)
         check("CLEO NEWS FILED toast", "NEWS FILED" in full)
+        check("CLEO REPLY writes OUTBOX", 'section "OUTBOX"' in full and 'key "new"' in full)
+        check("CLEO REPLY canned lines", "On my way" in full and "Grove forever" in full and "Busy rn" in full)
+        check("CLEO SPECTATE toggle", ":SEL_SPECTATE" in full and 'section "SPECTATE" key "on"' in full)
+        check("CLEO SPECTATE.frame write", 'section "SPECTATE" key "frame"' in full)
+        check("CLEO SPECTATE tick while closed", ":SPECTATE_TICK" in full)
     except Exception as exc:
         check("CLEO static", False, exc)
 
@@ -651,6 +756,7 @@ def main():
         check("CHANGELOG.md exists with 1.8.0", "1.8.0" in cl and ("Breaking News" in cl or "Herald" in cl or "gallery" in cl.lower()))
         check("CHANGELOG.md has 1.8.1 Camera vs NEWS", "1.8.1" in cl and ("Camera" in cl) and ("news.auto" in cl or "NEWS.make" in cl))
         check("CHANGELOG.md has 1.8.2 location tags", "1.8.2" in cl and ("location" in cl.lower() or "NEWS.zone" in cl or "📍" in cl))
+        check("CHANGELOG.md has 1.9.0 CJ reply + spectate", "1.9.0" in cl and ("OUTBOX" in cl or "REPLY" in cl) and ("spectate" in cl.lower() or "SPECTATE" in cl))
         check("CHANGELOG covers 1.0 foundation", "1.0" in cl and ("Foundation" in cl or "crash-safer" in cl))
     except Exception as exc:
         check("CHANGELOG.md", False, exc)
@@ -681,7 +787,7 @@ def main():
     except Exception as exc:
         check("README polish", False, exc)
 
-    check("VERSION is 1.8.2", pack_ver == "1.8.2", pack_ver)
+    check("VERSION is 1.9.0", pack_ver == "1.9.0", pack_ver)
 
     # Runtime: after clear, HTML still disables; after photo, actions enabled via setCountActions path
     # (API count already covered; spot-check helper exists in page source above)

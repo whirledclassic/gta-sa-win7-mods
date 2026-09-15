@@ -11,6 +11,12 @@ CLEO mods for **GTA SA PC 1.0** on **Windows 7** (pack version: root **`VERSION`
 
 Docs: [FEATURES](grovelink/FEATURES.md) · [CHANGELOG](CHANGELOG.md) · [TROUBLESHOOTING](grovelink/TROUBLESHOOTING.md). Not affiliated with Rockstar. Single-player only.
 
+## Changelog — 1.9.0 (CJ replies + LIVE SPECTATE)
+
+- **CJ replies:** CLEO **REPLY** → canned lines → `[OUTBOX]`; bridge appends chat as CJ; web shows CJ vs visitor bubbles.
+- **LIVE SPECTATE:** `GET /spectate` snapshot slideshow (~750ms); CLEO **SPECTATE** toggle + `SPECTATE.frame` copy (never NEWS). Not real video.
+- Camera stays gallery-only; NEWS stays separate with location tags. Smoke + docs updated. VERSION **1.9.0**.
+
 ## Changelog — 1.8.2 (Breaking News location tags)
 
 - Herald articles get optional **location** tags (📍 badge on `/news` + `/news/<id>`).

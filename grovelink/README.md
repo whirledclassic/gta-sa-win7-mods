@@ -24,24 +24,27 @@ Until PR #1 merges, `update.ini` defaults to branch `fix/grovelink-camera-snapsh
 ## In GTA
 
 - **K** — open / close the phone
-- **Up / Down** — menu wraps: **CAMERA / INBOX / NEWS / CONTACTS / STATUS / HELP / CLOSE**
-- **Enter** or **Space** — select / snap (Camera or NEWS), read INBOX, cycle contacts, show status, show HELP
-- **Backspace** — close
+- **Up / Down** — menu wraps: **CAMERA / INBOX / REPLY / NEWS / SPECTATE / CONTACTS / STATUS / HELP / CLOSE**
+- **Enter** or **Space** — select / snap (Camera or NEWS), read INBOX, enter REPLY picker, toggle SPECTATE, cycle contacts, show status, show HELP
+- **Backspace** — close (or cancel REPLY picker)
 - **CAMERA** — snap to phone/PC gallery only; shutter sound (`018C`); **PHOTO TAKEN #N**; **never** files news
 - **INBOX** — when `new=1` shows SMS + sound; otherwise **NO NEW TEXTS**
+- **REPLY** — Up/Down pick canned reply → Enter writes `OUTBOX` (`from=CJ`) so the web chat shows a **CJ** bubble. Canned: "On my way", "Who is this?", "Grove forever", "Busy rn", "Where you at?"
 - **NEWS** — **separate** from Camera: snap + `NEWS.make=1` + `NEWS.zone` location → Herald with 📍 badge; **BREAKING NEWS SNAP**
+- **SPECTATE** — toggle on/off. While **ON** (phone can stay closed), every ~2.5s takes a photo and sets `SPECTATE.frame=1` for the bridge. Open **`/spectate`** on phone/PC for the live snapshot view.
 - **Closed phone** — new SMS still shows **SMS FROM REAL PHONE** (once) so you open **K**
 - **NEWS FILED** — toast when bridge sets `NEWS.new=1` (after NEWS menu or web Breaking News)
 - **CONTACTS** — flavor only: cycles Sweet / Smoke / Ryder / Cesar / **Catalina** lines via `0ACD` (static text, no ped models; advances each select)
 - **STATUS** — **LIVE N  PHONE PAGE ON PC** / **NO BRIDGE** + shot count from `link.ini` when readable
-- **HELP** — Camera = pics to phone; NEWS = snap + Herald; **OPEN START GROVELINK ON PC**; **Outdated? UPDATE_GROVELINK**
+- **HELP** — Camera / REPLY / NEWS / SPECTATE reminders; **OPEN START GROVELINK ON PC**; **Outdated? UPDATE_GROVELINK**
 - **CLOSE** — put the phone away
 - If the bridge is not running (`STATUS.bridge=0`), opening the phone reminds you once: **START GROVELINK BRIDGE**
 
 ## Bridge page (phone / PC browser)
 
 - **Hero + grid** photo feed (latest large, grid below); optional **caption** per shot; **Breaking News** → Grove Street Herald
-- Sticky **composer** with optional **From:**; chat thread shows **Delivered to CJ**
+- Sticky **composer** with optional **From:**; chat thread shows **Delivered to CJ** for your texts and **CJ replied** bubbles when CJ uses in-game REPLY
+- **LIVE SPECTATE** link → `GET /spectate` (full-viewport latest frame, auto-refresh; snapshot slideshow only — not H.264/WebRTC)
 - Header shows prominent **VERSION** + **PHOTOS** stats, **LIVE** pulse badge, **LAN** + **localhost** URLs, last poll time, unread count
 - **Grove Street Herald** link → `GET /news` (fake newspaper; articles embed `/photo/…`)
 - Keyboard **Shortcuts** footer (`?` help detail, `Esc` close lightbox, `/` focus search)
@@ -65,7 +68,8 @@ Until PR #1 merges, `update.ini` defaults to branch `fix/grovelink-camera-snapsh
 - If skip list non-empty: **Hidden from phone: N** note under the status line
 - Auto-refresh interval from `server.poll_ms` (default **2000** ms), exposed in `/api` as `poll_ms`
 - SMS box posts to `/send` → `link.ini` INBOX (`new=1`, `from=`, `msg=`) for the in-game phone — **same Wi-Fi, bridge running, CJ gets texts**
-- `POST /caption`, `POST /news`, `GET /api/chat` for captions / Herald / delivered thread
+- CJ **REPLY** in GTA writes `OUTBOX` → bridge chat log → same thread (styled as CJ)
+- `POST /caption`, `POST /news`, `GET /api/chat`, `GET /api/spectate`, `GET /spectate` for captions / Herald / chat / live snapshots
 - **Camera ≠ Breaking News:** no `news.auto`. Use CLEO **NEWS** or web **Breaking News** for Herald.
 - First load of `/` logs **Phone page opened** in the bridge window
 - **`GET /api`** → JSON with `photos`, `latest`, `count`, `bridge_ok`, `poll_ms`, `version`, **`last_error`**, URLs, refresh time
@@ -75,7 +79,23 @@ Until PR #1 merges, `update.ini` defaults to branch `fix/grovelink-camera-snapsh
 - **`GET /export.zip`** → zip of current `bridge/photos` (stdlib `zipfile`; Gallery untouched)
 - **`POST /delete`** (or careful `GET /delete?file=…`) → remove from bridge cache only
 - On start: writes `bridge/OPEN_ON_PHONE.txt`, sets `STATUS.bridge=1`, optional browser open (`server.open_browser=1` default)
-- After shutter (`PHOTO.take=1`), gallery is polled aggressively for a few seconds
+- After shutter (`PHOTO.take=1`), NEWS make, or `SPECTATE.frame=1`, gallery is polled aggressively for a few seconds (only NEWS files Herald)
+- **Spectate limitation:** slideshow of stills (~2–3s in-game interval, ~750ms page poll), low FPS, same Wi-Fi, bridge must run — not real streaming
+
+## How to reply (CJ → web chat)
+
+1. Keep **START_GROVELINK** running; open the phone page on your real phone/PC.
+2. Send a text from the web composer (CJ gets **INBOX** / on-screen SMS notify).
+3. In GTA: **K** → **REPLY** → Enter → **Up/Down** pick a canned line → **Enter** to send.
+4. The web thread shows a **CJ** bubble ("CJ replied"). Your outbound texts still show **Delivered to CJ**.
+
+## How to spectate (web live view)
+
+1. Bridge running; same Wi-Fi.
+2. In GTA: **K** → **SPECTATE** → Enter (**SPECTATE ON**). Phone can be closed after.
+3. On phone/PC open `http://<PC-IP>:8088/spectate` (or tap **LIVE SPECTATE** on the phone page).
+4. You see the latest Gallery snapshot auto-refreshing — **not** smooth video. Toggle SPECTATE off when done.
+5. Spectate frames never create Breaking News (use **NEWS** menu or web button for that).
 
 ## Manual install (advanced)
 

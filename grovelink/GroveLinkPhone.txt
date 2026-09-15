@@ -1,27 +1,32 @@
 {$USE ini}
 {$USE CLEO}
 {$CLEO .cs}
-// GroveLink Phone v11 — crash-safer. No #model names, no 033E GXT, no hold_cellphone.
+// GroveLink Phone v12 — crash-safer. No #model names, no 033E GXT, no hold_cellphone.
 // K toggle | UP/DOWN wrap | ENTER or SPACE select | BACKSPACE close
-// Menu: CAMERA / INBOX / NEWS / CONTACTS / STATUS / HELP / CLOSE — labels via 0ACD only.
+// Menu: CAMERA / INBOX / REPLY / NEWS / SPECTATE / CONTACTS / STATUS / HELP / CLOSE
 // CAMERA = pics to phone/PC gallery ONLY (never writes NEWS keys / never triggers Herald).
 // NEWS = snap + NEWS.make=1 + NEWS.zone location tag so bridge files Herald (separate feature).
+// REPLY = Up/Down canned lines + Enter → OUTBOX (CJ replies on web chat).
+// SPECTATE = toggle snapshot live view; while on (phone open or closed) every ~2.5s
+//   take_photo + SPECTATE.frame=1 (bridge copies; never NEWS).
 // INBOX plays 018C when new=1. CONTACTS cycles static flavor lines (no models).
 // STATUS LIVE flashes photo count + PHONE PAGE ON PC; INBOX shows NO NEW TEXTS when empty.
 // Closed-phone: SMS FROM REAL PHONE notify (once per new) + NEWS FILED toast after bridge files.
-// HELP: Camera = pics; NEWS = snap + Herald. Mentions UPDATE_GROVELINK for outdated installs.
+// HELP: Camera = pics; REPLY = text back; NEWS = Herald; SPECTATE = web live view.
 0000: NOP
 03A4: name_thread 'GROVELNK'
 
 20@ = 0 // phone open
-21@ = 0
-22@ = 0 // menu index 0=CAMERA 1=INBOX 2=NEWS 3=CONTACTS 4=STATUS 5=HELP 6=CLOSE
+21@ = 0 // UI mode 0=menu 1=reply picker
+22@ = 0 // menu index 0=CAMERA 1=INBOX 2=REPLY 3=NEWS 4=SPECTATE 5=CONTACTS 6=STATUS 7=HELP 8=CLOSE
 23@ = 0 // K debounce
-24@ = 0 // temp int (INBOX.new / STATUS.bridge / NEWS.new)
+24@ = 0 // temp int (INBOX.new / STATUS.bridge / NEWS.new / timer)
 25@ = 0 // PHOTO.count
 26@ = 0 // contacts cycle index 0=Sweet 1=Smoke 2=Ryder 3=Cesar 4=Catalina
 27@ = 0 // phone-just-opened edge (remind / setup once per open)
 28@ = 0 // SMS closed-phone notify latch (1 = already shown for current new=1)
+29@ = 0 // reply canned index 0-4
+30@ = 0 // last spectate game timer (ms)
 
 :MAIN
 0001: wait 0
@@ -46,7 +51,7 @@
 0006: 21@ = 0
 0006: 22@ = 0
 0006: 27@ = 1
-0ACD: show_text_highpriority "CAM INBOX NEWS CONTACTS STATUS HELP CLOSE" time 1800
+0ACD: show_text_highpriority "CAM INBOX REPLY NEWS SPEC MORE" time 1800
 018C: play_sound 1138 at 0.0 0.0 0.0
 0002: jump @AFTER_TOGGLE
 
@@ -60,24 +65,24 @@
 
 :FORCE_CLOSE
 0006: 20@ = 0
+0006: 21@ = 0
 0006: 27@ = 0
 0002: jump @MAIN
 
 :AFTER_TOGGLE
 00D6: if
 8039:   not 23@ == 0
-004D: jf @PHONE_LOGIC
+004D: jf @NOTIFY_CHECK
 00D6: if
 8AB0:   not key_pressed 75
-004D: jf @PHONE_LOGIC
+004D: jf @NOTIFY_CHECK
 0006: 23@ = 0
 
 :NOTIFY_CHECK
 // Phone closed OR open: if new SMS and not yet latched, highpriority + sound.
-// When closed, message is "SMS FROM REAL PHONE" so user knows to open K.
 00D6: if
 0AAB:   file_exists "cleo\GroveLink\link.ini"
-004D: jf @PHONE_LOGIC
+004D: jf @SPECTATE_TICK
 0AF0: 24@ = read_int_from_ini_file "cleo\GroveLink\link.ini" section "INBOX" key "new"
 00D6: if
 0039:   24@ == 1
@@ -103,16 +108,46 @@
 0AF0: 24@ = read_int_from_ini_file "cleo\GroveLink\link.ini" section "NEWS" key "new"
 00D6: if
 0039:   24@ == 1
-004D: jf @PHONE_LOGIC
+004D: jf @SPECTATE_TICK
 0AF1: write_int 0 to_ini_file "cleo\GroveLink\link.ini" section "NEWS" key "new"
 0ACD: show_text_highpriority "NEWS FILED" time 2000
 018C: play_sound 1052 at 0.0 0.0 0.0
+
+:SPECTATE_TICK
+// While SPECTATE.on=1 (phone open or closed): every ~2.5s snap + SPECTATE.frame=1
+// Never writes NEWS / PHOTO.take — Camera + Herald stay separate.
+00D6: if
+0AAB:   file_exists "cleo\GroveLink\link.ini"
+004D: jf @PHONE_LOGIC
+0AF0: 24@ = read_int_from_ini_file "cleo\GroveLink\link.ini" section "SPECTATE" key "on"
+00D6: if
+0039:   24@ == 1
+004D: jf @PHONE_LOGIC
+01BD: 24@ = current_time
+0062: 24@ -= 30@ // elapsed since last spectate frame
+00D6: if
+0019:   24@ > 2500
+004D: jf @PHONE_LOGIC
+01BD: 30@ = current_time
+0A2F: set_photo_camera_effect 1
+0001: wait 60
+0A1E: take_photo 1
+0001: wait 120
+0A2F: set_photo_camera_effect 0
+0AF1: write_int 1 to_ini_file "cleo\GroveLink\link.ini" section "SPECTATE" key "frame"
 
 :PHONE_LOGIC
 00D6: if
 0039:   20@ == 1
 004D: jf @MAIN
 
+// Reply picker sub-mode: Up/Down choose canned, Enter sends OUTBOX, Backspace cancels
+00D6: if
+0039:   21@ == 1
+004D: jf @PHONE_OPEN_SETUP
+0002: jump @REPLY_MODE
+
+:PHONE_OPEN_SETUP
 // Once per open: if bridge is down, remind (STATUS.bridge=0). No wait spam.
 00D6: if
 0039:   27@ == 1
@@ -141,7 +176,7 @@
 0001: wait 160
 000A: 22@ += 1
 00D6: if
-0019:   22@ > 6
+0019:   22@ > 8
 004D: jf @SHOW_SEL
 0006: 22@ = 0
 0002: jump @SHOW_SEL
@@ -154,7 +189,7 @@
 00D6: if
 001B:   0 > 22@
 004D: jf @SHOW_SEL
-0006: 22@ = 6
+0006: 22@ = 8
 
 :SHOW_SEL
 00D6: if
@@ -172,27 +207,39 @@
 00D6: if
 0039:   22@ == 2
 004D: jf @SHOW_SEL4
-0ACD: show_text_highpriority "NEWS  snap + Herald" time 1200
+0ACD: show_text_highpriority "REPLY  text web chat" time 1200
 0002: jump @PHONE_LOGIC2
 :SHOW_SEL4
 00D6: if
 0039:   22@ == 3
 004D: jf @SHOW_SEL5
-0ACD: show_text_highpriority "CONTACTS" time 1200
+0ACD: show_text_highpriority "NEWS  snap + Herald" time 1200
 0002: jump @PHONE_LOGIC2
 :SHOW_SEL5
 00D6: if
 0039:   22@ == 4
 004D: jf @SHOW_SEL6
-0ACD: show_text_highpriority "STATUS" time 1200
+0ACD: show_text_highpriority "SPECTATE  web live view" time 1200
 0002: jump @PHONE_LOGIC2
 :SHOW_SEL6
 00D6: if
 0039:   22@ == 5
 004D: jf @SHOW_SEL7
-0ACD: show_text_highpriority "HELP" time 1200
+0ACD: show_text_highpriority "CONTACTS" time 1200
 0002: jump @PHONE_LOGIC2
 :SHOW_SEL7
+00D6: if
+0039:   22@ == 6
+004D: jf @SHOW_SEL8
+0ACD: show_text_highpriority "STATUS" time 1200
+0002: jump @PHONE_LOGIC2
+:SHOW_SEL8
+00D6: if
+0039:   22@ == 7
+004D: jf @SHOW_SEL9
+0ACD: show_text_highpriority "HELP" time 1200
+0002: jump @PHONE_LOGIC2
+:SHOW_SEL9
 0ACD: show_text_highpriority "CLOSE" time 1200
 
 :PHONE_LOGIC2
@@ -228,7 +275,7 @@
 :SEL_INBOX
 00D6: if
 0039:   22@ == 1
-004D: jf @SEL_NEWS
+004D: jf @SEL_REPLY
 // INBOX: only show text when new=1; otherwise say NO NEW TEXTS clearly
 00D6: if
 0AAB:   file_exists "cleo\GroveLink\link.ini"
@@ -249,10 +296,19 @@
 0ACD: show_text_highpriority "NO NEW TEXTS" time 2000
 0002: jump @KEY_BACK
 
-:SEL_NEWS
+:SEL_REPLY
 00D6: if
 0039:   22@ == 2
-004D: jf @SEL_CONTACTS
+004D: jf @SEL_NEWS
+// Enter reply picker: Up/Down choose canned, Enter sends to web chat
+0006: 21@ = 1
+0ACD: show_text_highpriority "REPLY: Up/Down pick  Enter send" time 2200
+0002: jump @KEY_BACK
+
+:SEL_NEWS
+00D6: if
+0039:   22@ == 3
+004D: jf @SEL_SPECTATE
 // NEWS: snap + PHOTO.take + count + NEWS.make=1 + NEWS.zone (location tag). Separate from Camera.
 0A2F: set_photo_camera_effect 1
 0001: wait 80
@@ -357,9 +413,36 @@
 0ACD: show_text_highpriority "BREAKING NEWS SNAP" time 2000
 0002: jump @KEY_BACK
 
+:SEL_SPECTATE
+00D6: if
+0039:   22@ == 4
+004D: jf @SEL_CONTACTS
+// Toggle SPECTATE.on — bridge /spectate page uses latest frames
+00D6: if
+0AAB:   file_exists "cleo\GroveLink\link.ini"
+004D: jf @SPEC_NOINI
+0AF0: 24@ = read_int_from_ini_file "cleo\GroveLink\link.ini" section "SPECTATE" key "on"
+00D6: if
+0039:   24@ == 1
+004D: jf @SPEC_TURN_ON
+0AF1: write_int 0 to_ini_file "cleo\GroveLink\link.ini" section "SPECTATE" key "on"
+0AF1: write_int 0 to_ini_file "cleo\GroveLink\link.ini" section "SPECTATE" key "frame"
+0ACD: show_text_highpriority "SPECTATE OFF" time 2000
+018C: play_sound 1139 at 0.0 0.0 0.0
+0002: jump @KEY_BACK
+:SPEC_TURN_ON
+0AF1: write_int 1 to_ini_file "cleo\GroveLink\link.ini" section "SPECTATE" key "on"
+0006: 30@ = 0 // force first frame soon
+0ACD: show_text_highpriority "SPECTATE ON  open /spectate" time 2500
+018C: play_sound 1138 at 0.0 0.0 0.0
+0002: jump @KEY_BACK
+:SPEC_NOINI
+0ACD: show_text_highpriority "NO link.ini  run INSTALL" time 2200
+0002: jump @KEY_BACK
+
 :SEL_CONTACTS
 00D6: if
-0039:   22@ == 3
+0039:   22@ == 5
 004D: jf @SEL_STATUS
 // Flavor contacts — static 0ACD lines only, no ped models
 00D6: if
@@ -396,7 +479,7 @@
 
 :SEL_STATUS
 00D6: if
-0039:   22@ == 4
+0039:   22@ == 6
 004D: jf @SEL_HELP
 00D6: if
 0AAB:   file_exists "cleo\GroveLink\link.ini"
@@ -417,15 +500,19 @@
 
 :SEL_HELP
 00D6: if
-0039:   22@ == 5
+0039:   22@ == 7
 004D: jf @SEL_CLOSE
-// HELP: Camera = pics to phone; NEWS = snap + Herald article
+// HELP: Camera / REPLY / NEWS / SPECTATE
 0ACD: show_text_highpriority "HELP: K opens phone" time 1800
 0001: wait 1900
 0ACD: show_text_highpriority "Camera: pics to phone only" time 2000
 0001: wait 2100
+0ACD: show_text_highpriority "REPLY: Up/Down then Enter send" time 2200
+0001: wait 2300
 0ACD: show_text_highpriority "NEWS: snap + Herald article" time 2000
 0001: wait 2100
+0ACD: show_text_highpriority "SPECTATE: web /spectate live" time 2200
+0001: wait 2300
 0ACD: show_text_highpriority "OPEN START GROVELINK ON PC" time 2200
 0001: wait 2300
 0ACD: show_text_highpriority "Outdated? UPDATE_GROVELINK" time 2500
@@ -433,6 +520,7 @@
 
 :SEL_CLOSE
 0006: 20@ = 0
+0006: 21@ = 0
 0ACD: show_text_highpriority "GROVELINK CLOSED" time 1200
 
 :KEY_BACK
@@ -440,6 +528,120 @@
 0AB0:   key_pressed 8
 004D: jf @MAIN
 0006: 20@ = 0
+0006: 21@ = 0
 0006: 27@ = 0
 0001: wait 160
+0002: jump @MAIN
+
+:REPLY_MODE
+// 21@==1: pick canned reply with Up/Down, Enter writes OUTBOX, Backspace cancels
+03F0: enable_text_draw 1
+038E: draw_box 548.0 248.0 132.0 292.0 28 28 32 255
+038E: draw_box 548.0 248.0 118.0 276.0 12 12 14 255
+038E: draw_box 548.0 232.0 102.0 196.0 8 28 16 255
+
+// Show current canned line
+00D6: if
+0039:   29@ == 0
+004D: jf @RSHOW1
+0ACD: show_text_highpriority "REPLY: On my way" time 900
+0002: jump @RKEYS
+:RSHOW1
+00D6: if
+0039:   29@ == 1
+004D: jf @RSHOW2
+0ACD: show_text_highpriority "REPLY: Who is this?" time 900
+0002: jump @RKEYS
+:RSHOW2
+00D6: if
+0039:   29@ == 2
+004D: jf @RSHOW3
+0ACD: show_text_highpriority "REPLY: Grove forever" time 900
+0002: jump @RKEYS
+:RSHOW3
+00D6: if
+0039:   29@ == 3
+004D: jf @RSHOW4
+0ACD: show_text_highpriority "REPLY: Busy rn" time 900
+0002: jump @RKEYS
+:RSHOW4
+0ACD: show_text_highpriority "REPLY: Where you at?" time 900
+
+:RKEYS
+00D6: if
+0AB0:   key_pressed 40
+004D: jf @RKEY_UP
+0001: wait 160
+000A: 29@ += 1
+00D6: if
+0019:   29@ > 4
+004D: jf @REPLY_MODE
+0006: 29@ = 0
+0002: jump @REPLY_MODE
+:RKEY_UP
+00D6: if
+0AB0:   key_pressed 38
+004D: jf @RKEY_SEND
+0001: wait 160
+000E: 29@ -= 1
+00D6: if
+001B:   0 > 29@
+004D: jf @REPLY_MODE
+0006: 29@ = 4
+0002: jump @REPLY_MODE
+
+:RKEY_SEND
+00D6: if or
+0AB0:   key_pressed 13
+0AB0:   key_pressed 32
+004D: jf @RKEY_CANCEL
+0001: wait 180
+00D6: if
+0AAB:   file_exists "cleo\GroveLink\link.ini"
+004D: jf @RSEND_NOINI
+// Write canned msg + OUTBOX.new=1 from=CJ
+00D6: if
+0039:   29@ == 0
+004D: jf @RSEND1
+0AF5: write_string "On my way" to_ini_file "cleo\GroveLink\link.ini" section "OUTBOX" key "msg"
+0002: jump @RSEND_GO
+:RSEND1
+00D6: if
+0039:   29@ == 1
+004D: jf @RSEND2
+0AF5: write_string "Who is this?" to_ini_file "cleo\GroveLink\link.ini" section "OUTBOX" key "msg"
+0002: jump @RSEND_GO
+:RSEND2
+00D6: if
+0039:   29@ == 2
+004D: jf @RSEND3
+0AF5: write_string "Grove forever" to_ini_file "cleo\GroveLink\link.ini" section "OUTBOX" key "msg"
+0002: jump @RSEND_GO
+:RSEND3
+00D6: if
+0039:   29@ == 3
+004D: jf @RSEND4
+0AF5: write_string "Busy rn" to_ini_file "cleo\GroveLink\link.ini" section "OUTBOX" key "msg"
+0002: jump @RSEND_GO
+:RSEND4
+0AF5: write_string "Where you at?" to_ini_file "cleo\GroveLink\link.ini" section "OUTBOX" key "msg"
+:RSEND_GO
+0AF5: write_string "CJ" to_ini_file "cleo\GroveLink\link.ini" section "OUTBOX" key "from"
+0AF1: write_int 1 to_ini_file "cleo\GroveLink\link.ini" section "OUTBOX" key "new"
+0006: 21@ = 0
+018C: play_sound 1052 at 0.0 0.0 0.0
+0ACD: show_text_highpriority "REPLY SENT TO PHONE" time 2200
+0002: jump @MAIN
+:RSEND_NOINI
+0006: 21@ = 0
+0ACD: show_text_highpriority "NO link.ini  run INSTALL" time 2200
+0002: jump @MAIN
+
+:RKEY_CANCEL
+00D6: if
+0AB0:   key_pressed 8
+004D: jf @MAIN
+0006: 21@ = 0
+0001: wait 160
+0ACD: show_text_highpriority "REPLY CANCELLED" time 1200
 0002: jump @MAIN

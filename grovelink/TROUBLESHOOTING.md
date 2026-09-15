@@ -186,3 +186,19 @@ If CJ never sees it: VERIFY `link.ini` path, confirm bridge `STATUS.bridge=1`, a
 ## Captions missing after update
 
 Captions live in `bridge/photos_captions.json` and optional `bridge/photos/<file>.txt`. Clearing phone copies does not wipe the JSON index entries for deleted names (harmless). Re-save a caption from the page if needed.
+
+## CJ reply not showing on the phone page
+
+1. Confirm bridge window is open and `/api/chat` lists the message with `"role": "cj"` or `"from": "CJ"`.
+2. In GTA use **REPLY** (not CONTACTS) — Enter opens the picker; Up/Down then Enter writes `OUTBOX.new=1`.
+3. Check `CLEO\GroveLink\link.ini` — after send, bridge should clear `OUTBOX.new` to `0`. If it stays `1`, the watcher is not running (restart START_GROVELINK).
+4. Hard-refresh the phone page; chat polls with `/api`.
+
+## Spectate page stuck on “Waiting for frames”
+
+1. Enable **SPECTATE** in-game until you see **SPECTATE ON**.
+2. Wait a few seconds for the first snap (`SPECTATE.frame` → bridge copy).
+3. Same Wi-Fi + firewall TCP **8088**; open `/api/spectate` — `latest_url` should be non-empty when a photo exists.
+4. Remember: this is a **snapshot slideshow**, not smooth video — FPS is low by design (Win7 stdlib bridge).
+5. Spectate never files Herald articles; use **NEWS** if you want Breaking News.
+
