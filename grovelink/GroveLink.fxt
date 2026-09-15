@@ -3,26 +3,46 @@ GLCON0	  CONTACTS
 GLCON1	> CONTACTS
 GLCAM1	> CAMERA
 GLCAM0	  CAMERA
-GLINB1	> INBOX
-GLINB0	  INBOX
-GLSTA1	> STATUS
-GLSTA0	  STATUS
+GLINB1	> MESSAGES
+GLINB0	  MESSAGES
 GLCLO1	> CLOSE
 GLCLO0	  CLOSE
 GLHINT	UP/DN  ENTER  BACK
 GLCAMT	CAMERA
 GLSNAP	ENTER = SNAP
 GLBACK	BACKSPACE = BACK
-GLINBT	INBOX
-GLINST	texts arrive as SMS
-GLSTAT	STATUS
-GLRUN	run START_GROVELINK.bat
-GLURL	open URL on real phone
-GLCARR	same Wi-Fi link
+GLINBT	MESSAGES
+GLINST	texts from real phone
+GLURL	open GroveLink in browser
+GLREP	ENTER = reply as CJ
 GLCTL	CONTACTS
+GLCALL	ENTER = CALL
 GLC0	SWEET
 GLC1	SMOKE
 GLC2	RYDER
 GLC3	CESAR
 GLC4	OG LOC
-GLC5	REAL PHONE
+GLC5	KENDL
+GLRPT	REPLY
+GLR0	On my way
+GLR1	Meet at Grove
+GLR2	Can't talk busy
+GLR3	Where you at?
+GLSW1	Sweet: Carl, it's Sweet.
+GLSW2	Sweet: You back in the hood?
+GLSW3	Sweet: Stay on the phone, bro.
+GLSM1	Smoke: CJ, what up, homie.
+GLSM2	Smoke: You know I got your back.
+GLSM3	Smoke: We need to talk business.
+GLRY1	Ryder: Fool, pick up.
+GLRY2	Ryder: Don't be actin' brand new.
+GLRY3	Ryder: Grove Street for life.
+GLCE1	Cesar: Carl, it's Cesar.
+GLCE2	Cesar: You ready to roll or what?
+GLCE3	Cesar: Hit me when you free.
+GLOG1	OG Loc: CJ! My main man!
+GLOG2	OG Loc: I'm about to blow up, dude.
+GLOG3	OG Loc: We should get in the studio.
+GLKE1	Kendl: Hey Carl.
+GLKE2	Kendl: Don't let Sweet run you.
+GLKE3	Kendl: Call me if you need family.
