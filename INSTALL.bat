@@ -17,15 +17,24 @@ for %%P in ("E:\GTA San Andreas" "D:\GTA San Andreas" "C:\GTA San Andreas") do (
 if not defined GTA if exist "E:\GTA San Andreas\gta_sa.exe" set "GTA=E:\GTA San Andreas"
 echo Game: %GTA%
 
+if not defined GTA (
+  echo Could not find gta_sa.exe + CLEO.asi
+  pause
+  exit /b 1
+)
+
 if not exist "%GTA%\CLEO" mkdir "%GTA%\CLEO"
 if not exist "%GTA%\CLEO\GroveLink" mkdir "%GTA%\CLEO\GroveLink"
 copy /Y "%~dp0grovelink\GroveLink.fxt" "%GTA%\CLEO\GroveLink.fxt" >nul
 copy /Y "%~dp0grovelink\GroveLink\link.ini" "%GTA%\CLEO\GroveLink\link.ini" >nul
 
-:: Remove the crashy test script if it was installed
-if exist "%GTA%\CLEO\GroveLinkPhone.cs" (
-  echo Removing bad GroveLinkPhone.cs so the game can start...
-  del /f /q "%GTA%\CLEO\GroveLinkPhone.cs"
+:: Keep a working compiled script if you already built v5+.
+:: Only remove the known-bad tiny crash dump leftover from early tests.
+for %%F in ("%GTA%\CLEO\GroveLinkPhone.cs") do (
+  if exist "%%~F" if %%~zF LSS 200 (
+    echo Removing tiny broken GroveLinkPhone.cs (%%~zF bytes)...
+    del /f /q "%%~F"
+  )
 )
 
 (
@@ -41,9 +50,12 @@ if exist "%GTA%\CLEO\GroveLinkPhone.cs" (
 copy /Y "%~dp0grovelink\bridge\START_GROVELINK.bat" "%USERPROFILE%\Desktop\START_GROVELINK.bat" >nul
 
 echo.
-echo DONE. The crashing script was removed.
-echo Game should start again from: %GTA%\gta_sa.exe
-echo Phone .cs must be compiled in Sanny Builder (F7) from GroveLinkPhone.txt
-echo then copy GroveLinkPhone.cs into %GTA%\CLEO\
+echo DONE. Copied GroveLink.fxt and link.ini.
+echo.
+echo NEXT: compile grovelink\GroveLinkPhone.txt in Sanny Builder (F7)
+echo then copy GroveLinkPhone.cs into:
+echo   %GTA%\CLEO\
+echo.
+echo In game press K. You should see CONTACTS on the right.
 pause
 endlocal
