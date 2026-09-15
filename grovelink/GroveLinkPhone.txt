@@ -1,8 +1,14 @@
 {$USE ini}
 {$USE CLEO}
 {$CLEO .cs}
+var
+    8@: Float
+    22@: Int
+    27@: Int
+end
 // GroveLink Phone v6 — real SA cellphone calls + two-way texts
 // K open/close | UP/DOWN | ENTER | BACKSPACE
+// Sanny 3: do not use high-level 27@ = 22@ (error 0014). Use 0085.
 0000: NOP
 03A4: name_thread 'GROVELNK'
 
@@ -213,9 +219,9 @@
 0051: return
 
 :ROW_Y
-27@ = 22@
-27@ *= 26
-27@ += 166
+0085: 27@ = 22@
+0012: 27@ *= 26
+000A: 27@ += 166
 008D: 8@ = integer 27@ to_float
 0051: return
 
@@ -290,9 +296,6 @@
 033E: display_text 548.0 140.0 'GLCTL'
 033F: set_text_draw_letter_size 0.23 0.90
 0340: set_text_draw_rgba 200 220 200 255
-0343: set_text_center 1
-0348: set_text_draw_proportional 1
-0349: set_font 1
 033E: display_text 548.0 154.0 'GLC0'
 033E: display_text 548.0 180.0 'GLC1'
 033E: display_text 548.0 206.0 'GLC2'
@@ -316,9 +319,6 @@
 033E: display_text 548.0 170.0 'GLCAMT'
 033F: set_text_draw_letter_size 0.20 0.86
 0340: set_text_draw_rgba 200 220 200 255
-0343: set_text_center 1
-0348: set_text_draw_proportional 1
-0349: set_font 1
 033E: display_text 548.0 210.0 'GLSNAP'
 033E: display_text 548.0 236.0 'GLBACK'
 0051: return
@@ -332,9 +332,6 @@
 033E: display_text 548.0 154.0 'GLINBT'
 033F: set_text_draw_letter_size 0.18 0.80
 0340: set_text_draw_rgba 200 220 200 255
-0343: set_text_center 1
-0348: set_text_draw_proportional 1
-0349: set_font 1
 033E: display_text 548.0 190.0 'GLINST'
 033E: display_text 548.0 220.0 'GLREP'
 033E: display_text 548.0 250.0 'GLURL'
@@ -351,18 +348,12 @@
 033E: display_text 548.0 140.0 'GLRPT'
 033F: set_text_draw_letter_size 0.20 0.86
 0340: set_text_draw_rgba 200 220 200 255
-0343: set_text_center 1
-0348: set_text_draw_proportional 1
-0349: set_font 1
 033E: display_text 548.0 156.0 'GLR0'
 033E: display_text 548.0 182.0 'GLR1'
 033E: display_text 548.0 208.0 'GLR2'
 033E: display_text 548.0 234.0 'GLR3'
 033F: set_text_draw_letter_size 0.18 0.78
 0340: set_text_draw_rgba 90 160 100 255
-0343: set_text_center 1
-0348: set_text_draw_proportional 1
-0349: set_font 1
 033E: display_text 548.0 328.0 'GLHINT'
 0051: return
 
@@ -670,6 +661,10 @@
 :PW_DONE
 040D: unload_wav 1
 0051: return
+
+:FORCE_CLOSE
+0050: gosub @CLOSE_PHONE
+0002: jump @MAIN
 
 :CLOSE_PHONE
 0006: 20@ = 0
