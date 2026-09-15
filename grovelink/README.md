@@ -4,6 +4,8 @@ In-game phone HUD. Photos taken in GTA show up on your real phone (same Wi-Fi) v
 
 Crash-safer CLEO: no `hold_cellphone`, no custom GXT `033E` draws. Labels use `0ACD` / `0ACE`. INBOX / STATUS read `link.ini`.
 
+Research notes + out-of-scope (no full taxi/homie phone): [RESEARCH.md](RESEARCH.md).
+
 ## One-click (beginners)
 
 1. From the **repo root**, right-click **`INSTALL.bat`** → **Run as administrator**.
@@ -35,14 +37,15 @@ Until PR #1 merges, `update.ini` defaults to branch `fix/grovelink-camera-snapsh
 - **Closed phone** — new SMS still shows **SMS FROM REAL PHONE** (once) so you open **K**
 - **NEWS FILED** — toast when bridge sets `NEWS.new=1` (after NEWS menu or web Breaking News)
 - **CONTACTS** — flavor only: cycles Sweet / Smoke / Ryder / Cesar / **Catalina** lines via `0ACD` (static text, no ped models; advances each select)
-- **STATUS** — **LIVE N  PHONE PAGE ON PC** / **NO BRIDGE** + shot count from `link.ini` when readable
+- **STATUS** — **LIVE N  PHONE PAGE ON PC** / **NO BRIDGE** + shot count; background HUD writes (`wanted`/`money`/`zone`/`hour`/`spectate`) when bridge=1
 - **HELP** — Camera / REPLY / NEWS / SPECTATE reminders; **OPEN START GROVELINK ON PC**; **Outdated? UPDATE_GROVELINK**
 - **CLOSE** — put the phone away
 - If the bridge is not running (`STATUS.bridge=0`), opening the phone reminds you once: **START GROVELINK BRIDGE**
 
 ## Bridge page (phone / PC browser)
 
-- **Hero + grid** photo feed (latest large, grid below); optional **caption** per shot; **Breaking News** → Grove Street Herald
+- **Quick Actions** bar (Camera tip / Spectate / Herald / Text CJ); second-screen **HUD** + optional SA time from CLEO `STATUS.*`
+- **Hero + grid** photo feed (latest large, grid below); ★ **favorites**; optional **caption** per shot; **Breaking News** → Grove Street Herald
 - Sticky **composer** with optional **From:**; chat thread shows **Delivered to CJ** for your texts and **CJ replied** bubbles when CJ uses in-game REPLY
 - **LIVE SPECTATE** link → `GET /spectate` (full-viewport latest frame, auto-refresh; snapshot slideshow only — not H.264/WebRTC)
 - Header shows prominent **VERSION** + **PHOTOS** stats, **LIVE** pulse badge, **LAN** + **localhost** URLs, last poll time, unread count
@@ -61,7 +64,8 @@ Until PR #1 merges, `update.ini` defaults to branch `fix/grovelink-camera-snapsh
 - Empty first visit shows **large LAN IP:port** (tap to copy) above the checklist
 - `server.max_photos` (default **40**) — bridge prunes oldest files under `bridge/photos` only
 - Unread badge: shots newer than your last visit (`localStorage` timestamp) get a **NEW** highlight
-- Favicon-free; Meta `theme-color` + `apple-mobile-web-app-capable` + **Add to Home Screen** tip for phones
+- Favicon-free; Meta `theme-color` + `apple-mobile-web-app-capable` + **`/manifest.webmanifest`** + **Add to Home Screen** tip
+- Chat **unread badge** + optional CJ browser notifications; spectate fullscreen / pause / frame age
 - Empty state checklist if no photos yet
 - Tap a shot to enlarge (lightbox) or open **/photo/…** full size
 - Server list newest-first; optional Oldest toggle on the page; human-readable timestamps
@@ -72,7 +76,8 @@ Until PR #1 merges, `update.ini` defaults to branch `fix/grovelink-camera-snapsh
 - `POST /caption`, `POST /news`, `GET /api/chat`, `GET /api/spectate`, `GET /spectate` for captions / Herald / chat / live snapshots
 - **Camera ≠ Breaking News:** no `news.auto`. Use CLEO **NEWS** or web **Breaking News** for Herald.
 - First load of `/` logs **Phone page opened** in the bridge window
-- **`GET /api`** → JSON with `photos`, `latest`, `count`, `bridge_ok`, `poll_ms`, `version`, **`last_error`**, URLs, refresh time
+- **`GET /api`** → JSON with `photos`, `latest`, `count`, `bridge_ok`, `poll_ms`, `version`, **`last_error`**, **`hud`**, **`favorites`**, URLs, refresh time
+- **`GET/POST /favorite`**, **`GET /manifest.webmanifest`**
 - **`GET /health`** → same core fields + `galleries`, `gta_dir`, **`last_error`**
 - **`POST /clear`** / **`GET /clear?confirm=1`** → wipe all `bridge/photos` copies (**confirm=1 required** on both)
 - **`skipped_deleted`** in `/api` + `/health` — count of names hidden by the phone delete skip list

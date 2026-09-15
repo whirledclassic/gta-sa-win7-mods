@@ -1,7 +1,9 @@
 {$USE ini}
 {$USE CLEO}
 {$CLEO .cs}
-// GroveLink Phone v12 — crash-safer. No #model names, no 033E GXT, no hold_cellphone.
+// GroveLink Phone v13 — crash-safer. No #model names, no 033E GXT, no hold_cellphone.
+// STATUS HUD: when bridge=1, periodically writes wanted/money/zone/hour/spectate to STATUS.*
+//   (safe opcodes only: 01C0 wanted, 010B money, 00BF hour, 0843 zone). Phone page /api hud.
 // K toggle | UP/DOWN wrap | ENTER or SPACE select | BACKSPACE close
 // Menu: CAMERA / INBOX / REPLY / NEWS / SPECTATE / CONTACTS / STATUS / HELP / CLOSE
 // CAMERA = pics to phone/PC gallery ONLY (never writes NEWS keys / never triggers Herald).
@@ -27,6 +29,7 @@
 28@ = 0 // SMS closed-phone notify latch (1 = already shown for current new=1)
 29@ = 0 // reply canned index 0-4
 30@ = 0 // last spectate game timer (ms)
+31@ = 0 // last status HUD write timer (ms)
 
 :MAIN
 0001: wait 0
@@ -51,6 +54,7 @@
 0006: 21@ = 0
 0006: 22@ = 0
 0006: 27@ = 1
+0006: 31@ = 0
 0ACD: show_text_highpriority "CAM INBOX REPLY NEWS SPEC MORE" time 1800
 018C: play_sound 1138 at 0.0 0.0 0.0
 0002: jump @AFTER_TOGGLE
@@ -118,16 +122,16 @@
 // Never writes NEWS / PHOTO.take — Camera + Herald stay separate.
 00D6: if
 0AAB:   file_exists "cleo\GroveLink\link.ini"
-004D: jf @PHONE_LOGIC
+004D: jf @STATUS_HUD_TICK
 0AF0: 24@ = read_int_from_ini_file "cleo\GroveLink\link.ini" section "SPECTATE" key "on"
 00D6: if
 0039:   24@ == 1
-004D: jf @PHONE_LOGIC
+004D: jf @STATUS_HUD_TICK
 01BD: 24@ = current_time
 0062: 24@ -= 30@ // elapsed since last spectate frame
 00D6: if
 0019:   24@ > 2500
-004D: jf @PHONE_LOGIC
+004D: jf @STATUS_HUD_TICK
 01BD: 30@ = current_time
 0A2F: set_photo_camera_effect 1
 0001: wait 60
@@ -135,6 +139,48 @@
 0001: wait 120
 0A2F: set_photo_camera_effect 0
 0AF1: write_int 1 to_ini_file "cleo\GroveLink\link.ini" section "SPECTATE" key "frame"
+
+
+:STATUS_HUD_TICK
+// When bridge=1: every ~3s write safe STATUS HUD fields for phone second-screen.
+// Skip if no ini. Crash-safer opcodes only (no hold_cellphone / no 033E).
+00D6: if
+0AAB:   file_exists "cleo\GroveLink\link.ini"
+004D: jf @PHONE_LOGIC
+0AF0: 24@ = read_int_from_ini_file "cleo\GroveLink\link.ini" section "STATUS" key "bridge"
+00D6: if
+0039:   24@ == 1
+004D: jf @PHONE_LOGIC
+01BD: 24@ = current_time
+0062: 24@ -= 31@
+00D6: if
+0019:   24@ > 3000
+004D: jf @PHONE_LOGIC
+01BD: 31@ = current_time
+// Wanted stars (0-6) — 01C0 store_wanted_level
+01C0: store_wanted_level $PLAYER_CHAR store_to 24@
+0AF1: write_int 24@ to_ini_file "cleo\GroveLink\link.ini" section "STATUS" key "wanted"
+// Money — 010B store_score (player cash). Safe read-only.
+010B: store_score $PLAYER_CHAR to 25@
+0AF1: write_int 25@ to_ini_file "cleo\GroveLink\link.ini" section "STATUS" key "money"
+// In-game clock hour — 00BF get_time_of_day
+00BF: get_time_of_day 4@ 5@
+0AF1: write_int 4@ to_ini_file "cleo\GroveLink\link.ini" section "STATUS" key "hour"
+// Spectate mirror
+0AF0: 24@ = read_int_from_ini_file "cleo\GroveLink\link.ini" section "SPECTATE" key "on"
+0AF1: write_int 24@ to_ini_file "cleo\GroveLink\link.ini" section "STATUS" key "spectate"
+// Zone name (reuse NEWS-style 0843 + coarse Grove Street check)
+00A0: store_actor $PLAYER_ACTOR position_to 1@ 2@ 3@
+0843: get_name_of_zone 1@ 2@ 3@ store_to 0@s
+0AF5: write_string 0@s to_ini_file "cleo\GroveLink\link.ini" section "STATUS" key "zone"
+00D6: if and
+0021:   1@ > 2420.0
+0023:   2560.0 > 1@
+0021:   2@ > -1750.0
+0023:   -1600.0 > 2@
+004D: jf @HUD_ZONE_DONE
+0AF5: write_string "Grove Street" to_ini_file "cleo\GroveLink\link.ini" section "STATUS" key "zone"
+:HUD_ZONE_DONE
 
 :PHONE_LOGIC
 00D6: if

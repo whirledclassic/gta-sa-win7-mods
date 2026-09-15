@@ -48,6 +48,7 @@ DELETED = set()  # basenames in bridge/photos the user removed from the phone UI
 WEB_NEWS = os.path.join(HERE, "news")
 CAPTIONS_PATH = os.path.join(HERE, "photos_captions.json")
 CHAT_LOG_PATH = os.path.join(HERE, "chat_delivered.json")
+FAVORITES_PATH = os.path.join(HERE, "photos_favorites.json")
 
 
 def read_pack_version():
@@ -264,7 +265,7 @@ def ensure_dirs(cfg, gta_dir):
                     "[PHOTO]\ntake=0\ncount=0\n\n"
                     "[INBOX]\nnew=0\nfrom=REAL PHONE\nmsg=\n\n"
                     "[OUTBOX]\nnew=0\nfrom=CJ\nmsg=\n\n"
-                    "[STATUS]\nbridge=1\nip=0.0.0.0\n\n"
+                    "[STATUS]\nbridge=1\nip=0.0.0.0\nwanted=0\nmoney=0\nzone=\nhour=-1\nspectate=0\n\n"
                     "[NEWS]\nnew=0\nmake=0\nzone=\n\n"
                     "[SPECTATE]\non=0\nframe=0\n"
                 )
@@ -1176,8 +1177,27 @@ def render_news_article_page(art_id):
         "<div class=\"story\">%s</div>"
         "<div class=\"weather\"><b>Los Santos Weather:</b> %s</div>"
         "<div class=\"nav\"><a href=\"/news\">&larr; All stories</a> · "
-        "<a href=\"/\">Phone feed</a></div>"
-        "</div></body></html>"
+        "<a href=\"/\">Phone feed</a> · "
+        "<button type=\"button\" id=\"share_article\" style=\"background:#2a1a08;color:#f5e6c8;border:1px solid #c4a35a;padding:8px 12px;font-weight:bold;cursor:pointer;min-height:40px\">Share article</button></div>"
+        "</div>"
+        "<script>"
+        "(function(){"
+        "var btn=document.getElementById('share_article');"
+        "if(!btn)return;"
+        "btn.onclick=function(){"
+        "  var url=window.location.href;"
+        "  var title=document.title||'Grove Street Herald';"
+        "  function fallback(){"
+        "    function ok(){btn.textContent='Copied!';setTimeout(function(){btn.textContent='Share article';},1500);}"
+        "    if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(url).then(ok).catch(function(){prompt('Copy URL',url);});}"
+        "    else{prompt('Copy URL',url);}"
+        "  }"
+        "  if(navigator.share){navigator.share({title:title,url:url,text:title}).catch(fallback);}"
+        "  else{fallback();}"
+        "};"
+        "})();"
+        "</script>"
+        "</body></html>"
     ) % (hl, hl, byline, when, loc_html, img, body, weather)
 
 
@@ -1204,6 +1224,126 @@ def attach_captions_to_photos(photos):
         out.append(item)
     return out
 
+
+# --- 2.0.0 favorites + HUD helpers ---
+
+def load_favorites():
+    """Set of favorited photo basenames (JSON list under bridge)."""
+    data = _load_json_file(FAVORITES_PATH, [])
+    out = set()
+    if isinstance(data, list):
+        for name in data:
+            n = _safe_basename(name)
+            if n:
+                out.add(n)
+    elif isinstance(data, dict):
+        for name, flag in data.items():
+            if flag:
+                n = _safe_basename(name)
+                if n:
+                    out.add(n)
+    return out
+
+
+def save_favorites(names):
+    cleaned = sorted(set(_safe_basename(n) for n in (names or []) if _safe_basename(n)))
+    return _save_json_file(FAVORITES_PATH, cleaned)
+
+
+def set_favorite(name, on):
+    name = _safe_basename(name)
+    if not name:
+        return False, "bad name"
+    favs = load_favorites()
+    if on:
+        favs.add(name)
+    else:
+        favs.discard(name)
+    ok = save_favorites(favs)
+    return ok, name
+
+
+def attach_favorites_to_photos(photos):
+    favs = load_favorites()
+    out = []
+    for p in photos or []:
+        if not isinstance(p, dict):
+            out.append(p)
+            continue
+        item = dict(p)
+        name = item.get("file") or ""
+        item["favorite"] = bool(name and name in favs)
+        out.append(item)
+    return out
+
+
+def read_hud_from_ini(ini=None):
+    """Read safe STATUS HUD fields written by CLEO (crash-safer ints/strings)."""
+    ini = ini or STATE.get("link_ini") or ""
+    hud = {
+        "wanted": 0,
+        "money": 0,
+        "zone": "",
+        "hour": -1,
+        "spectate": False,
+        "bridge": False,
+    }
+    if not ini or not os.path.isfile(ini):
+        return hud
+    try:
+        wanted = read_ini_key(ini, "STATUS", "wanted", "0")
+        money = read_ini_key(ini, "STATUS", "money", "0")
+        zone = read_ini_key(ini, "STATUS", "zone", "")
+        hour = read_ini_key(ini, "STATUS", "hour", "-1")
+        spectate = read_ini_key(ini, "STATUS", "spectate", "0")
+        # also mirror SPECTATE.on if STATUS.spectate missing
+        if spectate in ("", "0"):
+            spectate = read_ini_key(ini, "SPECTATE", "on", "0")
+        bridge = read_ini_key(ini, "STATUS", "bridge", "0")
+        try:
+            hud["wanted"] = max(0, min(6, int(wanted)))
+        except Exception:
+            hud["wanted"] = 0
+        try:
+            hud["money"] = int(money)
+        except Exception:
+            hud["money"] = 0
+        hud["zone"] = (zone or "").strip()[:48]
+        try:
+            hud["hour"] = int(hour)
+        except Exception:
+            hud["hour"] = -1
+        if hud["hour"] < 0 or hud["hour"] > 23:
+            # -1 means unset / CLEO skipped
+            if str(hour).strip() in ("", "-1"):
+                hud["hour"] = -1
+            else:
+                hud["hour"] = max(0, min(23, hud["hour"]))
+        hud["spectate"] = str(spectate).strip() in ("1", "true", "yes", "on")
+        hud["bridge"] = str(bridge).strip() in ("1", "true", "yes")
+    except Exception:
+        pass
+    return hud
+
+
+def render_manifest():
+    """PWA-lite web app manifest (Add to Home Screen)."""
+    ver = STATE.get("version", "unknown") or "unknown"
+    return {
+        "name": "GroveLink Phone",
+        "short_name": "GroveLink",
+        "description": "GTA SA camera gallery, texts to CJ, Herald, and spectate snapshots (v%s)." % ver,
+        "start_url": "/",
+        "scope": "/",
+        "display": "standalone",
+        "background_color": "#071109",
+        "theme_color": "#071109",
+        "orientation": "any",
+        "lang": "en",
+        "icons": [],
+    }
+
+
 # --- end 1.8.0 helpers ---
 
 
@@ -1216,7 +1356,10 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#071109">
 <meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="GroveLink">
 <meta name="mobile-web-app-capable" content="yes">
+<link rel="manifest" href="/manifest.webmanifest">
 <title>GroveLink</title>
 <style>
   body { margin:0; background:#070b08; color:#d7ffd0; font-family: Arial, Helvetica, sans-serif; }
@@ -1480,6 +1623,48 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     background:none; border:0; color:#2cff6a; font-size:11px; font-weight:bold;
     cursor:pointer; padding:0; text-decoration:underline; min-height:28px;
   }
+
+  .hudstrip {
+    margin-top:10px; padding:10px 12px; background:#0b1a0e; border:1px solid #1a4;
+    font-size:12px; color:#b6e6b0; display:flex; flex-wrap:wrap; gap:10px; align-items:center;
+  }
+  .hudstrip .huditem { white-space:nowrap; }
+  .hudstrip .hudk { color:#7aaa7a; margin-right:4px; }
+  .hudstrip .hudv { color:#2cff6a; font-weight:bold; }
+  .hudstrip.hidden { display:none; }
+  .timestrip {
+    margin-top:8px; font-size:12px; color:#7aaa7a; letter-spacing:1px;
+  }
+  .timestrip strong { color:#2cff6a; }
+  .timestrip.hidden { display:none; }
+  .quickbar {
+    display:flex; gap:8px; margin:10px 12px 0; flex-wrap:wrap;
+  }
+  .quickbar a, .quickbar button {
+    flex:1; min-width:100px; background:#143; color:#d7ffd0; border:1px solid #2cff6a;
+    padding:10px 8px; font-size:11px; font-weight:bold; min-height:44px; cursor:pointer;
+    text-decoration:none; text-align:center; display:inline-flex; align-items:center; justify-content:center;
+    box-sizing:border-box; border-radius:2px;
+  }
+  .quickbar a.qa-herald { border-color:#c4a35a; color:#f5e6c8; background:#2a1a08; }
+  .quickbar a.qa-spec { border-color:#4af; color:#9cf; background:#1a2a40; }
+  .favbtn {
+    background:#143; color:#d7ffd0; border:1px solid #2cff6a; padding:10px 12px;
+    font-size:12px; font-weight:bold; min-height:40px; cursor:pointer; white-space:nowrap;
+  }
+  .favbtn.on { background:#2a2208; border-color:#c4a35a; color:#ffd86a; }
+  .chathead { display:flex; align-items:center; gap:8px; margin:0 0 8px; }
+  .chathead h3 { margin:0; flex:1; font-size:12px; letter-spacing:1px; color:#2cff6a; }
+  .chatbadge {
+    display:none; min-width:20px; padding:2px 7px; border-radius:10px; background:#e22; color:#fff;
+    font-size:11px; font-weight:bold; text-align:center;
+  }
+  .chatbadge.show { display:inline-block; }
+  .chatacts { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:8px; }
+  .chatacts button {
+    background:#1a2a1a; color:#d7ffd0; border:1px solid #2cff6a; padding:8px 10px;
+    font-size:11px; font-weight:bold; min-height:36px; cursor:pointer;
+  }
   .newslink {
     display:inline-block; margin-top:8px; padding:8px 12px; border:1px solid #c4a35a;
     color:#f5e6c8; background:#2a1a08; text-decoration:none; font-size:12px; font-weight:bold;
@@ -1496,6 +1681,13 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       <div class="stat"><div class="k">VERSION</div><div class="v" id="ver">__VERSION__</div></div>
       <div class="stat"><div class="k">PHOTOS</div><div class="v" id="count">0</div></div>
     </div>
+    <div class="hudstrip hidden" id="hud_strip" title="Live second-screen HUD from GTA (STATUS.* in link.ini)">
+      <span class="huditem"><span class="hudk">WANTED</span><span class="hudv" id="hud_wanted">—</span></span>
+      <span class="huditem"><span class="hudk">$</span><span class="hudv" id="hud_money">—</span></span>
+      <span class="huditem"><span class="hudk">ZONE</span><span class="hudv" id="hud_zone">—</span></span>
+      <span class="huditem"><span class="hudk">SPEC</span><span class="hudv" id="hud_spec">off</span></span>
+    </div>
+    <div class="timestrip hidden" id="time_strip"><strong>SA TIME</strong> <span id="hud_hour">—</span></div>
     <div class="urls">
       <div class="urlrow">
         <span><strong>Phone (LAN):</strong> <span id="lan_url">__LAN_URL__</span></span>
@@ -1520,7 +1712,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       <div class="hint" id="big_copy_hint">Copies host:port for your phone browser</div>
     </div>
     <div class="smsnote">Same Wi-Fi + bridge running → CJ gets your texts in-game (K → INBOX). No QR lib — open <code>http://</code> + address above. Or <a id="sms_link" href="#">sms: note with URL</a>.</div>
-    <div class="tip"><strong>Tip:</strong> Browser menu → <b>Add to Home Screen</b> for a one-tap icon (no favicon needed).</div>
+    <div class="tip"><strong>Tip:</strong> Browser menu → <b>Add to Home Screen</b> (uses <code>/manifest.webmanifest</code>) for a one-tap icon.</div>
     <div class="status" id="skip_note" style="display:none;margin-top:6px">Hidden from phone: <span id="skip_count">0</span> (deleted skip list — Gallery untouched)</div>
     <div class="status">
       <span class="pulse live" id="pulse"></span>
@@ -1531,8 +1723,21 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       <span id="last_error_hint" class="bad" style="display:none"></span>
     </div>
   </header>
+  <div class="quickbar" id="quick_actions">
+    <button type="button" id="qa_camera" title="Open GTA and press K → Camera">Camera tip</button>
+    <a class="qa-spec" href="/spectate">Spectate</a>
+    <a class="qa-herald" href="/news">Herald</a>
+    <button type="button" id="qa_text">Text CJ</button>
+  </div>
   <div class="chatbox" id="chatbox">
-    <h3>TEXTS TO CJ</h3>
+    <div class="chathead">
+      <h3>TEXTS TO CJ</h3>
+      <span class="chatbadge" id="chat_unread" title="Unread CJ replies">0</span>
+    </div>
+    <div class="chatacts">
+      <button type="button" id="chat_mark_read">Mark chat read</button>
+      <button type="button" id="chat_notify_btn">Enable CJ alerts</button>
+    </div>
     <div id="chat_thread"><div class="chatempty">Send a message below — delivered texts show here. CJ replies appear on the right.</div></div>
   </div>
   <a class="spectate-link" href="/spectate">LIVE SPECTATE — snapshot view</a>
@@ -1548,6 +1753,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
   <div class="tabs">
     <button type="button" class="tab on" id="tab_all" data-filter="all">All</button>
     <button type="button" class="tab" id="tab_today" data-filter="today">Today</button>
+    <button type="button" class="tab" id="tab_fav" data-filter="favorites">Favorites</button>
     <button type="button" class="tab" id="tab_sort" data-sort="newest" title="Client-side only — server always sends newest first">Newest</button>
   </div>
   <div id="feed"></div>
@@ -1623,12 +1829,17 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 </div>
 <script>
 var LS_KEY = 'grovelink_last_visit';
+var LS_FAV = 'grovelink_favorites';
+var LS_CHAT_READ = 'grovelink_chat_read_ts';
 var FILTER = 'all';
 var SEARCH_Q = '';
 var SORT_ORDER = 'newest'; // client-side only; server /api is always newest-first
 var LAST_PHOTOS = [];
 var LAST_CHAT = [];
+var LAST_HUD = null;
 var PENDING_ACTION = ''; // 'delete:NAME' or 'clear'
+var HERO_IDX = 0;
+var PULL_Y = 0;
 function emptyHtml() {
   var ipPort = '';
   try { ipPort = (document.getElementById('ip_port') || {}).textContent || ''; } catch (e) {}
@@ -1681,6 +1892,140 @@ function getLastVisit() {
 function setLastVisit(ts) {
   try { localStorage.setItem(LS_KEY, String(ts || Math.floor(Date.now()/1000))); } catch (e) {}
 }
+
+function loadLocalFavs() {
+  try {
+    var raw = localStorage.getItem(LS_FAV) || '[]';
+    var arr = JSON.parse(raw);
+    if (!arr || !arr.length) return {};
+    var o = {};
+    for (var i = 0; i < arr.length; i++) o[String(arr[i])] = true;
+    return o;
+  } catch (e) { return {}; }
+}
+function saveLocalFavs(map) {
+  try {
+    var arr = [];
+    for (var k in map) { if (map[k]) arr.push(k); }
+    localStorage.setItem(LS_FAV, JSON.stringify(arr));
+  } catch (e) {}
+}
+var LOCAL_FAVS = loadLocalFavs();
+function isFav(name) {
+  if (!name) return false;
+  if (LOCAL_FAVS[name]) return true;
+  return false;
+}
+function mergeServerFavs(photos) {
+  for (var i = 0; i < (photos || []).length; i++) {
+    var p = photos[i];
+    if (p && p.favorite && p.file) LOCAL_FAVS[p.file] = true;
+  }
+  saveLocalFavs(LOCAL_FAVS);
+}
+function toggleFavorite(name) {
+  name = String(name || '');
+  if (!name) return;
+  var on = !isFav(name);
+  LOCAL_FAVS[name] = on;
+  if (!on) delete LOCAL_FAVS[name];
+  saveLocalFavs(LOCAL_FAVS);
+  renderFeed(LAST_PHOTOS);
+  var x = new XMLHttpRequest();
+  x.open('POST', '/favorite', true);
+  x.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+  x.send('file=' + encodeURIComponent(name) + '&favorite=' + (on ? '1' : '0'));
+}
+function getChatReadTs() {
+  try {
+    var v = parseInt(localStorage.getItem(LS_CHAT_READ) || '0', 10);
+    return isNaN(v) ? 0 : v;
+  } catch (e) { return 0; }
+}
+function setChatReadTs(ts) {
+  try { localStorage.setItem(LS_CHAT_READ, String(ts || Math.floor(Date.now()/1000))); } catch (e) {}
+}
+function countUnreadCj(inbox) {
+  var readTs = getChatReadTs();
+  var n = 0;
+  for (var i = 0; i < (inbox || []).length; i++) {
+    var m = inbox[i] || {};
+    var isCj = (m.role === 'cj') || (m.side === 'cj') || ((m['from'] || '').toUpperCase() === 'CJ');
+    if (!isCj) continue;
+    var ts = parseInt(m.ts || m.time || 0, 10) || 0;
+    if (ts > readTs) n++;
+  }
+  return n;
+}
+function updateChatBadge(inbox) {
+  var n = countUnreadCj(inbox);
+  var b = document.getElementById('chat_unread');
+  if (!b) return;
+  if (n > 0) {
+    b.textContent = String(n);
+    b.className = 'chatbadge show';
+  } else {
+    b.textContent = '0';
+    b.className = 'chatbadge';
+  }
+}
+function maybeNotifyCj(inbox) {
+  try {
+    if (!('Notification' in window)) return;
+    if (Notification.permission !== 'granted') return;
+    var readTs = getChatReadTs();
+    var newest = null;
+    for (var i = 0; i < (inbox || []).length; i++) {
+      var m = inbox[i] || {};
+      var isCj = (m.role === 'cj') || (m.side === 'cj') || ((m['from'] || '').toUpperCase() === 'CJ');
+      if (!isCj) continue;
+      var ts = parseInt(m.ts || m.time || 0, 10) || 0;
+      if (ts > readTs && (!newest || ts > (parseInt(newest.ts || 0, 10) || 0))) newest = m;
+    }
+    if (!newest) return;
+    var key = 'gl_notif_' + (newest.ts || '') + '_' + (newest.msg || '');
+    if (sessionStorage.getItem(key)) return;
+    sessionStorage.setItem(key, '1');
+    new Notification('CJ replied', { body: String(newest.msg || 'New reply').slice(0, 80), tag: 'grovelink-cj' });
+  } catch (e) { /* fail soft on HTTP LAN / insecure contexts */ }
+}
+function paintHud(hud) {
+  LAST_HUD = hud || null;
+  var strip = document.getElementById('hud_strip');
+  var tstrip = document.getElementById('time_strip');
+  if (!hud) {
+    if (strip) strip.className = 'hudstrip hidden';
+    if (tstrip) tstrip.className = 'timestrip hidden';
+    return;
+  }
+  var has = (hud.zone || hud.wanted > 0 || hud.money !== 0 || hud.spectate || (typeof hud.hour === 'number' && hud.hour >= 0));
+  if (strip) {
+    strip.className = has ? 'hudstrip' : 'hudstrip hidden';
+    var w = document.getElementById('hud_wanted');
+    var m = document.getElementById('hud_money');
+    var z = document.getElementById('hud_zone');
+    var s = document.getElementById('hud_spec');
+    if (w) w.textContent = (hud.wanted > 0) ? ('★'.repeat(Math.min(6, hud.wanted))) : '0';
+    if (m) {
+      try { m.textContent = Number(hud.money || 0).toLocaleString(); }
+      catch (e) { m.textContent = String(hud.money || 0); }
+    }
+    if (z) z.textContent = hud.zone || '—';
+    if (s) s.textContent = hud.spectate ? 'ON' : 'off';
+  }
+  if (tstrip) {
+    var hour = (typeof hud.hour === 'number') ? hud.hour : -1;
+    if (hour >= 0 && hour <= 23) {
+      tstrip.className = 'timestrip';
+      var hh = (hour < 10 ? '0' : '') + hour + ':00';
+      var el = document.getElementById('hud_hour');
+      if (el) el.textContent = hh + ' (in-game)';
+    } else {
+      tstrip.className = 'timestrip hidden';
+    }
+  }
+}
+
 
 function startOfTodaySec() {
   var d = new Date();
@@ -1963,6 +2308,8 @@ function photoCard(p, isHero) {
   html += '<button type="button" class="capbtn" onclick="saveCaption(\\'' + safe + '\\', document.getElementById(\\'' + 'cap_' + cid + '\\').value)">Save</button></div>';
   html += '<div class="btns">';
   html += '<button type="button" class="newsbtn" onclick="breakingNews(\\'' + safe + '\\')">Breaking News</button>';
+  var favOn = isFav(name) || !!p.favorite;
+  html += '<button type="button" class="favbtn' + (favOn ? ' on' : '') + '" onclick="toggleFavorite(\\'' + safe + '\\')">' + (favOn ? '★ Fav' : '☆ Fav') + '</button>';
   html += '<button type="button" class="sharebtn" onclick="sharePhoto(\\'' + safe + '\\')">Share</button>';
   html += '<button type="button" class="delbtn" onclick="deletePhoto(\\'' + safe + '\\')">Delete</button>';
   html += '</div></div>';
@@ -1970,6 +2317,7 @@ function photoCard(p, isHero) {
 }
 
 function renderChat(inbox) {
+  LAST_CHAT = inbox || [];
   var box = document.getElementById('chat_thread');
   if (!box) return;
   var list = inbox || [];
@@ -2011,6 +2359,14 @@ function renderFeed(photos) {
     }
     list = filtered;
   }
+  if (FILTER === 'favorites') {
+    var filteredF = [];
+    for (var jf = 0; jf < list.length; jf++) {
+      var pf = list[jf];
+      if (isFav(pf.file) || !!pf.favorite) filteredF.push(pf);
+    }
+    list = filteredF;
+  }
   if (SEARCH_Q) {
     var q = SEARCH_Q.toLowerCase();
     var filtered2 = [];
@@ -2035,6 +2391,8 @@ function renderFeed(photos) {
     document.getElementById('unread_count').textContent = '0';
     if (SEARCH_Q) {
       feed.innerHTML = '<div class="empty"><h2>NO MATCHES</h2><p>No filenames match <b>' + escapeHtml(SEARCH_Q) + '</b>. Clear the search box.</p></div>';
+    } else if (FILTER === 'favorites') {
+      feed.innerHTML = '<div class="empty"><h2>NO FAVORITES</h2><p>Tap ★ on a shot to star it. Favorites sync in this browser + optional bridge JSON.</p></div>';
     } else {
       feed.innerHTML = EMPTY_TODAY;
     }
@@ -2127,7 +2485,23 @@ function paint(data) {
       sms.href = 'sms:?&body=' + encodeURIComponent(note);
     }
   }
+  mergeServerFavs(photos);
+  if (data.favorites && data.favorites.length) {
+    for (var fi = 0; fi < data.favorites.length; fi++) LOCAL_FAVS[data.favorites[fi]] = true;
+    saveLocalFavs(LOCAL_FAVS);
+  }
+  paintHud(data.hud || null);
   renderChat(data.inbox || []);
+  updateChatBadge(data.inbox || []);
+  maybeNotifyCj(data.inbox || []);
+  if (data.poll_ms && data.spectate_on) {
+    var hot = Math.min(parseInt(data.poll_ms, 10) || 2000, 1000);
+    if (hot !== POLL_MS && data.spectate_on) { /* phone page keeps poll_ms; spectate page hotter */ }
+  }
+  if (data.poll_ms) {
+    var pm = parseInt(data.poll_ms, 10);
+    if (pm >= 500 && pm !== POLL_MS) POLL_MS = pm;
+  }
   renderFeed(photos);
 }
 function setCountActions(n, latest) {
@@ -2229,6 +2603,7 @@ document.getElementById('share_page').onclick = function() {
 };
 document.getElementById('tab_all').onclick = function() { setFilter('all'); };
 document.getElementById('tab_today').onclick = function() { setFilter('today'); };
+(function(){ var t=document.getElementById('tab_fav'); if(t) t.onclick=function(){ setFilter('favorites'); }; })();
 (function() {
   var btn = document.getElementById('tab_sort');
   if (!btn) return;
@@ -2270,6 +2645,55 @@ document.getElementById('mark_read').onclick = function() {
   poll();
   flashOk('Marked all as read.');
 };
+(function(){
+  var qaCam = document.getElementById('qa_camera');
+  if (qaCam) qaCam.onclick = function(){
+    flashOk('In GTA: press K → Camera → Enter/Space. Photos appear here (gallery only — not Herald).');
+  };
+  var qaText = document.getElementById('qa_text');
+  if (qaText) qaText.onclick = function(){
+    var m = document.getElementById('msg');
+    if (m) { m.focus(); try { m.scrollIntoView({behavior:'smooth', block:'center'}); } catch(e) { m.scrollIntoView(); } }
+  };
+  var cmr = document.getElementById('chat_mark_read');
+  if (cmr) cmr.onclick = function(){
+    setChatReadTs(Math.floor(Date.now()/1000));
+    updateChatBadge(LAST_CHAT);
+    flashOk('Chat marked read.');
+  };
+  var cnb = document.getElementById('chat_notify_btn');
+  if (cnb) cnb.onclick = function(){
+    if (!('Notification' in window)) {
+      flashOk('Notifications not supported in this browser.');
+      return;
+    }
+    try {
+      Notification.requestPermission().then(function(p){
+        flashOk(p === 'granted' ? 'CJ alerts enabled (when browser allows).' : 'Permission: ' + p + ' (fails soft on HTTP LAN).');
+      }).catch(function(){ flashOk('Could not request notification permission.'); });
+    } catch (e) {
+      flashOk('Notifications unavailable (try HTTPS or supported browser).');
+    }
+  };
+})();
+// Light pull-to-refresh on feed
+(function(){
+  var startY = 0;
+  var pulling = false;
+  document.addEventListener('touchstart', function(ev){
+    if (window.scrollY <= 0 && ev.touches && ev.touches[0]) {
+      startY = ev.touches[0].clientY; pulling = true;
+    } else { pulling = false; }
+  }, {passive:true});
+  document.addEventListener('touchend', function(ev){
+    if (!pulling) return;
+    pulling = false;
+    try {
+      var y = (ev.changedTouches && ev.changedTouches[0]) ? ev.changedTouches[0].clientY : 0;
+      if (y - startY > 70) { poll(); flashOk('Refreshed.'); }
+    } catch (e) {}
+  }, {passive:true});
+})();
 document.getElementById('f').onsubmit = function(ev) {
   ev.preventDefault();
   sendMsg(document.getElementById('msg').value);
@@ -2413,26 +2837,46 @@ def render_spectate_html():
         "font-weight:bold;font-size:13px;letter-spacing:2px;padding:8px 14px;border-radius:2px;"
         "box-shadow:0 0 12px rgba(255,40,40,0.55);animation:pulse 1.2s ease-in-out infinite}"
         "@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.65}}"
-        ".back{position:fixed;top:14px;right:14px;z-index:5;background:#0b0f0c;color:#2cff6a;"
-        "border:1px solid #2cff6a;padding:8px 12px;text-decoration:none;font-size:12px;font-weight:bold}"
+        ".banner{position:fixed;top:52px;left:14px;right:14px;z-index:5;background:rgba(4,16,6,0.88);"
+        "border:1px solid #2cff6a;color:#b6e6b0;font-size:12px;padding:8px 12px;text-align:center;"
+        "letter-spacing:0.5px}"
+        ".banner b{color:#2cff6a}"
+        ".controls{position:fixed;top:14px;right:14px;z-index:6;display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}"
+        ".controls a,.controls button{background:#0b0f0c;color:#2cff6a;border:1px solid #2cff6a;"
+        "padding:8px 12px;text-decoration:none;font-size:12px;font-weight:bold;cursor:pointer;min-height:40px}"
         ".meta{position:fixed;bottom:12px;left:12px;right:12px;z-index:5;font-size:11px;color:#7aaa7a;"
         "text-align:center;text-shadow:0 1px 3px #000}"
         "</style></head><body>"
         "<div class=\"badge\" id=\"badge\">LIVE SPECTATE</div>"
-        "<a class=\"back\" href=\"/\">← GroveLink phone</a>"
+        "<div class=\"banner\" id=\"banner\"><b>Snapshot live — not video</b> · slideshow of camera stills · same Wi-Fi + bridge</div>"
+        "<div class=\"controls\">"
+        "<button type=\"button\" id=\"btn_pause\">Pause</button>"
+        "<button type=\"button\" id=\"btn_fs\">Fullscreen</button>"
+        "<a class=\"back\" href=\"/\">← Phone</a>"
+        "</div>"
         "<img id=\"frame\" alt=\"spectate frame\">"
         "<div id=\"wait\">"
         "<h1>WAITING FOR SPECTATE FRAMES</h1>"
         "<p>Enable <b>SPECTATE</b> in-game (K → SPECTATE → Enter). "
-        "Snapshot slideshow only — not real video. Same Wi-Fi + bridge must run. Low FPS (~2–3s).</p>"
+        "Snapshot slideshow only — not real video. Same Wi-Fi + bridge must run.</p>"
         "</div>"
-        "<div class=\"meta\" id=\"meta\">GroveLink __VER__ · snapshot live view</div>"
+        "<div class=\"meta\" id=\"meta\">GroveLink __VER__ · snapshot live — not video</div>"
         "<script>"
         "var img=document.getElementById('frame');"
         "var wait=document.getElementById('wait');"
         "var meta=document.getElementById('meta');"
         "var last='';"
+        "var paused=false;"
+        "var timer=null;"
+        "var pollMs=750;"
+        "function ageLabel(sec){"
+        "  sec=parseInt(sec,10)||0;"
+        "  if(sec<5) return 'just now';"
+        "  if(sec<60) return sec+'s ago';"
+        "  return Math.floor(sec/60)+'m '+ (sec%60) +'s ago';"
+        "}"
         "function tick(){"
+        "  if(paused) return;"
         "  var x=new XMLHttpRequest();"
         "  x.open('GET','/api/spectate',true);"
         "  x.timeout=4000;"
@@ -2442,6 +2886,7 @@ def render_spectate_html():
         "      var url=j.latest_url||'';"
         "      var on=!!j.spectate_on;"
         "      var name=j.latest||'';"
+        "      if(j.poll_ms){ var pm=parseInt(j.poll_ms,10); if(pm>=200&&pm<=5000) pollMs=pm; }"
         "      if(url){"
         "        var bust=url+(url.indexOf('?')>=0?'&':'?')+'t='+(j.last_refresh||Date.now());"
         "        if(bust!==last){ last=bust; img.src=bust; }"
@@ -2452,13 +2897,38 @@ def render_spectate_html():
         "      meta.textContent='GroveLink '+ (j.version||'') +"
         "        (on?' · SPECTATE ON':' · SPECTATE off in-game') +"
         "        (name?' · '+name:'') +"
-        "        ' · snapshots not video';"
-        "    }catch(e){}"
+        "        ' · frame '+ ageLabel(j.age_sec) +"
+        "        ' · snapshot live — not video';"
+        "      schedule();"
+        "    }catch(e){ schedule(); }"
         "  };"
-        "  x.onerror=function(){ meta.textContent='Bridge offline — run START_GROVELINK'; };"
+        "  x.onerror=function(){ meta.textContent='Bridge offline — run START_GROVELINK'; schedule(); };"
+        "  x.ontimeout=function(){ schedule(); };"
         "  x.send();"
         "}"
-        "tick(); setInterval(tick, 750);"
+        "function schedule(){"
+        "  if(timer) clearTimeout(timer);"
+        "  if(paused) return;"
+        "  timer=setTimeout(tick, pollMs);"
+        "}"
+        "document.getElementById('btn_pause').onclick=function(){"
+        "  paused=!paused;"
+        "  this.textContent=paused?'Resume':'Pause';"
+        "  if(!paused) tick(); else if(timer) clearTimeout(timer);"
+        "};"
+        "document.getElementById('btn_fs').onclick=function(){"
+        "  var el=document.documentElement;"
+        "  try{"
+        "    if(!document.fullscreenElement && !document.webkitFullscreenElement){"
+        "      if(el.requestFullscreen) el.requestFullscreen();"
+        "      else if(el.webkitRequestFullscreen) el.webkitRequestFullscreen();"
+        "    } else {"
+        "      if(document.exitFullscreen) document.exitFullscreen();"
+        "      else if(document.webkitExitFullscreen) document.webkitExitFullscreen();"
+        "    }"
+        "  }catch(e){}"
+        "};"
+        "tick();"
         "</script></body></html>"
     ).replace('__VER__', _esc(ver))
 
@@ -2476,14 +2946,25 @@ def spectate_payload():
             STATE["spectate_on"] = spectate_on
     except Exception:
         pass
+    last_ref = int(STATE.get("last_refresh", 0) or 0)
+    age_sec = 0
+    if last_ref:
+        try:
+            age_sec = max(0, int(time.time()) - last_ref)
+        except Exception:
+            age_sec = 0
+    # Hotter poll hint when SPECTATE.on (client uses this)
+    poll_ms = 400 if spectate_on else 750
     return {
         "ok": True,
         "spectate_on": spectate_on,
         "latest": latest,
         "latest_url": ("/photo/%s" % latest) if latest else "",
-        "last_refresh": STATE.get("last_refresh", 0),
+        "last_refresh": last_ref,
+        "age_sec": age_sec,
+        "poll_ms": poll_ms,
         "version": STATE.get("version", "unknown") or "unknown",
-        "note": "snapshot slideshow — not H.264/WebRTC",
+        "note": "snapshot live — not video",
     }
 
 
@@ -2494,6 +2975,10 @@ def api_payload():
     photos = STATE.get("photos", [])
     try:
         photos = attach_captions_to_photos(photos)
+    except Exception:
+        pass
+    try:
+        photos = attach_favorites_to_photos(photos)
     except Exception:
         pass
     latest = ""
@@ -2537,6 +3022,8 @@ def api_payload():
         "last_error": STATE.get("last_error", "") or "",
         "skipped_deleted": len(DELETED),
         "news_count": len(list_news_articles(5)),
+        "favorites": sorted(load_favorites()),
+        "hud": read_hud_from_ini(),
     }
 
 
@@ -2831,6 +3318,20 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/spectate" or path == "/spectate/":
             self._html(render_spectate_html())
             return
+        if path == "/manifest.webmanifest" or path == "/manifest.json":
+            body = json.dumps(render_manifest())
+            data = body.encode("utf-8") if not isinstance(body, bytes) else body
+            self.send_response(200)
+            self.send_header("Content-Type", "application/manifest+json; charset=utf-8")
+            self.send_header("Content-Length", str(len(data)))
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            self.wfile.write(data)
+            return
+        if path == "/favorite" or path == "/favorites":
+            # GET list of favorites
+            self._json({"ok": True, "favorites": sorted(load_favorites())})
+            return
         self.send_error(404)
 
     def do_POST(self):
@@ -2885,6 +3386,45 @@ class Handler(BaseHTTPRequestHandler):
             ok, detail = delete_bridge_photo(name)
             code = 200 if ok else 404
             self._json({"ok": ok, "detail": detail, "file": os.path.basename(name or "")}, code=code)
+            return
+
+        if path == "/favorite" or path == "/favorites":
+            name = ""
+            fav_flag = "1"
+            if text_body.lstrip().startswith("{"):
+                try:
+                    obj = json.loads(text_body)
+                    name = obj.get("file") or obj.get("name") or ""
+                    if "favorite" in obj:
+                        fav_flag = str(obj.get("favorite"))
+                    elif "on" in obj:
+                        fav_flag = str(obj.get("on"))
+                except Exception:
+                    name = ""
+            else:
+                fields = parse_qs(text_body)
+                if "file" in fields and fields["file"]:
+                    name = fields["file"][0]
+                if "favorite" in fields and fields["favorite"]:
+                    fav_flag = fields["favorite"][0]
+                elif "on" in fields and fields["on"]:
+                    fav_flag = fields["on"][0]
+            if not name and "?" in self.path:
+                qfields = parse_qs(self.path.split("?", 1)[1])
+                if "file" in qfields and qfields["file"]:
+                    name = qfields["file"][0]
+                if "favorite" in qfields and qfields["favorite"]:
+                    fav_flag = qfields["favorite"][0]
+            on = str(fav_flag).strip().lower() in ("1", "true", "yes", "on")
+            ok, detail = set_favorite(name, on)
+            code = 200 if ok else 400
+            self._json({
+                "ok": ok,
+                "file": _safe_basename(name),
+                "favorite": on if ok else False,
+                "favorites": sorted(load_favorites()),
+                "detail": detail,
+            }, code=code)
             return
 
         if path == "/caption":

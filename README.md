@@ -11,6 +11,13 @@ CLEO mods for **GTA SA PC 1.0** on **Windows 7** (pack version: root **`VERSION`
 
 Docs: [FEATURES](grovelink/FEATURES.md) · [CHANGELOG](CHANGELOG.md) · [TROUBLESHOOTING](grovelink/TROUBLESHOOTING.md). Not affiliated with Rockstar. Single-player only.
 
+## Changelog — 2.0.0 (research-backed companion pass)
+
+- **Favorites** (★ + filter + localStorage/bridge JSON), chat unread + optional CJ **Notification**, spectate fullscreen/pause/age + snapshot banner
+- Second-screen **HUD** (`/api` `hud` from CLEO STATUS fields), SA time strip when hour present, **Quick Actions**, `/manifest.webmanifest`
+- Herald article Web Share; Camera ≠ NEWS kept; taxi/homie calls **out of scope** ([RESEARCH.md](grovelink/RESEARCH.md))
+- Smoke + docs; VERSION **2.0.0**. Do not merge until review.
+
 ## Changelog — 1.9.0 (CJ replies + LIVE SPECTATE)
 
 - **CJ replies:** CLEO **REPLY** → canned lines → `[OUTBOX]`; bridge appends chat as CJ; web shows CJ vs visitor bubbles.

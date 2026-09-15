@@ -1,6 +1,19 @@
 # GroveLink changelog
 
-Human-readable highlights from pack **1.0 → 1.9.0**. Full detail also lives in root `README.md` round notes and [grovelink/FEATURES.md](grovelink/FEATURES.md).
+Human-readable highlights from pack **1.0 → 2.0.0**. Full detail also lives in root `README.md` round notes and [grovelink/FEATURES.md](grovelink/FEATURES.md).
+
+## 2.0.0 — Research-backed phone companion pass
+
+- **Gallery favorites:** ★ star + Favorites filter; persist `localStorage` + optional bridge `photos_favorites.json` (`GET/POST /favorite`).
+- **Share:** Web Share / copy for photos (kept); Herald article **Share** button; light pull-to-refresh.
+- **Chat:** unread badge for CJ replies; optional browser **Notification** (request on button, fail-soft on HTTP LAN); mark chat read.
+- **Spectate:** fullscreen, pause/resume, last-frame age, **snapshot live — not video** banner; hotter refresh when `SPECTATE.on`.
+- **Herald:** Web Share on article; location badge kept; Camera ≠ NEWS unchanged.
+- **STATUS / HUD:** CLEO periodically writes safe `STATUS.wanted/money/zone/hour/spectate` when `bridge=1`; phone header second-screen HUD + `/api` `hud`; optional SA time strip.
+- **PWA-lite:** `/manifest.webmanifest` + better Add to Home Screen meta.
+- **Quick Actions** bar: Camera tip, Spectate, Herald, Text CJ.
+- **Out of scope:** full taxi/homie spawn/call (documented in `grovelink/RESEARCH.md` vs Ultimate Interactive Phone).
+- Docs: RESEARCH / FEATURES / README / CHANGELOG; smoke covers favorites, manifest, hud, VERSION **2.0.0**.
 
 ## 1.9.0 — CJ replies + LIVE SPECTATE
 

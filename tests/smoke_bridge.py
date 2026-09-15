@@ -9,6 +9,7 @@ help footer + empty-action disable + VERIFY VERSION + CHANGELOG + port-busy + RE
 1.8.1: Camera≠NEWS — PHOTO.take alone no news; NEWS.make creates article; POST /news; no news_auto.
 1.8.2: Breaking News location tags — POST /news location in HTML; NEWS.make with zone in ini.
 1.9.0: CJ REPLY (OUTBOX→chat); /spectate snapshot live view; SPECTATE.frame copy (no NEWS).
+2.0.0: favorites API; /manifest.webmanifest; /api hud; spectate UX; share article; RESEARCH.md.
 
 Run from repo root or anywhere:
   python tests/smoke_bridge.py
@@ -111,6 +112,7 @@ def main():
     os.makedirs(gl.WEB_NEWS)
     gl.CAPTIONS_PATH = os.path.join(tmp, "photos_captions.json")
     gl.CHAT_LOG_PATH = os.path.join(tmp, "chat_delivered.json")
+    gl.FAVORITES_PATH = os.path.join(tmp, "photos_favorites.json")
     gl.STATE["link_ini"] = os.path.join(tmp, "link.ini")
 
     port = free_port()
@@ -643,6 +645,127 @@ def main():
     except Exception as exc:
         check("1.9.0 OUTBOX+SPECTATE suite", False, "%s\n%s" % (exc, traceback.format_exc()[:500]))
 
+
+    # --- 2.0.0 favorites + manifest + hud + spectate UX ---
+    try:
+        try:
+            from urllib.request import Request, urlopen
+        except ImportError:
+            from urllib2 import Request, urlopen
+        # Seed photo for favorite
+        fav_name = "7777777777_fav.jpg"
+        with open(os.path.join(photos, fav_name), "wb") as f:
+            f.write(b"\xff\xd8\xff\xe0" + b"\x00" * 200)
+        gl.copy_latest([])
+        gl.FAVORITES_PATH = os.path.join(tmp, "photos_favorites.json")
+        req_f = Request(
+            "http://127.0.0.1:%s/favorite" % port,
+            data=("file=" + fav_name + "&favorite=1").encode("utf-8"),
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+        )
+        resp_f = urlopen(req_f, timeout=5)
+        body_f = resp_f.read()
+        code_f = getattr(resp_f, "status", None) or resp_f.getcode()
+        jf = json.loads(body_f.decode("utf-8") if isinstance(body_f, bytes) else body_f)
+        check("POST /favorite status 200", code_f == 200, code_f)
+        check("POST /favorite ok", jf.get("ok") is True, jf)
+        check("POST /favorite lists file", fav_name in (jf.get("favorites") or []), jf)
+        code_fg, raw_fg = http_get(port, "/favorite")
+        jfg = json.loads(raw_fg.decode("utf-8") if isinstance(raw_fg, bytes) else raw_fg)
+        check("GET /favorite list", code_fg == 200 and fav_name in (jfg.get("favorites") or []), jfg)
+        # Write STATUS HUD fields into ini
+        with open(server.link_ini, "w") as f:
+            f.write(
+                "[INBOX]\nnew=0\nfrom=\nmsg=\n"
+                "[OUTBOX]\nnew=0\nfrom=CJ\nmsg=\n"
+                "[PHOTO]\ntake=0\ncount=1\n"
+                "[STATUS]\nbridge=1\nwanted=3\nmoney=12500\nzone=Grove Street\nhour=14\nspectate=1\n"
+                "[NEWS]\nnew=0\nmake=0\n"
+                "[SPECTATE]\non=1\nframe=0\n"
+            )
+        gl.STATE["link_ini"] = server.link_ini
+        code_a, raw_a = http_get(port, "/api")
+        api_h = json.loads(raw_a.decode("utf-8") if isinstance(raw_a, bytes) else raw_a)
+        check("GET /api has hud object", isinstance(api_h.get("hud"), dict), api_h.get("hud"))
+        hud = api_h.get("hud") or {}
+        check("GET /api hud.wanted", hud.get("wanted") == 3, hud)
+        check("GET /api hud.money", hud.get("money") == 12500, hud)
+        check("GET /api hud.zone", hud.get("zone") == "Grove Street", hud)
+        check("GET /api hud.hour", hud.get("hour") == 14, hud)
+        check("GET /api hud.spectate", hud.get("spectate") is True, hud)
+        check("GET /api favorites field", isinstance(api_h.get("favorites"), list) and fav_name in api_h.get("favorites"), api_h.get("favorites"))
+        # Photo favorite flag
+        fav_flags = [p.get("favorite") for p in (api_h.get("photos") or []) if p.get("file") == fav_name]
+        check("GET /api photo.favorite true", fav_flags and fav_flags[0] is True, fav_flags)
+        # Manifest
+        code_m, raw_m = http_get(port, "/manifest.webmanifest")
+        check("GET /manifest.webmanifest 200", code_m == 200, code_m)
+        try:
+            man = json.loads(raw_m.decode("utf-8") if isinstance(raw_m, bytes) else raw_m)
+        except Exception:
+            man = {}
+        check("manifest name GroveLink", "GroveLink" in str(man.get("name") or man.get("short_name") or ""), man)
+        check("manifest display standalone", man.get("display") == "standalone", man)
+        check("manifest start_url", man.get("start_url") in ("/", "/index.html"), man)
+        # HTML hooks
+        code_h, raw_h = http_get(port, "/")
+        html_h = raw_h.decode("utf-8") if isinstance(raw_h, bytes) else raw_h
+        check("GET / links manifest", 'rel="manifest"' in html_h and "/manifest.webmanifest" in html_h)
+        check("GET / has Favorites tab", 'id="tab_fav"' in html_h and "Favorites" in html_h)
+        check("GET / has Quick Actions", 'id="quick_actions"' in html_h or "qa_camera" in html_h)
+        check("GET / has HUD strip", 'id="hud_strip"' in html_h)
+        check("GET / has chat notify btn", 'id="chat_notify_btn"' in html_h)
+        check("GET / has fav toggle JS", "toggleFavorite" in html_h and "LS_FAV" in html_h)
+        # Spectate UX
+        code_sp2, raw_sp2 = http_get(port, "/spectate")
+        html_sp2 = raw_sp2.decode("utf-8") if isinstance(raw_sp2, bytes) else raw_sp2
+        check("GET /spectate snapshot live banner", "snapshot live" in html_sp2.lower() and "not video" in html_sp2.lower())
+        check("GET /spectate fullscreen btn", "btn_fs" in html_sp2 or "Fullscreen" in html_sp2)
+        check("GET /spectate pause btn", "btn_pause" in html_sp2 or "Pause" in html_sp2)
+        check("GET /spectate ageLabel", "ageLabel" in html_sp2 or "age_sec" in html_sp2)
+        code_as2, raw_as2 = http_get(port, "/api/spectate")
+        spj2 = json.loads(raw_as2.decode("utf-8") if isinstance(raw_as2, bytes) else raw_as2)
+        check("GET /api/spectate age_sec", "age_sec" in spj2, spj2)
+        check("GET /api/spectate poll_ms hot when on", int(spj2.get("poll_ms") or 0) <= 500, spj2.get("poll_ms"))
+        # News share button
+        arts = gl.list_news_articles(5)
+        if arts:
+            aid = arts[0].get("id")
+            code_na, raw_na = http_get(port, "/news/" + aid)
+            html_na = raw_na.decode("utf-8") if isinstance(raw_na, bytes) else raw_na
+            check("GET /news/<id> Share article", "share_article" in html_na or "Share article" in html_na)
+        else:
+            # create one quickly
+            req_n = Request(
+                "http://127.0.0.1:%s/news" % port,
+                data=("file=" + fav_name + "&location=Grove+Street").encode("utf-8"),
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+            )
+            resp_n = urlopen(req_n, timeout=5)
+            jn = json.loads(resp_n.read().decode("utf-8"))
+            aid = jn.get("id")
+            code_na, raw_na = http_get(port, "/news/" + aid)
+            html_na = raw_na.decode("utf-8") if isinstance(raw_na, bytes) else raw_na
+            check("GET /news/<id> Share article", "share_article" in html_na or "Share article" in html_na)
+        # RESEARCH.md present
+        research = os.path.join(REPO, "grovelink", "RESEARCH.md")
+        check("RESEARCH.md exists", os.path.isfile(research))
+        with open(research, "r") as f:
+            res = f.read()
+        check("RESEARCH.md maps sources", "iFruit" in res or "companion" in res.lower())
+        check("RESEARCH.md out of scope taxi/homie", "taxi" in res.lower() and "out of scope" in res.lower())
+        # CLEO HUD writes
+        with open(os.path.join(REPO, "grovelink", "GroveLinkPhone.txt"), "r") as f:
+            cleo20 = f.read()
+        check("CLEO STATUS_HUD_TICK", ":STATUS_HUD_TICK" in cleo20)
+        check("CLEO writes STATUS.wanted", 'section "STATUS" key "wanted"' in cleo20)
+        check("CLEO writes STATUS.hour", 'section "STATUS" key "hour"' in cleo20)
+        check("CLEO uses 01C0 wanted", "01C0:" in cleo20 and "store_wanted_level" in cleo20)
+        check("CLEO uses 010B money", "010B:" in cleo20 and "store_score" in cleo20)
+        check("CLEO uses 00BF hour", "00BF:" in cleo20 and "get_time_of_day" in cleo20)
+    except Exception as exc:
+        check("2.0.0 favorites/manifest/hud suite", False, "%s\n%s" % (exc, traceback.format_exc()[:500]))
+
     try:
         server.shutdown()
     except Exception:
@@ -681,12 +804,12 @@ def main():
         check("CLEO HELP mentions REPLY", "REPLY:" in full and "Enter send" in full)
         check("CLEO HELP mentions SPECTATE", "SPECTATE:" in full and "/spectate" in full)
         cam_to_inbox = full.split(":SEL_INBOX")[0]
-        # From first camera effect to SEL_INBOX — Camera select only
+        # Camera menu select is the LAST shutter before :SEL_INBOX (SPECTATE_TICK may shutter earlier)
         if "0A2F: set_photo_camera_effect 1" in cam_to_inbox:
-            cam_sel = cam_to_inbox.split("0A2F: set_photo_camera_effect 1", 1)[1]
+            cam_sel = cam_to_inbox.split("0A2F: set_photo_camera_effect 1")[-1]
         else:
             cam_sel = ""
-        check("CLEO CAMERA select omits NEWS.make", 'key "make"' not in cam_sel)
+        check("CLEO CAMERA select omits NEWS.make", 'key "make"' not in cam_sel and 'section "NEWS"' not in cam_sel)
         news_sel = ""
         if ":SEL_NEWS" in full and ":SEL_SPECTATE" in full:
             news_sel = full.split(":SEL_NEWS", 1)[1].split(":SEL_SPECTATE", 1)[0]
@@ -695,7 +818,7 @@ def main():
         check("CLEO NEWS select writes NEWS.make", 'key "make"' in news_sel)
         check("CLEO NEWS writes NEWS.zone", 'key "zone"' in news_sel or 'section "NEWS" key "zone"' in news_sel)
         check("CLEO NEWS uses 0843 or coord ladder", "0843" in news_sel or "Grove Street" in news_sel)
-        check("CLEO CAMERA select omits NEWS.zone", 'key "zone"' not in cam_sel)
+        check("CLEO CAMERA select omits NEWS.zone", 'section "NEWS" key "zone"' not in cam_sel and 'section "NEWS"' not in cam_sel)
         check("CLEO CONTACTS Catalina flavor", "CATALINA" in full)
         check("CLEO contacts cycle advances", "26@ = 4" in full and ":CONTACT4" in full)
         check("CLEO SMS FROM REAL PHONE notify", "SMS FROM REAL PHONE" in full)
@@ -757,6 +880,7 @@ def main():
         check("CHANGELOG.md has 1.8.1 Camera vs NEWS", "1.8.1" in cl and ("Camera" in cl) and ("news.auto" in cl or "NEWS.make" in cl))
         check("CHANGELOG.md has 1.8.2 location tags", "1.8.2" in cl and ("location" in cl.lower() or "NEWS.zone" in cl or "📍" in cl))
         check("CHANGELOG.md has 1.9.0 CJ reply + spectate", "1.9.0" in cl and ("OUTBOX" in cl or "REPLY" in cl) and ("spectate" in cl.lower() or "SPECTATE" in cl))
+        check("CHANGELOG.md has 2.0.0 research pass", "2.0.0" in cl and ("favorite" in cl.lower() or "HUD" in cl or "manifest" in cl.lower()))
         check("CHANGELOG covers 1.0 foundation", "1.0" in cl and ("Foundation" in cl or "crash-safer" in cl))
     except Exception as exc:
         check("CHANGELOG.md", False, exc)
@@ -787,7 +911,7 @@ def main():
     except Exception as exc:
         check("README polish", False, exc)
 
-    check("VERSION is 1.9.0", pack_ver == "1.9.0", pack_ver)
+    check("VERSION is 2.0.0", pack_ver == "2.0.0", pack_ver)
 
     # Runtime: after clear, HTML still disables; after photo, actions enabled via setCountActions path
     # (API count already covered; spot-check helper exists in page source above)
