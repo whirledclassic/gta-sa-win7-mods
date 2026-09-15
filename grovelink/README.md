@@ -2,7 +2,7 @@
 
 In-game phone HUD. Photos taken in GTA show up on your real phone (same Wi-Fi) via the local bridge on port **8088**.
 
-Crash-safer CLEO: no `hold_cellphone`, no custom GXT `033E` draws. Labels use `0ACD` / `0ACE`. INBOX reads `link.ini`.
+Crash-safer CLEO: no `hold_cellphone`, no custom GXT `033E` draws. Labels use `0ACD` / `0ACE`. INBOX / STATUS read `link.ini`.
 
 ## One-click (beginners)
 
@@ -10,28 +10,38 @@ Crash-safer CLEO: no `hold_cellphone`, no custom GXT `033E` draws. Labels use `0
 2. Wait for the green SUCCESS screen.
 3. Desktop → **GroveLink Phone** → launch GTA → **K** → Camera → **Enter** / **Space**.
 
-INSTALL finds GTA, copies support files, compiles with Sanny when available, creates Gallery folders, opens firewall **8088**, and places Desktop shortcuts + `GroveLink_PHONE_URL.txt`. If Sanny is missing it prints exact F7 steps and **keeps** any existing `.cs`.
+INSTALL finds GTA, copies support files, compiles with Sanny when available, creates Gallery folders, opens firewall **8088**, and places Desktop shortcuts + **`VERIFY_GROVELINK.bat`** + `GroveLink_PHONE_URL.txt`. If Sanny is missing it prints exact F7 steps and **keeps** any existing `.cs`.
+
+Double-click **VERIFY_GROVELINK.bat** (Desktop or repo root) anytime for an OK/MISSING checklist: `gta_sa.exe`, CLEO, `GroveLinkPhone.cs`, `link.ini`, Python, `config.ini`, firewall note, and the URLs to try.
 
 ## In GTA
 
 - **K** — open / close the phone
-- **Up / Down** — menu (CAMERA / INBOX / CLOSE)
-- **Enter** or **Space** — select / snap (Camera) or read INBOX
+- **Up / Down** — menu wraps: **CAMERA / INBOX / CONTACTS / STATUS / CLOSE**
+- **Enter** or **Space** — select / snap (Camera), read INBOX, cycle contacts, show status
 - **Backspace** — close
-- Camera snap shows **PHOTO TAKEN #N** (count from `link.ini`)
+- **CAMERA** — snap; shows **PHOTO TAKEN #N** (count from `link.ini`)
+- **INBOX** — shows last SMS from the real-phone page (`INBOX.msg`); clears `INBOX.new`; plays a short sound (`018C`) when `new=1`
+- **CONTACTS** — flavor only: cycles Sweet / Smoke / Ryder / Cesar lines via `0ACD` (static text, no ped models)
+- **STATUS** — bridge up/down + photo count from `link.ini` when readable
+- **CLOSE** — put the phone away
 - If the bridge is not running (`STATUS.bridge=0`), opening the phone reminds you once: **START GROVELINK BRIDGE**
-- INBOX shows the last SMS from the real-phone page (`INBOX.msg`); clears `INBOX.new` when read
 
 ## Bridge page (phone / PC browser)
 
-- Header shows **LAN URL** + **localhost URL**, bridge online, last refresh time
-- **Copy** buttons for URLs; large SEND / tap targets for mobile
+- Header shows **LAN URL** + **localhost URL**, bridge online, last refresh time, unread count
+- **Copy** buttons for URLs; **Download latest** opens newest `/photo/…`; **Mark all read** clears NEW badges
+- **Delete** on each shot removes it from **bridge/photos only** — it does **not** delete the file in the GTA Gallery
+- Unread badge: shots newer than your last visit (`localStorage` timestamp) get a **NEW** highlight
+- Meta `theme-color` + short **Add to Home Screen** tip for phones
 - Empty state checklist if no photos yet
 - Tap a shot to enlarge (lightbox) or open **/photo/…** full size
 - Newest first with human-readable timestamps
 - Auto-refresh about every 2 seconds (indicator in header)
 - SMS box still posts to `/send` → `link.ini` INBOX for the in-game phone
-- **`GET /health`** → JSON `{ok, photo_count, galleries, ip, port, gta_dir}`
+- **`GET /api`** → JSON with `photos`, `latest` filename, `count` / `photo_count`, `bridge_ok`, URLs, refresh time
+- **`GET /health`** → JSON `{ok, bridge_ok, photo_count, count, latest, galleries, ip, port, gta_dir}`
+- **`POST /delete`** (or careful `GET /delete?file=…`) → remove from bridge cache only
 - On start: writes `bridge/OPEN_ON_PHONE.txt`, sets `STATUS.bridge=1`, optional browser open (`server.open_browser=1` default)
 - After shutter (`PHOTO.take=1`), gallery is polled aggressively for a few seconds
 
@@ -44,6 +54,7 @@ INSTALL finds GTA, copies support files, compiles with Sanny when available, cre
 5. Edit `bridge/config.ini` (`gta_dir`, gallery paths, `port=8088`, `open_browser=1`)
 6. Run `bridge/START_GROVELINK.bat` (needs Python 2.7 / 3.4–3.8 stdlib)
 7. Open the printed URL on the real phone (same Wi-Fi); allow firewall TCP 8088
+8. Optional: copy repo-root `VERIFY_GROVELINK.bat` to Desktop for one-click checks
 
 ## Note on prebuilt `.cs`
 

@@ -34,6 +34,34 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 CFG_PATH = os.path.join(HERE, "config.ini")
 WEB_PHOTOS = os.path.join(HERE, "photos")
 OPEN_PHONE_TXT = os.path.join(HERE, "OPEN_ON_PHONE.txt")
+DELETED_PATH = os.path.join(HERE, "photos_deleted.txt")
+DELETED = set()  # basenames in bridge/photos the user removed from the phone UI
+
+
+def load_deleted():
+    DELETED.clear()
+    if not os.path.isfile(DELETED_PATH):
+        return
+    try:
+        with open(DELETED_PATH, "r") as f:
+            for line in f:
+                name = os.path.basename(line.strip())
+                if name:
+                    DELETED.add(name)
+    except Exception:
+        pass
+
+
+def save_deleted():
+    try:
+        _mkdir(os.path.dirname(DELETED_PATH) or HERE)
+        with open(DELETED_PATH, "w") as f:
+            for name in sorted(DELETED):
+                f.write(name + "\n")
+    except Exception as exc:
+        print("Could not save deleted list:", exc)
+
+
 
 # Shared runtime state (watcher + HTTP handler)
 STATE = {
@@ -237,6 +265,8 @@ def copy_latest(folders):
     copied = []
     for mtime, full, name in images[:40]:
         dest_name = "%d_%s" % (int(mtime), name.replace(" ", "_"))
+        if dest_name in DELETED:
+            continue
         dest = os.path.join(WEB_PHOTOS, dest_name)
         if not os.path.isfile(dest):
             try:
@@ -248,6 +278,7 @@ def copy_latest(folders):
             "mtime": int(mtime),
             "when": human_time(mtime),
         })
+    # Also list any leftover bridge photos not yet in DELETED (manual drops etc.)
     STATE["photos"] = copied
     stamp_now()
     return copied
@@ -396,6 +427,9 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 <head>
 <meta charset=\"utf-8\">
 <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">
+<meta name=\"theme-color\" content=\"#071109\">
+<meta name=\"apple-mobile-web-app-capable\" content=\"yes\">
+<meta name=\"mobile-web-app-capable\" content=\"yes\">
 <title>GroveLink</title>
 <style>
   body { margin:0; background:#070b08; color:#d7ffd0; font-family: Arial, Helvetica, sans-serif; }
@@ -407,10 +441,18 @@ HTML_TEMPLATE = """<!DOCTYPE html>
   .urls strong { color:#2cff6a; }
   .urlrow { display:flex; gap:8px; align-items:flex-start; margin-top:6px; }
   .urlrow span { flex:1; }
-  .copybtn {
+  .copybtn, .actionbtn {
     flex:0 0 auto; background:#1a3; color:#d7ffd0; border:1px solid #2cff6a;
     padding:10px 12px; font-size:13px; font-weight:bold; min-height:44px; cursor:pointer;
+    text-decoration:none; display:inline-flex; align-items:center; justify-content:center;
+    box-sizing:border-box;
   }
+  .actionbtn { background:#143; margin:0; }
+  .actionbtn[disabled] { opacity:0.4; pointer-events:none; }
+  .actions { display:flex; gap:8px; margin-top:10px; flex-wrap:wrap; }
+  .actions .actionbtn { flex:1; min-width:140px; }
+  .tip { margin-top:10px; font-size:11px; color:#7aaa7a; line-height:1.45; }
+  .tip strong { color:#2cff6a; }
   .status { margin-top:8px; font-size:11px; color:#7aaa7a; }
   .status .ok { color:#2cff6a; }
   .status .bad { color:#ff6a6a; }
@@ -426,10 +468,20 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     font-size:16px; min-height:48px; min-width:88px;
   }
   .okmsg { padding:0 12px 8px; color:#2cff6a; font-size:12px; min-height:16px; }
-  .shot { margin:12px; background:#000; border:1px solid #1a4; }
-  .shot a { display:block; }
+  .shot { margin:12px; background:#000; border:1px solid #1a4; position:relative; }
+  .shot.unread { border-color:#2cff6a; box-shadow:0 0 0 2px rgba(44,255,106,0.35); }
+  .badge {
+    position:absolute; top:8px; left:8px; background:#2cff6a; color:#041006;
+    font-size:10px; font-weight:bold; padding:4px 8px; letter-spacing:1px; z-index:1;
+  }
+  .shot a.imgwrap { display:block; }
   .shot img { width:100%; display:block; cursor:zoom-in; }
-  .meta { padding:6px 10px; font-size:11px; color:#7aaa7a; }
+  .meta { padding:8px 10px; font-size:11px; color:#7aaa7a; display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+  .meta .grow { flex:1; min-width:120px; }
+  .delbtn {
+    background:#3a1212; color:#ffb0b0; border:1px solid #a44; padding:10px 12px;
+    font-size:12px; font-weight:bold; min-height:40px; cursor:pointer;
+  }
   .empty { padding:20px 16px; color:#7aaa7a; line-height:1.55; }
   .empty h2 { margin:0 0 10px; color:#2cff6a; font-size:14px; letter-spacing:1px; }
   .empty ol { margin:0; padding-left:20px; }
@@ -461,11 +513,17 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         <button type=\"button\" class=\"copybtn\" id=\"copy_local\">Copy</button>
       </div>
     </div>
+    <div class=\"actions\">
+      <a class=\"actionbtn\" id=\"dl_latest\" href=\"#\" target=\"_blank\" rel=\"noopener\">Download latest</a>
+      <button type=\"button\" class=\"actionbtn\" id=\"mark_read\">Mark all read</button>
+    </div>
+    <div class=\"tip\"><strong>Tip:</strong> On your phone, use the browser menu → <b>Add to Home Screen</b> for a one-tap GroveLink icon. Theme color matches this green HUD.</div>
     <div class=\"status\">
       <span class=\"pulse\" id=\"pulse\"></span>
       Bridge: <span id=\"bridge_status\" class=\"ok\">online</span>
       &nbsp;·&nbsp; Last refresh: <span id=\"last_refresh\">—</span>
       &nbsp;·&nbsp; <span id=\"refresh_hint\">auto every 2s</span>
+      &nbsp;·&nbsp; Unread: <span id=\"unread_count\">0</span>
     </div>
   </header>
   <form id=\"f\">
@@ -480,6 +538,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
   <img id=\"lbimg\" src=\"\" alt=\"full size\">
 </div>
 <script>
+var LS_KEY = 'grovelink_last_visit';
 var EMPTY_HTML =
   '<div class=\"empty\">' +
   '<h2>NO PHOTOS YET</h2>' +
@@ -492,7 +551,17 @@ var EMPTY_HTML =
   '</div>';
 
 function escapeHtml(s) {
-  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\"/g,'&quot;');
+}
+
+function getLastVisit() {
+  try {
+    var v = parseInt(localStorage.getItem(LS_KEY) || '0', 10);
+    return isNaN(v) ? 0 : v;
+  } catch (e) { return 0; }
+}
+function setLastVisit(ts) {
+  try { localStorage.setItem(LS_KEY, String(ts || Math.floor(Date.now()/1000))); } catch (e) {}
 }
 
 function copyText(text, btn) {
@@ -529,16 +598,41 @@ function closeLb(ev) {
   document.getElementById('lbimg').src = '';
 }
 
+function deletePhoto(name) {
+  if (!name) return;
+  if (!confirm('Remove this shot from the phone page?\\n(Does NOT delete the file in GTA Gallery.)')) return;
+  var body = 'file=' + encodeURIComponent(name);
+  var x = new XMLHttpRequest();
+  x.open('POST', '/delete', true);
+  x.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+  x.onreadystatechange = function() {
+    if (x.readyState === 4) {
+      var okEl = document.getElementById('ok');
+      if (x.status === 200) {
+        okEl.textContent = 'Removed from phone page (GTA Gallery untouched).';
+        poll();
+      } else {
+        okEl.textContent = 'Could not delete (already gone?).';
+      }
+      setTimeout(function(){ okEl.textContent = ''; }, 3000);
+    }
+  };
+  x.send(body);
+}
+
 function paint(data) {
   var feed = document.getElementById('feed');
   var count = document.getElementById('count');
   var photos = data.photos || [];
-  count.textContent = photos.length;
+  var lastVisit = getLastVisit();
+  var unread = 0;
+  count.textContent = (typeof data.count === 'number') ? data.count : photos.length;
   var lr = data.last_refresh_human || data.last_refresh || '—';
   document.getElementById('last_refresh').textContent = lr;
   var st = document.getElementById('bridge_status');
   var pulse = document.getElementById('pulse');
-  if (data.ok === false) {
+  var bridgeOk = (data.bridge_ok !== false) && (data.ok !== false);
+  if (!bridgeOk) {
     st.textContent = 'offline?';
     st.className = 'bad';
     pulse.className = 'pulse dim';
@@ -549,7 +643,23 @@ function paint(data) {
   }
   if (data.lan_url) document.getElementById('lan_url').textContent = data.lan_url;
   if (data.local_url) document.getElementById('local_url').textContent = data.local_url;
+
+  var latest = data.latest || (photos[0] && (photos[0].file || photos[0])) || '';
+  var dl = document.getElementById('dl_latest');
+  if (latest) {
+    dl.href = '/photo/' + latest;
+    dl.removeAttribute('disabled');
+    dl.style.opacity = '1';
+    dl.style.pointerEvents = 'auto';
+  } else {
+    dl.href = '#';
+    dl.setAttribute('disabled', 'disabled');
+    dl.style.opacity = '0.4';
+    dl.style.pointerEvents = 'none';
+  }
+
   if (!photos.length) {
+    document.getElementById('unread_count').textContent = '0';
     feed.innerHTML = EMPTY_HTML;
     return;
   }
@@ -558,15 +668,21 @@ function paint(data) {
     var p = photos[i];
     var name = p.file || p;
     var when = p.when || '';
+    var mtime = parseInt(p.mtime || 0, 10) || 0;
+    var isNew = mtime > lastVisit;
+    if (isNew) unread++;
     var href = '/photo/' + name;
-    html += '<div class=\"shot\">';
-    html += '<a href=\"' + href + '\" target=\"_blank\" rel=\"noopener\" onclick=\"openLb(\\'' + href + '\\'); return false;\">';
+    html += '<div class=\"shot' + (isNew ? ' unread' : '') + '\">';
+    if (isNew) html += '<div class=\"badge\">NEW</div>';
+    html += '<a class=\"imgwrap\" href=\"' + href + '\" target=\"_blank\" rel=\"noopener\" onclick=\"openLb(\\'' + href + '\\'); return false;\">';
     html += '<img src=\"' + href + '\" alt=\"shot\">';
     html += '</a>';
-    html += '<div class=\"meta\">' + escapeHtml(when ? when + ' · ' + name : name) +
-            ' · <a href=\"' + href + '\" target=\"_blank\" rel=\"noopener\">full size</a></div>';
-    html += '</div>';
+    html += '<div class=\"meta\"><span class=\"grow\">' + escapeHtml(when ? when + ' · ' + name : name) +
+            ' · <a href=\"' + href + '\" target=\"_blank\" rel=\"noopener\">full size</a></span>';
+    html += '<button type=\"button\" class=\"delbtn\" onclick=\"deletePhoto(\\'' + String(name).replace(/'/g, '') + '\\')\">Delete</button>';
+    html += '</div></div>';
   }
+  document.getElementById('unread_count').textContent = String(unread);
   feed.innerHTML = html;
 }
 function poll() {
@@ -590,6 +706,13 @@ document.getElementById('copy_lan').onclick = function() {
 document.getElementById('copy_local').onclick = function() {
   copyText(document.getElementById('local_url').textContent, this);
 };
+document.getElementById('mark_read').onclick = function() {
+  setLastVisit(Math.floor(Date.now()/1000));
+  poll();
+  var okEl = document.getElementById('ok');
+  okEl.textContent = 'Marked all as read.';
+  setTimeout(function(){ okEl.textContent = ''; }, 2000);
+};
 document.getElementById('f').onsubmit = function(ev) {
   ev.preventDefault();
   var msg = document.getElementById('msg').value;
@@ -606,6 +729,10 @@ document.getElementById('f').onsubmit = function(ev) {
   };
   x.send(body);
 };
+// First visit: treat nothing as unread until user sees the page once
+if (!getLastVisit()) {
+  try { /* leave 0 so existing shots show NEW on first open */ } catch (e) {}
+}
 document.getElementById('feed').innerHTML = EMPTY_HTML;
 poll();
 setInterval(poll, 2000);
@@ -613,6 +740,7 @@ setInterval(poll, 2000);
 </body>
 </html>
 """
+
 
 
 def render_html():
@@ -628,11 +756,18 @@ def render_html():
 def api_payload():
     ip = STATE.get("ip", "127.0.0.1")
     port = STATE.get("port", 8088)
+    photos = STATE.get("photos", [])
+    latest = ""
+    if photos:
+        latest = photos[0].get("file") or ""
     return {
         "ok": True,
-        "photos": STATE.get("photos", []),
+        "bridge_ok": bool(STATE.get("bridge_ok", True)),
+        "photos": photos,
         "inbox": STATE.get("inbox", []),
-        "photo_count": len(STATE.get("photos", [])),
+        "photo_count": len(photos),
+        "count": len(photos),
+        "latest": latest,
         "last_refresh": STATE.get("last_refresh", 0),
         "last_refresh_human": STATE.get("last_refresh_human", ""),
         "lan_url": "http://%s:%s" % (ip, port),
@@ -643,14 +778,53 @@ def api_payload():
 
 
 def health_payload():
+    photos = STATE.get("photos", [])
+    latest = ""
+    if photos:
+        latest = photos[0].get("file") or ""
     return {
         "ok": True,
-        "photo_count": len(STATE.get("photos", [])),
+        "bridge_ok": bool(STATE.get("bridge_ok", True)),
+        "photo_count": len(photos),
+        "count": len(photos),
+        "latest": latest,
         "galleries": list(STATE.get("galleries", [])),
         "ip": STATE.get("ip", "127.0.0.1"),
         "port": STATE.get("port", 8088),
         "gta_dir": STATE.get("gta_dir", "") or "",
     }
+
+
+
+def delete_bridge_photo(name):
+    """Remove a file from bridge/photos only (never GTA Gallery)."""
+    name = os.path.basename(name or "")
+    if not name or name in (".", "..") or "/" in name or "\\" in name:
+        return False, "bad name"
+    # Reject path tricks
+    if ".." in name:
+        return False, "bad name"
+    full = os.path.join(WEB_PHOTOS, name)
+    # Must stay inside WEB_PHOTOS
+    try:
+        web_abs = os.path.abspath(WEB_PHOTOS)
+        full_abs = os.path.abspath(full)
+        if not full_abs.startswith(web_abs + os.sep) and full_abs != web_abs:
+            return False, "bad path"
+    except Exception:
+        return False, "bad path"
+    if not os.path.isfile(full):
+        return False, "not found"
+    try:
+        os.remove(full)
+    except Exception as exc:
+        return False, str(exc)
+    DELETED.add(name)
+    save_deleted()
+    # Refresh STATE photos list (keep order, drop deleted)
+    STATE["photos"] = [p for p in STATE.get("photos", []) if p.get("file") != name]
+    stamp_now()
+    return True, "deleted"
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -683,6 +857,9 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         path = self.path.split("?", 1)[0]
+        qs = ""
+        if "?" in self.path:
+            qs = self.path.split("?", 1)[1]
         if path == "/" or path == "/index.html":
             self._html(render_html())
             return
@@ -691,6 +868,15 @@ class Handler(BaseHTTPRequestHandler):
             return
         if path == "/health":
             self._json(health_payload())
+            return
+        # Careful GET delete: /delete?file=NAME  (also supports POST)
+        if path == "/delete":
+            fields = parse_qs(qs)
+            name = ""
+            if "file" in fields and fields["file"]:
+                name = fields["file"][0]
+            ok, detail = delete_bridge_photo(name)
+            self._json({"ok": ok, "detail": detail, "file": os.path.basename(name or "")})
             return
         if path.startswith("/photo/"):
             name = os.path.basename(unquote(path[len("/photo/"):]))
@@ -720,23 +906,46 @@ class Handler(BaseHTTPRequestHandler):
         self.send_error(404)
 
     def do_POST(self):
-        if self.path.split("?", 1)[0] != "/send":
-            self.send_error(404)
-            return
+        path = self.path.split("?", 1)[0]
         length = int(self.headers.get("Content-Length", "0") or 0)
         raw = self.rfile.read(length) if length else b""
         try:
-            text = raw.decode("utf-8")
+            text_body = raw.decode("utf-8")
         except Exception:
-            text = raw.decode("latin-1")
+            text_body = raw.decode("latin-1")
+
+        if path == "/delete":
+            name = ""
+            if text_body.lstrip().startswith("{"):
+                try:
+                    name = json.loads(text_body).get("file") or ""
+                except Exception:
+                    name = ""
+            else:
+                fields = parse_qs(text_body)
+                if "file" in fields and fields["file"]:
+                    name = fields["file"][0]
+            # Also allow ?file= on POST URL
+            if not name and "?" in self.path:
+                qfields = parse_qs(self.path.split("?", 1)[1])
+                if "file" in qfields and qfields["file"]:
+                    name = qfields["file"][0]
+            ok, detail = delete_bridge_photo(name)
+            code = 200 if ok else 404
+            self._json({"ok": ok, "detail": detail, "file": os.path.basename(name or "")}, code=code)
+            return
+
+        if path != "/send":
+            self.send_error(404)
+            return
         msg = ""
-        if text.lstrip().startswith("{"):
+        if text_body.lstrip().startswith("{"):
             try:
-                msg = json.loads(text).get("msg") or ""
+                msg = json.loads(text_body).get("msg") or ""
             except Exception:
                 msg = ""
         else:
-            fields = parse_qs(text)
+            fields = parse_qs(text_body)
             if "msg" in fields and fields["msg"]:
                 msg = fields["msg"][0]
         msg = (msg or "").strip().replace("\r", " ").replace("\n", " ")[:80]
@@ -751,6 +960,7 @@ class Handler(BaseHTTPRequestHandler):
             })
             print("SMS -> GTA:", msg)
         self._json({"ok": True})
+
 
 
 def shutter_burst(cfg, gta_dir, seconds=3.0, interval=0.25):
@@ -804,6 +1014,7 @@ def main():
     cfg = read_cfg()
     gta_dir = detect_gta_dir(cfg)
     ensure_dirs(cfg, gta_dir)
+    load_deleted()
     galleries = detect_gallery(cfg, gta_dir)
     ini = link_ini_path(gta_dir)
     port = 8088

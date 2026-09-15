@@ -230,9 +230,14 @@ netsh firewall add portopening TCP 8088 "GroveLink Phone" >nul 2>&1
 echo    Rule "GroveLink Phone" allowed on port 8088.
 
 echo.
-echo [7/8] Desktop starters + phone URL note...
+echo [7/8] Desktop starters + health check + phone URL note...
 copy /Y "%~dp0grovelink\bridge\START_GROVELINK.bat" "%USERPROFILE%\Desktop\START_GROVELINK.bat" >nul
 copy /Y "%~dp0grovelink\bridge\START_GROVELINK.bat" "%PUBLIC%\Desktop\START_GROVELINK.bat" >nul 2>&1
+copy /Y "%~dp0VERIFY_GROVELINK.bat" "%USERPROFILE%\Desktop\VERIFY_GROVELINK.bat" >nul
+copy /Y "%~dp0VERIFY_GROVELINK.bat" "%PUBLIC%\Desktop\VERIFY_GROVELINK.bat" >nul 2>&1
+REM So Desktop VERIFY can find bridge files even when not run from the zip folder
+> "%USERPROFILE%\Desktop\GroveLink_REPO.txt" echo %~dp0
+if exist "%PUBLIC%\Desktop\" > "%PUBLIC%\Desktop\GroveLink_REPO.txt" echo %~dp0
 
 REM Launcher that starts bridge (opens browser itself via open_browser=1)
 (
@@ -267,10 +272,13 @@ powershell -NoProfile -Command ^
   echo Also see: grovelink\bridge\OPEN_ON_PHONE.txt after the bridge runs once.
   echo Health check:     http://127.0.0.1:8088/health
   echo.
-  echo In GTA: K → Camera → Enter or Space
+  echo In GTA: K → Camera / Inbox / Contacts / Status / Close
+  echo         Camera: Enter or Space to snap
+  echo.
+  echo Stuck? Double-click VERIFY_GROVELINK.bat on the Desktop.
 ) > "%USERPROFILE%\Desktop\GroveLink_PHONE_URL.txt"
 
-echo    Desktop: GroveLink Phone shortcut, START_GROVELINK.bat, GroveLink_PHONE_URL.txt
+echo    Desktop: GroveLink Phone, START_GROVELINK, VERIFY_GROVELINK, PHONE_URL + REPO pointer
 
 echo.
 echo [8/8] Done
@@ -292,6 +300,8 @@ echo.
 echo   3. Press K → Camera → Enter ^(or Space^)
 echo      Shot appears on the phone page in a couple seconds.
 echo.
+echo   Optional: VERIFY_GROVELINK.bat on Desktop checks everything.
+echo.
 echo ------------------------------------------------
 echo Game folder : %GTA%
 if exist "%GTA%\CLEO\GroveLinkPhone.cs" (
@@ -299,13 +309,14 @@ if exist "%GTA%\CLEO\GroveLinkPhone.cs" (
 ) else (
   echo Phone script: MISSING — follow Sanny F7 steps printed above
 )
-if exist "%GTA%\CLEO\MissionSwitcher_SkinOnly.cs" (
+if "%SW_COMPILED%"=="1" (
+  echo Switcher    : INSTALLED  MissionSwitcher_SkinOnly.cs  ^(H near companion / J = CJ^)
+) else if exist "%GTA%\CLEO\MissionSwitcher_SkinOnly.cs" (
   echo Switcher    : PRESENT  MissionSwitcher_SkinOnly.cs  ^(H / J^)
-) else (
-  echo Switcher    : optional — compile later if you want it
 )
 echo Gallery     : %GAL1%
 echo PC page     : http://127.0.0.1:8088
+echo Health check: Desktop VERIFY_GROVELINK.bat
 echo ------------------------------------------------
 echo.
 set /p RUN=Start GroveLink Phone bridge now? (Y/N): 

@@ -1,5 +1,15 @@
 # GroveLink troubleshooting (Windows 7)
 
+## Quick health check
+
+Double-click **`VERIFY_GROVELINK.bat`** (Desktop after INSTALL, or repo root). It prints **OK** / **MISSING** for:
+
+- `gta_sa.exe`, `CLEO.asi`, `GroveLinkPhone.cs`, `link.ini`
+- Python, `config.ini`, bridge script
+- Firewall note + URLs to try (`http://127.0.0.1:8088`, `/health`, phone LAN URL)
+
+Fix anything marked MISSING, then run VERIFY again.
+
 ## No `GroveLinkPhone.cs` after install
 
 INSTALL only replaces the `.cs` when Sanny successfully compiles a new one. It never deletes a working script without a replacement.
@@ -32,7 +42,7 @@ Also checked: `My Documents\...`, Public Documents, and paths in `bridge\config.
 3. On the PC try **http://127.0.0.1:8088** first.  
 4. On the phone use **http://LAN-IP:8088** printed by the bridge (also `bridge\OPEN_ON_PHONE.txt` and Desktop `GroveLink_PHONE_URL.txt`).  
 5. INSTALL adds firewall rule **GroveLink Phone** TCP **8088**. If you skipped admin install, allow Python/port 8088 manually.  
-6. `/health` should return JSON with `"ok": true`.
+6. `/health` should return JSON with `"ok": true`. VERIFY_GROVELINK also reminds you about the firewall.
 
 ## Photo taken but blank page
 
@@ -40,8 +50,15 @@ Also checked: `My Documents\...`, Public Documents, and paths in `bridge\config.
 2. Confirm `cleo\GroveLink\link.ini` has `PHOTO.take` briefly flip to `1` (bridge clears it).  
 3. Bridge burst-polls Gallery for a few seconds after shutter — wait ~2–4s and refresh.  
 4. Check Gallery folder for new `.jpg` / `.bmp` files larger than ~100 bytes.  
-5. `/api` should list `photos` with `file` + `when`.  
+5. `/api` should list `photos` with `file` + `when`, plus `latest` and `count`.  
 6. If Gallery path is wrong, fix `config.ini` and restart the bridge.
+
+## Delete on phone page vs GTA Gallery
+
+**Delete** on the web page only removes the copy under `grovelink\bridge\photos\`. It does **not** delete the original in Documents `...\Gallery`. GTA's own gallery is untouched.
+
+Deleted names are remembered in `bridge\photos_deleted.txt` so the watcher does not immediately re-copy the same shot from Gallery while you still want it hidden on the phone page.
+
 
 ## Sanny F7 steps
 
@@ -50,7 +67,9 @@ Also checked: `My Documents\...`, Public Documents, and paths in `bridge\config.
 3. **F7** Compile. Fix any opcode/plugin errors (IniFiles.cleo / CLEO must match).  
 4. Output `.cs` → copy to `[GTA]\CLEO\GroveLinkPhone.cs`.
 
-Mission Switcher (optional): compile **one** of `switcher\MissionSwitcher_SkinOnly.txt` (safer) or `MissionSwitcher.txt`, copy `.cs` to CLEO. INSTALL auto-compiles SkinOnly when Sanny is found.
+Menu after compile: **CAMERA / INBOX / CONTACTS / STATUS / CLOSE** (Up/Down wrap, K toggle).
+
+Mission Switcher (optional): compile **one** of `switcher\MissionSwitcher_SkinOnly.txt` (safer) or `MissionSwitcher.txt`, copy `.cs` to CLEO. INSTALL auto-compiles SkinOnly when Sanny is found (SUCCESS mentions it only if installed).
 
 ## Win7 Python versions
 
@@ -69,4 +88,10 @@ Bridge is **stdlib only** (no pip packages).
 
 1. Bridge must be running (`STATUS.bridge=1` in `link.ini`).  
 2. Send from the web page SEND box.  
-3. In GTA: **K** → **INBOX** → Enter/Space — shows `INBOX.msg`, clears `INBOX.new`.
+3. In GTA: **K** → **INBOX** → Enter/Space — shows `INBOX.msg`, clears `INBOX.new`, plays a short sound when the message was new.
+
+## STATUS says BRIDGE DOWN
+
+1. Start Desktop **GroveLink Phone** / START_GROVELINK and keep the window open.  
+2. Bridge sets `STATUS.bridge=1` on start (and `0` on clean stop).  
+3. In GTA: **K** → **STATUS** to re-read bridge + photo count from `link.ini`.
