@@ -1,8 +1,8 @@
 # GroveLink Phone
 
-On-screen SA cellphone: contacts, game voice calls, camera, two-way browser SMS.
+On-screen SA cellphone: contacts, game voice calls, camera, two-way browser SMS, Grove GPS, radio, incoming RING from the web page.
 
-Use the root **INSTALL.bat** / **PATCH.bat** / **CHECK.bat**. Manual copy is only if those fail.
+Use the root **INSTALL.bat** / **PATCH.bat** / **CHECK.bat**.
 
 ## Keys
 
