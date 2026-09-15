@@ -12,6 +12,7 @@ help footer + empty-action disable + VERIFY VERSION + CHANGELOG + port-busy + RE
 2.0.0: favorites API; /manifest.webmanifest; /api hud; spectate UX; share article; RESEARCH.md.
 2.1.0: chat nicknames; spectate watching count; Moments reel; wanted toasts; By place; docs.
 2.2.0: chat reactions+pin; spectate cinema; /recap; bridge uptime; CLEO 6th REPLY; docs.
+2.3.0: photo comments; mute; spectate DL; density; streak; Herald depth; UI polish; docs.
 
 Run from repo root or anywhere:
   python tests/smoke_bridge.py
@@ -979,6 +980,126 @@ def main():
         check("2.2.0 reactions/pin/recap suite", False, "%s\n%s" % (exc, traceback.format_exc()[:600]))
 
 
+    # --- 2.3.0 comments + mute + density + streak + spectate DL + Herald depth ---
+    try:
+        try:
+            from urllib.request import Request, urlopen
+        except ImportError:
+            from urllib2 import Request, urlopen
+
+        # Seed a bridge photo file for comment + streak
+        photos_dir = os.path.join(BRIDGE, "photos")
+        if not os.path.isdir(photos_dir):
+            os.makedirs(photos_dir)
+        shot = "smoke_streak_shot.jpg"
+        shot_path = os.path.join(photos_dir, shot)
+        with open(shot_path, "wb") as f:
+            f.write(b"\xff\xd8\xff\xd9")  # minimal jpeg-ish
+        try:
+            os.utime(shot_path, None)
+        except Exception:
+            pass
+        # Refresh STATE photos via list helper if present
+        try:
+            gl.copy_latest([])
+        except Exception:
+            gl.STATE["photos"] = [{
+                "file": shot,
+                "mtime": int(time.time()),
+                "when": "now",
+                "size": 4,
+                "size_h": "4 B",
+            }]
+            try:
+                gl.note_streak_from_photos(gl.STATE["photos"])
+            except Exception:
+                pass
+
+        req_c = Request(
+            "http://127.0.0.1:%s/comment" % port,
+            data=("file=%s&comment=Smoke%%20comment" % shot).encode("utf-8"),
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+        )
+        resp_c = urlopen(req_c, timeout=5)
+        jc = json.loads(resp_c.read().decode("utf-8"))
+        check("POST /comment ok", jc.get("ok") is True and "Smoke comment" in str(jc.get("comment") or ""), jc)
+
+        code_api23, raw_api23 = http_get(port, "/api")
+        japi23 = json.loads(raw_api23.decode("utf-8") if isinstance(raw_api23, bytes) else raw_api23)
+        check("GET /api has streak", "streak" in japi23 and isinstance(japi23.get("streak"), int), japi23.get("streak"))
+        photos23 = japi23.get("photos") or []
+        found_cmt = False
+        for p in photos23:
+            if isinstance(p, dict) and p.get("file") == shot and (p.get("comment") or "") == "Smoke comment":
+                found_cmt = True
+                break
+        # If photo not in list (copy_latest empty galleries), still accept comment JSON
+        if not found_cmt:
+            try:
+                found_cmt = (gl.get_comment(shot) == "Smoke comment")
+            except Exception:
+                found_cmt = False
+        check("comment stored for photo", found_cmt, photos23[:2] if photos23 else jc)
+
+        code_h23, raw_h23 = http_get(port, "/health")
+        jh23 = json.loads(raw_h23.decode("utf-8") if isinstance(raw_h23, bytes) else raw_h23)
+        check("GET /health has streak", "streak" in jh23, jh23)
+
+        code_rec23, raw_rec23 = http_get(port, "/recap")
+        html_rec23 = raw_rec23.decode("utf-8") if isinstance(raw_rec23, bytes) else raw_rec23
+        check("GET /recap PHOTO STREAK", "PHOTO STREAK" in html_rec23)
+        check("GET /recap modern wrap", "class=\"wrap\"" in html_rec23 or "class='wrap'" in html_rec23 or "SESSION RECAP" in html_rec23)
+
+        code_home23, raw_home23 = http_get(port, "/")
+        html23 = raw_home23.decode("utf-8") if isinstance(raw_home23, bytes) else raw_home23
+        check("GET / comment UI", "saveComment" in html23 and "commentrow" in html23)
+        check("GET / mute UI", "chat_mute_btn" in html23 and "isChatMuted" in html23)
+        check("GET / density UI", "theme_dark" in html23 and "theme_bright" in html23 and "applyDensity" in html23)
+        check("GET / streak header", "streak_val" in html23)
+        check("GET / section headers", "class=\"sect\"" in html23 or "Companion chat" in html23)
+
+        code_sp23, raw_sp23 = http_get(port, "/spectate")
+        html_sp23 = raw_sp23.decode("utf-8") if isinstance(raw_sp23, bytes) else raw_sp23
+        check("GET /spectate download btn", "btn_dl" in html_sp23 and "Download" in html_sp23)
+
+        # Herald depth: create news and inspect article fields / HTML
+        ok_n, art_n, det_n = gl.create_news_from_photo(shot, caption="Smoke caption", auto=False, location="Grove Street")
+        check("create_news detailed ok", ok_n is True and isinstance(art_n, dict), det_n)
+        if art_n:
+            check("news has subhead", bool(art_n.get("subhead")), art_n.get("subhead"))
+            check("news has pull_quote", bool(art_n.get("pull_quote")), art_n.get("pull_quote"))
+            check("news has related", bool(art_n.get("related")), art_n.get("related"))
+            check("news has dateline", bool(art_n.get("dateline")), art_n.get("dateline"))
+            check("news has desk/byline", bool(art_n.get("desk") or art_n.get("byline")), art_n.get("byline"))
+            check("news has photo_credit", bool(art_n.get("photo_credit")), art_n.get("photo_credit"))
+            body_n = art_n.get("body") or ""
+            check("news body multi-paragraph", body_n.count("\n\n") >= 2, body_n.count("\n\n"))
+            aid = art_n.get("id")
+            code_na, raw_na = http_get(port, "/news/%s" % aid)
+            html_na = raw_na.decode("utf-8") if isinstance(raw_na, bytes) else raw_na
+            check("GET /news/<id> pull quote", "class=\"pull\"" in html_na or "pull" in html_na)
+            check("GET /news/<id> related", "related" in html_na.lower())
+            check("GET /news/<id> dateline", "dateline" in html_na.lower() or (art_n.get("dateline") or "")[:8] in html_na)
+            code_ni, raw_ni = http_get(port, "/news")
+            html_ni = raw_ni.decode("utf-8") if isinstance(raw_ni, bytes) else raw_ni
+            check("GET /news index deck/subhead", "deck" in html_ni or (art_n.get("subhead") or "")[:20] in html_ni)
+
+        with open(os.path.join(REPO, "grovelink", "FEATURES.md"), "r") as f:
+            feat23 = f.read()
+        check("FEATURES.md 2.3.0", "2.3.0" in feat23 and "comment" in feat23.lower())
+        check("FEATURES.md streak/density/Herald", "streak" in feat23.lower() and ("density" in feat23.lower() or "Dark street" in feat23) and ("Herald" in feat23 or "subhead" in feat23.lower() or "pull" in feat23.lower()))
+        with open(os.path.join(REPO, "CHANGELOG.md"), "r") as f:
+            cl23 = f.read()
+        check("CHANGELOG.md has 2.3.0", "2.3.0" in cl23)
+        with open(os.path.join(REPO, "grovelink", "RESEARCH.md"), "r") as f:
+            res23 = f.read()
+        check("RESEARCH.md 2.3.0", "2.3.0" in res23)
+    except Exception as exc:
+        check("2.3.0 comments/streak/Herald suite", False, "%s\n%s" % (exc, traceback.format_exc()[:600]))
+
+
+
+
     try:
         server.shutdown()
     except Exception:
@@ -1098,6 +1219,7 @@ def main():
         check("CHANGELOG.md has 2.0.0 research pass", "2.0.0" in cl and ("favorite" in cl.lower() or "HUD" in cl or "manifest" in cl.lower()))
         check("CHANGELOG.md has 2.1.0 features", "2.1.0" in cl and ("nickname" in cl.lower() or "watching" in cl.lower() or "Moments" in cl))
         check("CHANGELOG.md has 2.2.0 features", "2.2.0" in cl and ("reaction" in cl.lower() or "recap" in cl.lower() or "uptime" in cl.lower() or "cinema" in cl.lower()))
+        check("CHANGELOG.md has 2.3.0 features", "2.3.0" in cl and ("comment" in cl.lower() or "streak" in cl.lower() or "Herald" in cl or "density" in cl.lower()))
         check("CHANGELOG covers 1.0 foundation", "1.0" in cl and ("Foundation" in cl or "crash-safer" in cl))
     except Exception as exc:
         check("CHANGELOG.md", False, exc)
@@ -1128,7 +1250,7 @@ def main():
     except Exception as exc:
         check("README polish", False, exc)
 
-    check("VERSION is 2.2.0", pack_ver == "2.2.0", pack_ver)
+    check("VERSION is 2.3.0", pack_ver == "2.3.0", pack_ver)
 
     # Runtime: after clear, HTML still disables; after photo, actions enabled via setCountActions path
     # (API count already covered; spot-check helper exists in page source above)

@@ -171,13 +171,21 @@ Bridge is **stdlib only** (no pip packages).
 
 If CJ never sees it: VERIFY `link.ini` path, confirm bridge `STATUS.bridge=1`, and that INSTALL put `link.ini` under the same GTA folder the game uses.
 
+## Photo comments / streak / mute / density (2.3.0)
+
+1. **Comments:** under each shot, type a short comment → **Comment** (`POST /comment`). Stored in `bridge/photos_comments.json` (+ `.comment.txt` sidecar). Distinct from captions.
+2. **Streak:** days with ≥1 photo in `bridge/photos_streak.json`; shown in header **STREAK** and `/recap` **PHOTO STREAK**.
+3. **Mute alerts:** **Mute alerts** on the chat bar (localStorage) — skips browser CJ notifications when muted.
+4. **Dark street / Bright:** theme density buttons above chat; preference in localStorage.
+5. **Spectate Download:** on `/spectate`, **Download** saves/opens the current frame.
+
 ## Breaking News / Grove Street Herald
 
 **Camera ≠ Breaking News.** Camera snaps only land on the phone/PC gallery. News is a separate feature.
 
 1. **In GTA:** **K** → **NEWS** → Enter/Space → **BREAKING NEWS SNAP**. Bridge burst-copies the shot then files a Herald article (`NEWS.make=1`). CLEO may flash **NEWS FILED** when `NEWS.new=1`.
 2. **On the phone page (no retake):** open an existing shot → optional caption → **Breaking News** (`POST /news`).
-3. Browser opens `/news/<id>` (Grove Street Herald styling). Index: `/news`.
+3. Browser opens `/news/<id>` (Grove Street Herald styling — subhead, pull quote, dateline, weather, related). Index: `/news`.
 4. Articles are JSON under `grovelink/bridge/news/` (stdlib only; no cloud AI).
 5. There is **no** `news.auto` / auto-on-shutter (removed in 1.8.1) — Camera can never trigger news.
 

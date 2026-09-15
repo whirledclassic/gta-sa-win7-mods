@@ -1,4 +1,4 @@
-# GroveLink bridge — Windows 7, Python 2.7 or 3.4-3.8, stdlib only
+# GroveLink bridge - Windows 7, Python 2.7 or 3.4-3.8, stdlib only
 from __future__ import print_function
 
 import json
@@ -49,6 +49,8 @@ WEB_NEWS = os.path.join(HERE, "news")
 CAPTIONS_PATH = os.path.join(HERE, "photos_captions.json")
 CHAT_LOG_PATH = os.path.join(HERE, "chat_delivered.json")
 FAVORITES_PATH = os.path.join(HERE, "photos_favorites.json")
+COMMENTS_PATH = os.path.join(HERE, "photos_comments.json")
+STREAK_PATH = os.path.join(HERE, "photos_streak.json")
 
 
 def read_pack_version():
@@ -111,7 +113,7 @@ STATE = {
     "spectate_on": False,
     # IP -> last_seen unix for /spectate + /api/spectate polls (~30s window)
     "spectate_viewers": {},
-    "started_at": 0,  # unix — set in main(); bridge uptime
+    "started_at": 0,  # unix - set in main(); bridge uptime
     "pinned_chat_id": "",  # one pinned chat message id (empty = none)
 }
 
@@ -202,7 +204,7 @@ def _is_windows():
 
 
 def _looks_like_win_abs(path):
-    """True for paths like C:\\... — skip creating those on non-Windows."""
+    """True for paths like C:\\... - skip creating those on non-Windows."""
     if not path:
         return False
     # Drive-letter absolute (C:\...) or UNC (\\server\...)
@@ -484,6 +486,14 @@ def copy_latest(folders):
         kept = attach_captions_to_photos(kept)
     except Exception:
         pass
+    try:
+        kept = attach_comments_to_photos(kept)
+    except Exception:
+        pass
+    try:
+        note_streak_from_photos(kept)
+    except Exception:
+        pass
     STATE["photos"] = kept
     stamp_now()
     return kept
@@ -589,7 +599,7 @@ def write_open_on_phone(ip, port):
     lan = "http://%s:%s" % (ip, port)
     local = "http://127.0.0.1:%s" % port
     body = (
-        "GroveLink — open on your phone (same Wi-Fi as this PC)\n"
+        "GroveLink - open on your phone (same Wi-Fi as this PC)\n"
         "======================================================\n"
         "\n"
         "  PHONE (LAN):  %s\n"
@@ -613,7 +623,7 @@ def try_open_browser(url):
     try:
         if sys.platform.startswith("win"):
             try:
-                os.startfile(url)  # noqa: PTH118 — Win7 bridge
+                os.startfile(url)  # noqa: PTH118 - Win7 bridge
                 return True
             except Exception:
                 pass
@@ -628,6 +638,7 @@ def try_open_browser(url):
 # --- GroveLink 1.8.0: captions, Breaking News, chat helpers (injected) ---
 
 WEB_NEWS = os.path.join(HERE, "news")
+# CAPTIONS_PATH / CHAT_LOG_PATH already set near top (smoke may override early aliases)
 CAPTIONS_PATH = os.path.join(HERE, "photos_captions.json")
 CHAT_LOG_PATH = os.path.join(HERE, "chat_delivered.json")
 
@@ -662,6 +673,34 @@ _NEWS_WEATHER = (
     "Partly cloudy over Grove; Ballas outlook: unsettled",
     "Heat advisory for anyone standing near a camera flash",
     "Clear skies; keep your phone charged, CJ",
+    "Evening haze over Idlewood; flash recommended",
+    "Fog rolling off the docks - mind the camera lens",
+)
+_NEWS_DESKS = (
+    "City Desk", "Crime & Vibes Desk", "Photo Desk", "Neighborhood Desk",
+    "Culture Desk", "Night Beat", "Grove Bureau",
+)
+_NEWS_PULLS = (
+    '"It was pure San Andreas," one neighbor insisted, waving a phone.',
+    '"Stay Grove," muttered a voice from a porch across the street.',
+    '"SPD had no comment - only vibes," the desk noted dryly.',
+    '"That flash scared the cats off the roof," witnesses claimed.',
+    '"Not a wanted poster - satire only," editors remind readers.',
+    '"Keep the bridge window open," a helpful civilian texted CJ.',
+)
+_NEWS_RELATED = (
+    "Related: Camera != Breaking News - gallery snaps stay on the phone page.",
+    "Related: File location tags via NEWS menu or the web Breaking News dialog.",
+    "Related: LIVE SPECTATE is snapshot slideshow, not H.264 video.",
+    "Related: Text CJ from the sticky composer; he replies via REPLY in-game.",
+    "Related: Session recap counts today's photos, news, and chat.",
+)
+_NEWS_COLOR = (
+    "A bystander claimed the still looked expensive, which in Los Santos means someone almost crashed.",
+    "Local cats resumed rooftop patrol within minutes; editorial confidence remains high.",
+    "The Herald's fact-check unit (one intern, one clipboard) stamped this SATIRE / PROBABLY FINE.",
+    "Traffic briefly slowed as drivers rubbernecked at someone holding a real phone in 1992.",
+    "Smoke allegedly asked if the photo would make the Herald. It did. You're reading it.",
 )
 
 # Map common SA info-zone GXT keys (0843, max 8 chars) → Herald-friendly tags
@@ -804,6 +843,171 @@ def set_caption(name, caption):
 
 
 
+# --- 2.3.0 photo comments + photo-day streak ---
+
+def load_comments():
+    data = _load_json_file(COMMENTS_PATH, {})
+    if not isinstance(data, dict):
+        return {}
+    return data
+
+
+def save_comments(data):
+    return _save_json_file(COMMENTS_PATH, data if isinstance(data, dict) else {})
+
+
+def get_comment(name):
+    name = _safe_basename(name)
+    if not name:
+        return ""
+    comments = load_comments()
+    val = comments.get(name) or ""
+    if not val:
+        side = os.path.join(WEB_PHOTOS, name + ".comment.txt")
+        if os.path.isfile(side):
+            try:
+                with open(side, "r") as f:
+                    val = f.read().strip()[:140]
+            except Exception:
+                val = ""
+    return val
+
+
+def set_comment(name, comment):
+    """Short text comment on a photo (beside captions JSON + sidecar)."""
+    name = _safe_basename(name)
+    if not name:
+        return False, "bad name"
+    comment = (comment or "").strip().replace("\r", " ").replace("\n", " ")[:140]
+    comments = load_comments()
+    if comment:
+        comments[name] = comment
+        try:
+            side = os.path.join(WEB_PHOTOS, name + ".comment.txt")
+            with open(side, "w") as f:
+                f.write(comment + "\n")
+        except Exception:
+            pass
+    else:
+        if name in comments:
+            del comments[name]
+        try:
+            side = os.path.join(WEB_PHOTOS, name + ".comment.txt")
+            if os.path.isfile(side):
+                os.remove(side)
+        except Exception:
+            pass
+    save_comments(comments)
+    return True, comment
+
+
+def attach_comments_to_photos(photos):
+    comments = load_comments()
+    out = []
+    for p in photos or []:
+        if not isinstance(p, dict):
+            out.append(p)
+            continue
+        item = dict(p)
+        name = item.get("file") or ""
+        c = comments.get(name) or ""
+        if not c and name:
+            side = os.path.join(WEB_PHOTOS, name + ".comment.txt")
+            if os.path.isfile(side):
+                try:
+                    with open(side, "r") as f:
+                        c = f.read().strip()[:140]
+                except Exception:
+                    c = ""
+        item["comment"] = c
+        out.append(item)
+    return out
+
+
+def _ymd_from_ts(ts):
+    try:
+        return time.strftime("%Y-%m-%d", time.localtime(int(ts)))
+    except Exception:
+        return ""
+
+
+def load_streak_dates():
+    data = _load_json_file(STREAK_PATH, {"dates": []})
+    dates = []
+    if isinstance(data, dict):
+        raw = data.get("dates") or []
+    elif isinstance(data, list):
+        raw = data
+    else:
+        raw = []
+    for d in raw:
+        s = str(d or "").strip()
+        if len(s) == 10 and s[4] == "-" and s[7] == "-":
+            dates.append(s)
+    return sorted(set(dates))
+
+
+def save_streak_dates(dates):
+    cleaned = sorted(set(str(d).strip() for d in (dates or []) if str(d).strip()))
+    return _save_json_file(STREAK_PATH, {"dates": cleaned})
+
+
+def note_streak_from_photos(photos):
+    """Merge YYYY-MM-DD of photo mtimes into streak date set (days with >=1 photo)."""
+    dates = set(load_streak_dates())
+    for p in photos or []:
+        if not isinstance(p, dict):
+            continue
+        ymd = _ymd_from_ts(p.get("mtime") or 0)
+        if ymd:
+            dates.add(ymd)
+    # Always note today if any photo is from today
+    today0 = _start_of_today_sec()
+    for p in photos or []:
+        if not isinstance(p, dict):
+            continue
+        try:
+            if int(p.get("mtime") or 0) >= today0:
+                dates.add(_ymd_from_ts(time.time()))
+                break
+        except Exception:
+            pass
+    save_streak_dates(dates)
+    return sorted(dates)
+
+
+def compute_streak(dates=None):
+    """Consecutive days with >=1 photo ending today (0 if today missing)."""
+    if dates is None:
+        dates = load_streak_dates()
+    dset = set(dates or [])
+    if not dset:
+        return 0
+    try:
+        cur = time.strftime("%Y-%m-%d", time.localtime())
+    except Exception:
+        return 0
+    if cur not in dset:
+        return 0
+    n = 0
+    y, m, d = [int(x) for x in cur.split("-")]
+    import datetime as _dt
+    day = _dt.date(y, m, d)
+    while day.strftime("%Y-%m-%d") in dset:
+        n += 1
+        day = day - _dt.timedelta(days=1)
+    return n
+
+
+def streak_payload():
+    dates = load_streak_dates()
+    return {
+        "streak": compute_streak(dates),
+        "photo_days": len(dates),
+        "dates": dates[-60:],  # cap for /api
+    }
+
+
 ALLOWED_REACTIONS = ("👍", "😂", "🔥")  # thumbs / laugh / fire
 
 
@@ -873,7 +1077,7 @@ def append_chat_delivered(frm, msg):
 
 
 def append_chat_cj_reply(frm, msg):
-    """CJ reply from CLEO OUTBOX — show as CJ bubble on web thread."""
+    """CJ reply from CLEO OUTBOX - show as CJ bubble on web thread."""
     log = load_chat_log()
     entry = _ensure_chat_entry_shape({
         "id": _new_chat_id(),
@@ -1026,6 +1230,11 @@ def session_recap_data():
     if places:
         top_place = places[0].get("place") or ""
         top_count = int(places[0].get("count") or 0)
+    try:
+        note_streak_from_photos(photos)
+    except Exception:
+        pass
+    streak = streak_payload()
     return {
         "ok": True,
         "photo_count_today": photo_n,
@@ -1036,6 +1245,9 @@ def session_recap_data():
         "uptime_sec": bridge_uptime_sec(),
         "uptime_human": format_uptime(bridge_uptime_sec()),
         "version": STATE.get("version", "unknown") or "unknown",
+        "streak": streak.get("streak", 0),
+        "photo_days": streak.get("photo_days", 0),
+        "streak_dates": streak.get("dates") or [],
     }
 
 
@@ -1098,7 +1310,7 @@ def _keywords_from_photo(photo_name, mtime=0):
 
 
 def generate_news_article(photo_name, caption="", auto=False, location=""):
-    """Build satirical Grove Street Herald article from templates + keywords."""
+    """Build satirical Grove Street Herald article - multi-graf, offline templates."""
     photo_name = _safe_basename(photo_name)
     if not photo_name:
         return None
@@ -1121,56 +1333,118 @@ def generate_news_article(photo_name, caption="", auto=False, location=""):
     subject = _pick(_NEWS_SUBJECTS, seed // 5)
     angle = _pick(_NEWS_ANGLES, seed // 7)
     weather = _pick(_NEWS_WEATHER, seed // 11)
+    desk = _pick(_NEWS_DESKS, seed // 13)
+    pull = _pick(_NEWS_PULLS, seed // 17)
+    related = _pick(_NEWS_RELATED, seed // 19)
+    color = _pick(_NEWS_COLOR, seed // 23)
     kw_bit = ""
     if kws:
         kw_bit = kws[0]
     if caption:
-        # Prefer a short caption fragment in the headline
         frag = caption[:48]
-        headline = "BREAKING: %s — %s near %s" % (verb, frag, place)
+        headline = "BREAKING: %s - %s near %s" % (verb, frag, place)
     elif kw_bit and not kw_bit.isdigit():
         headline = "BREAKING: %s %s %s near %s" % (verb, subject, kw_bit, place)
     else:
         headline = "BREAKING: %s %s near %s" % (verb, subject, place)
     headline = headline[:120]
-    byline = "By Grove Street Herald Staff"
+    # Subhead (deck)
+    if location:
+        subhead = (
+            "On-scene from %s: a %s was %s as the real-phone feed lit up GroveLink."
+            % (location, subject, verb.lower())
+        )
+    else:
+        subhead = (
+            "Witnesses say a %s was %s near %s - details from the GroveLink still."
+            % (subject, verb.lower(), place)
+        )
+    subhead = subhead[:160]
+    byline = "By %s · Grove Street Herald" % desk
     stamp = human_time(mtime)
     filed = human_time(time.time())
-    body_parts = [
-        "LOS SANTOS — In a development that surprised absolutely nobody on %s, "
-        "a %s was %s with what witnesses describe as 'a very phone-looking phone.'"
-        % (place, subject, verb.lower()),
-        "",
-        angle[0].upper() + angle[1:] + ".",
-        "",
-    ]
+    # Dateline
+    try:
+        lt = time.localtime(mtime or time.time())
+        date_s = time.strftime("%A, %B %d, %Y", lt)
+    except Exception:
+        date_s = stamp
+    dateline = "%s - %s" % (place.upper(), date_s)
+    photo_credit = "Photo credit: GroveLink bridge still · /photo/%s" % photo_name
+
+    body_parts = []
+    # Graf 1 - lead
+    body_parts.append(
+        "%s In a development that surprised absolutely nobody along %s, "
+        "a %s was %s with what witnesses describe as \"a very phone-looking phone.\" "
+        "The Grove Street Herald obtained the still through the GroveLink companion bridge "
+        "running on the same Wi-Fi as the game PC."
+        % (dateline + ".", place, subject, verb.lower())
+    )
+    body_parts.append("")
+    # Graf 2 - angle + weather
+    body_parts.append(
+        angle[0].upper() + angle[1:] + ". Weather desk adds: %s."
+        % weather
+    )
+    body_parts.append("")
+    # Graf 3 - location / caption / keywords
     if location:
-        body_parts.append("Location desk tagged this filing: %s." % location)
+        body_parts.append(
+            "Location desk tagged this filing at %s after the CLEO NEWS snap "
+            "(or the web Breaking News confirm). Camera snaps alone never file Herald copy - "
+            "Camera stays gallery-only; NEWS is a separate menu."
+            % location
+        )
         body_parts.append("")
     if caption:
-        body_parts.append('On-scene caption from the real-phone feed: "%s"' % caption[:160])
+        body_parts.append(
+            'On-scene caption from the real-phone feed: \"%s\"' % caption[:160]
+        )
         body_parts.append("")
     if kws:
         body_parts.append(
-            "Filename desk notes keywords: %s." % ", ".join(kws[:4])
+            "Filename desk notes keywords: %s. Editors cross-checked against "
+            "known San Andreas place names and time-of-day cues from the file mtime."
+            % ", ".join(kws[:4])
         )
         body_parts.append("")
+    # Graf 4 - color
+    body_parts.append(color)
+    body_parts.append("")
+    # Graf 5 - how it works / disclaimer
     body_parts.append(
-        "The Grove Street Herald reminds readers this column is satirical fan content "
-        "for single-player San Andreas shenanigans — not real news, not a police blotter."
+        "How this landed: a GroveLink bridge watcher burst-copied the Gallery still "
+        "into bridge/photos, then the Herald generator assembled this satirical column "
+        "from offline templates (no external AI APIs). Readers on the phone page can "
+        "star, caption, comment, or share the same frame."
     )
     body_parts.append("")
     body_parts.append(
-        "Photo desk embedded the still via GroveLink bridge (/photo/%s)." % photo_name
+        "The Grove Street Herald reminds readers this column is satirical fan content "
+        "for single-player San Andreas shenanigans - not real news, not a police blotter, "
+        "and not affiliated with Rockstar Games."
     )
+    body_parts.append("")
+    body_parts.append(photo_credit + ".")
     if auto:
         body_parts.append("")
-        body_parts.append("(Auto-drafted when a new shutter burst landed. Edit anytime.)")
+        body_parts.append(
+            "(Legacy note: auto-draft path retained for older configs; "
+            "1.8.1+ never auto-files on Camera shutter - NEWS.make or web POST /news only.)"
+        )
+
     art_id = "n%d_%s" % (int(time.time()), abs(seed) % 100000)
     article = {
         "id": art_id,
         "headline": headline,
+        "subhead": subhead,
         "byline": byline,
+        "desk": desk,
+        "dateline": dateline,
+        "pull_quote": pull,
+        "related": related,
+        "photo_credit": photo_credit,
         "body": "\n".join(body_parts),
         "photo": photo_name,
         "caption": caption or "",
@@ -1255,73 +1529,85 @@ def _esc(s):
         .replace("<", "&lt;")
         .replace(">", "&gt;")
         .replace('"', "&quot;")
+        .replace("'", "&#39;")
     )
 
 
 def render_news_index():
     arts = list_news_articles(40)
-    ip = STATE.get("ip", "127.0.0.1")
-    port = STATE.get("port", 8088)
     rows = []
     if not arts:
         rows.append(
-            '<p class="empty">No stories filed yet. Open the phone page, pick a shot, '
-            "tap <b>Breaking News</b>.</p>"
+            '<div class="empty"><h2>No stories filed yet</h2>'
+            "<p>Open the phone page, pick a shot, tap <b>Breaking News</b> "
+            "(or use CLEO <b>NEWS</b> - Camera alone never files Herald).</p></div>"
         )
     for a in arts:
         aid = _esc(a.get("id") or "")
         hl = _esc(a.get("headline") or "Untitled")
+        sub = _esc(a.get("subhead") or "")
         when = _esc(a.get("filed") or a.get("timestamp") or "")
         photo = _esc(a.get("photo") or "")
         loc = _esc(a.get("location") or a.get("place") or "")
+        desk = _esc(a.get("desk") or a.get("byline") or "Grove Street Herald")
+        weather = _esc(a.get("weather") or "")
         thumb = ""
         if photo:
             thumb = (
-                '<a href="/news/%s"><img class="thumb" src="/photo/%s" alt=""></a>'
+                '<a class="thumbwrap" href="/news/%s">'
+                '<img class="thumb" src="/photo/%s" alt=""></a>'
                 % (aid, photo)
             )
-        loc_badge = ""
-        if loc:
-            loc_badge = '<div class="locbadge">📍 %s</div>' % loc
+        loc_badge = ('<span class="locbadge">%s</span>' % loc) if loc else ""
+        deck = ('<div class="deck">%s</div>' % sub) if sub else ""
+        wx = ('<div class="wx">%s</div>' % weather) if weather else ""
         rows.append(
             '<article class="card">%s<div class="body">'
-            '<a class="hl" href="/news/%s">%s</a>'
-            '%s'
-            '<div class="meta">%s · Grove Street Herald</div></div></article>'
-            % (thumb, aid, hl, loc_badge, when)
+            '<a class="hl" href="/news/%s">%s</a>%s'
+            '<div class="meta">%s · %s %s</div>%s'
+            "</div></article>"
+            % (thumb, aid, hl, deck, when, desk, loc_badge, wx)
         )
     weather = _pick(_NEWS_WEATHER, int(time.time()) // 3600)
-    return (
+    html = (
         "<!DOCTYPE html><html><head><meta charset=\"utf-8\">"
         "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
+        "<meta name=\"theme-color\" content=\"#0d0a08\">"
         "<title>Grove Street Herald</title>"
         "<style>"
         "body{margin:0;background:#1a1510;color:#f5e6c8;font-family:Georgia,'Times New Roman',serif;}"
-        ".mast{background:#0d0a08;border-bottom:4px solid #c4a35a;padding:18px 16px;text-align:center;}"
-        ".mast h1{margin:0;font-size:28px;letter-spacing:3px;color:#c4a35a;font-variant:small-caps;}"
-        ".mast .sub{font-size:12px;color:#a89060;margin-top:6px;letter-spacing:1px;}"
-        ".weather{max-width:720px;margin:12px auto;padding:10px 14px;background:#241c14;"
+        ".mast{background:#0d0a08;border-bottom:4px solid #c4a35a;padding:22px 16px;text-align:center;}"
+        ".mast h1{margin:0;font-size:30px;letter-spacing:3px;color:#c4a35a;font-variant:small-caps;}"
+        ".mast .sub{font-size:12px;color:#a89060;margin-top:8px;letter-spacing:1px;}"
+        ".weather{max-width:760px;margin:14px auto 0;padding:12px 16px;background:#241c14;"
         "border:1px solid #c4a35a;font-size:13px;color:#e8d4a8;}"
-        ".wrap{max-width:720px;margin:0 auto;padding:12px 14px 40px;}"
-        ".card{display:flex;gap:14px;padding:14px 0;border-bottom:1px solid #3a2e22;}"
-        ".thumb{width:96px;height:72px;object-fit:cover;border:2px solid #c4a35a;background:#000;}"
-        ".hl{color:#f5e6c8;font-size:18px;font-weight:bold;text-decoration:none;line-height:1.3;}"
+        ".wrap{max-width:760px;margin:0 auto;padding:8px 16px 48px;}"
+        ".card{display:flex;gap:16px;padding:18px 0;border-bottom:1px solid #3a2e22;}"
+        ".thumbwrap{flex:0 0 auto;}"
+        ".thumb{width:112px;height:84px;object-fit:cover;border:2px solid #c4a35a;background:#000;display:block;}"
+        ".hl{color:#fff8e8;font-size:19px;font-weight:bold;text-decoration:none;line-height:1.3;display:block;}"
         ".hl:hover{color:#c4a35a;}"
-        ".meta{font-size:11px;color:#a89060;margin-top:6px;}"
-        ".locbadge{display:inline-block;margin-top:8px;padding:3px 10px;border:1px solid #c4a35a;"
-        "background:#2a1a08;color:#f5e6c8;font-size:12px;font-weight:bold;letter-spacing:0.5px;}"
-        ".empty{color:#a89060;line-height:1.5;}"
-        ".nav{text-align:center;margin:16px;font-size:13px;}"
+        ".deck{font-size:14px;color:#d4c09a;margin-top:8px;line-height:1.45;}"
+        ".meta{font-size:11px;color:#a89060;margin-top:10px;line-height:1.5;}"
+        ".locbadge{display:inline-block;margin-left:6px;padding:2px 8px;border:1px solid #c4a35a;"
+        "background:#2a1a08;color:#f5e6c8;font-size:11px;font-weight:bold;letter-spacing:0.5px;}"
+        ".wx{font-size:11px;color:#c4a35a;margin-top:6px;font-style:italic;}"
+        ".empty{color:#a89060;line-height:1.55;padding:24px 8px;}"
+        ".empty h2{color:#c4a35a;margin:0 0 10px;font-size:18px;}"
+        ".nav{text-align:center;margin:20px;font-size:13px;}"
         ".nav a{color:#c4a35a;}"
+        "@media(max-width:520px){.card{flex-direction:column;}.thumb{width:100%;height:160px;}}"
         "</style></head><body>"
         "<div class=\"mast\"><h1>Grove Street Herald</h1>"
-        "<div class=\"sub\">Los Santos · San Andreas · Satirical edition</div></div>"
-        "<div class=\"weather\"><b>Los Santos Weather:</b> %s</div>"
-        "<div class=\"wrap\">%s</div>"
+        "<div class=\"sub\">Los Santos · San Andreas · Satirical edition · Offline templates</div></div>"
+        "<div class=\"weather\"><b>Los Santos Weather:</b> __WEATHER__</div>"
+        "<div class=\"wrap\">__ROWS__</div>"
         "<div class=\"nav\"><a href=\"/\">&larr; Back to GroveLink phone</a>"
-        " · <a href=\"/qr\">Share URL</a></div>"
+        " · <a href=\"/recap\">Recap</a> · <a href=\"/qr\">Share URL</a></div>"
         "</body></html>"
-    ) % (_esc(weather), "\n".join(rows))
+    )
+    # Escape literal % in CSS (100%) for safety if anyone switches back to % formatting
+    return html.replace("__WEATHER__", _esc(weather)).replace("__ROWS__", "\n".join(rows))
 
 
 def render_news_article_page(art_id):
@@ -1329,16 +1615,31 @@ def render_news_article_page(art_id):
     if not art:
         return None
     hl = _esc(art.get("headline") or "")
+    sub = _esc(art.get("subhead") or "")
     byline = _esc(art.get("byline") or "")
-    body = _esc(art.get("body") or "").replace("\n", "<br>\n")
+    dateline = _esc(art.get("dateline") or "")
+    pull = _esc(art.get("pull_quote") or "")
+    related = _esc(art.get("related") or "")
+    credit = _esc(art.get("photo_credit") or "")
+    body_raw = art.get("body") or ""
+    paras = []
+    for block in str(body_raw).split("\n\n"):
+        block = block.strip()
+        if not block:
+            continue
+        paras.append("<p>%s</p>" % _esc(block).replace("\n", "<br>\n"))
+    body = "\n".join(paras) if paras else ("<p>%s</p>" % _esc(body_raw).replace("\n", "<br>\n"))
     photo = _esc(art.get("photo") or "")
     when = _esc(art.get("filed") or art.get("timestamp") or "")
     weather = _esc(art.get("weather") or "")
     caption = _esc(art.get("caption") or "")
     loc = _esc(art.get("location") or art.get("place") or "")
-    loc_html = ""
-    if loc:
-        loc_html = '<div class="locbadge">📍 %s</div>' % loc
+    loc_html = ('<div class="locbadge">%s</div>' % loc) if loc else ""
+    sub_html = ('<p class="subhead">%s</p>' % sub) if sub else ""
+    date_html = ('<div class="dateline">%s</div>' % dateline) if dateline else ""
+    pull_html = ('<blockquote class="pull">%s</blockquote>' % pull) if pull else ""
+    related_html = ('<aside class="related">%s</aside>' % related) if related else ""
+    credit_html = ('<div class="credit">%s</div>' % credit) if credit else ""
     img = ""
     if photo:
         img = (
@@ -1346,39 +1647,55 @@ def render_news_article_page(art_id):
             '<figcaption>%s</figcaption></figure>'
             % (photo, caption or photo)
         )
-    return (
+    html = (
         "<!DOCTYPE html><html><head><meta charset=\"utf-8\">"
         "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
-        "<title>%s — Grove Street Herald</title>"
+        "<meta name=\"theme-color\" content=\"#0d0a08\">"
+        "<title>__HL__ - Grove Street Herald</title>"
         "<style>"
         "body{margin:0;background:#1a1510;color:#f5e6c8;font-family:Georgia,'Times New Roman',serif;}"
-        ".mast{background:#0d0a08;border-bottom:4px solid #c4a35a;padding:14px 16px;text-align:center;}"
+        ".mast{background:#0d0a08;border-bottom:4px solid #c4a35a;padding:16px;text-align:center;}"
         ".mast h1{margin:0;font-size:22px;letter-spacing:2px;color:#c4a35a;font-variant:small-caps;}"
-        ".wrap{max-width:680px;margin:0 auto;padding:18px 16px 48px;}"
-        "h2{font-size:26px;line-height:1.25;margin:0 0 10px;color:#fff8e8;}"
-        ".by{font-size:13px;color:#a89060;margin-bottom:12px;}"
+        ".wrap{max-width:700px;margin:0 auto;padding:22px 18px 56px;}"
+        "h2{font-size:28px;line-height:1.25;margin:0 0 10px;color:#fff8e8;}"
+        ".subhead{font-size:17px;color:#d4c09a;line-height:1.45;margin:0 0 14px;font-style:italic;}"
+        ".by{font-size:13px;color:#a89060;margin-bottom:6px;}"
+        ".dateline{font-size:12px;color:#c4a35a;letter-spacing:0.5px;margin-bottom:14px;font-weight:bold;}"
         ".locbadge{display:inline-block;margin:0 0 16px;padding:4px 12px;border:1px solid #c4a35a;"
         "background:#2a1a08;color:#f5e6c8;font-size:13px;font-weight:bold;}"
         "figure{margin:0 0 18px;}"
-        "figure img{width:100%%;display:block;border:3px solid #c4a35a;background:#000;}"
+        "figure img{width:100%;display:block;border:3px solid #c4a35a;background:#000;}"
         "figcaption{font-size:12px;color:#a89060;margin-top:8px;font-style:italic;}"
-        ".story{font-size:16px;line-height:1.65;color:#f0e2c4;}"
-        ".weather{margin:18px 0;padding:10px 12px;border:1px solid #c4a35a;background:#241c14;"
+        ".pull{margin:20px 0;padding:14px 18px;border-left:4px solid #c4a35a;background:#241c14;"
+        "font-size:18px;line-height:1.45;color:#fff0d0;font-style:italic;}"
+        ".story{font-size:16px;line-height:1.7;color:#f0e2c4;}"
+        ".story p{margin:0 0 1em;}"
+        ".weather{margin:20px 0;padding:12px 14px;border:1px solid #c4a35a;background:#241c14;"
         "font-size:13px;color:#e8d4a8;}"
+        ".related{margin:18px 0;padding:12px 14px;border:1px dashed #c4a35a;background:#1e1810;"
+        "font-size:13px;color:#d4c09a;}"
+        ".credit{font-size:11px;color:#a89060;margin-top:8px;font-style:italic;}"
         ".nav{margin-top:28px;font-size:13px;}"
-        ".nav a{color:#c4a35a;}"
+        ".nav a{color:#c4a35a;margin-right:8px;}"
         "</style></head><body>"
         "<div class=\"mast\"><h1>Grove Street Herald</h1></div>"
         "<div class=\"wrap\">"
-        "<h2>%s</h2>"
-        "<div class=\"by\">%s · Filed %s</div>"
-        "%s"
-        "%s"
-        "<div class=\"story\">%s</div>"
-        "<div class=\"weather\"><b>Los Santos Weather:</b> %s</div>"
-        "<div class=\"nav\"><a href=\"/news\">&larr; All stories</a> · "
-        "<a href=\"/\">Phone feed</a> · "
-        "<button type=\"button\" id=\"share_article\" style=\"background:#2a1a08;color:#f5e6c8;border:1px solid #c4a35a;padding:8px 12px;font-weight:bold;cursor:pointer;min-height:40px\">Share article</button></div>"
+        "<h2>__HL2__</h2>"
+        "__SUB__"
+        "<div class=\"by\">__BY__ · Filed __WHEN__</div>"
+        "__DATE__"
+        "__LOC__"
+        "__IMG__"
+        "__PULL__"
+        "<div class=\"story\">__BODY__</div>"
+        "__CREDIT__"
+        "<div class=\"weather\"><b>Los Santos Weather:</b> __WX__</div>"
+        "__RELATED__"
+        "<div class=\"nav\"><a href=\"/news\">&larr; All stories</a>"
+        "<a href=\"/\">Phone feed</a><a href=\"/recap\">Recap</a> "
+        "<button type=\"button\" id=\"share_article\" style=\"background:#2a1a08;color:#f5e6c8;"
+        "border:1px solid #c4a35a;padding:8px 12px;font-weight:bold;cursor:pointer;min-height:40px\">"
+        "Share article</button></div>"
         "</div>"
         "<script>"
         "(function(){"
@@ -1398,7 +1715,22 @@ def render_news_article_page(art_id):
         "})();"
         "</script>"
         "</body></html>"
-    ) % (hl, hl, byline, when, loc_html, img, body, weather)
+    )
+    return (
+        html.replace("__HL__", hl)
+        .replace("__HL2__", hl)
+        .replace("__SUB__", sub_html)
+        .replace("__BY__", byline)
+        .replace("__WHEN__", when)
+        .replace("__DATE__", date_html)
+        .replace("__LOC__", loc_html)
+        .replace("__IMG__", img)
+        .replace("__PULL__", pull_html)
+        .replace("__BODY__", body)
+        .replace("__CREDIT__", credit_html)
+        .replace("__WX__", weather)
+        .replace("__RELATED__", related_html)
+    )
 
 
 def attach_captions_to_photos(photos):
@@ -1680,7 +2012,7 @@ def render_manifest():
 
 
 # HTML is assembled with placeholders for URLs injected at request time via
-# a thin wrapper — keep static shell + JS that pulls /api for live data.
+# a thin wrapper - keep static shell + JS that pulls /api for live data.
 HTML_TEMPLATE = """<!DOCTYPE html>
 <html>
 <head>
@@ -1694,11 +2026,15 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 <link rel="manifest" href="/manifest.webmanifest">
 <title>GroveLink</title>
 <style>
-  body { margin:0; background:#070b08; color:#d7ffd0; font-family: Arial, Helvetica, sans-serif; }
-  .shell { max-width: 440px; margin: 0 auto; min-height: 100vh; background:#10180f; padding-bottom: 88px; }
-  header { padding:16px; background:#071109; border-bottom:2px solid #2cff6a; }
-  h1 { margin:0; font-size:18px; letter-spacing:3px; color:#2cff6a; }
-  .sub { font-size:12px; color:#7aaa7a; margin-top:6px; line-height:1.5; }
+  body { margin:0; background:#050805; color:#d7ffd0; font-family: system-ui, -apple-system, Segoe UI, Arial, Helvetica, sans-serif; -webkit-font-smoothing:antialiased; }
+  .shell { max-width: 460px; margin: 0 auto; min-height: 100vh; background:#0c140e; padding-bottom: 96px; box-shadow:0 0 0 1px #0a1a0c; }
+  header { padding:18px 16px 16px; background:linear-gradient(180deg,#0a1610 0%,#071109 100%); border-bottom:2px solid #2cff6a; }
+  h1 { margin:0; font-size:20px; letter-spacing:3px; color:#2cff6a; font-weight:800; }
+  .sub { font-size:12px; color:#8bbb8b; margin-top:8px; line-height:1.55; max-width:36em; }
+  .sect {
+    margin:14px 12px 6px; font-size:11px; letter-spacing:2px; color:#2cff6a; font-weight:bold;
+    text-transform:uppercase; opacity:0.95;
+  }
   .urls { margin-top:10px; font-size:12px; color:#b6e6b0; word-break:break-all; }
   .urls strong { color:#2cff6a; }
   .urlrow { display:flex; gap:8px; align-items:flex-start; margin-top:6px; }
@@ -1764,12 +2100,13 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     color:#2cff6a; font-size:10px; letter-spacing:2px; font-weight:bold; vertical-align:middle;
   }
   .livebadge.off { border-color:#a44; color:#ff6a6a; }
-  .stats { margin-top:10px; display:flex; gap:10px; flex-wrap:wrap; }
+  .stats { margin-top:14px; display:flex; gap:10px; flex-wrap:wrap; }
   .stat {
-    flex:1; min-width:110px; background:#0b1a0e; border:1px solid #1a4; padding:10px 12px;
+    flex:1; min-width:100px; background:#0b1a0e; border:1px solid #1f5a2a; padding:12px 12px;
+    border-radius:4px;
   }
-  .stat .k { font-size:10px; color:#7aaa7a; letter-spacing:1px; }
-  .stat .v { font-size:20px; font-weight:bold; color:#2cff6a; margin-top:4px; }
+  .stat .k { font-size:10px; color:#7aaa7a; letter-spacing:1.5px; text-transform:uppercase; }
+  .stat .v { font-size:22px; font-weight:800; color:#2cff6a; margin-top:6px; letter-spacing:0.5px; }
   .offline {
     display:none; margin:0; padding:14px 16px; background:#3a1212; border-bottom:2px solid #ff6a6a;
     color:#ffb0b0; font-size:14px; font-weight:bold; line-height:1.4; text-align:center;
@@ -1893,10 +2230,11 @@ HTML_TEMPLATE = """<!DOCTYPE html>
   .sectionlab {
     margin:4px 12px 8px; font-size:11px; letter-spacing:2px; color:#2cff6a; font-weight:bold;
   }
-  .empty { padding:20px 16px; color:#7aaa7a; line-height:1.55; }
-  .empty h2 { margin:0 0 10px; color:#2cff6a; font-size:14px; letter-spacing:1px; }
-  .empty ol { margin:0; padding-left:20px; }
-  .empty li { margin:6px 0; }
+  .empty { padding:28px 18px; color:#8bbb8b; line-height:1.6; background:#0a120c; margin:12px; border:1px dashed #1f5a2a; border-radius:6px; }
+  .empty h2 { margin:0 0 12px; color:#2cff6a; font-size:15px; letter-spacing:2px; font-weight:800; }
+  .empty p { margin:0 0 10px; }
+  .empty ol { margin:12px 0 0; padding-left:22px; }
+  .empty li { margin:8px 0; }
   #lightbox {
     display:none; position:fixed; inset:0; background:rgba(0,0,0,0.92);
     z-index:99; align-items:center; justify-content:center; padding:12px;
@@ -2070,25 +2408,67 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     display:inline-block; margin-left:6px; padding:2px 6px; font-size:10px;
     background:#2a1a08; border:1px solid #c4a35a; color:#f5e6c8; border-radius:2px;
   }
+  .commentrow { display:flex; gap:8px; padding:0 12px 10px; background:#0b120e; align-items:center; }
+  .commentrow input {
+    flex:1; padding:10px; border:1px solid #1a4; background:#0b0f0c; color:#b6e6b0;
+    font-size:13px; min-height:40px; box-sizing:border-box;
+  }
+  .commentrow .capbtn { white-space:nowrap; }
+  .commentshow {
+    padding:0 12px 8px; background:#0b120e; color:#9cbf9c; font-size:12px; font-style:italic;
+    min-height:0;
+  }
+  .commentshow:empty { display:none; }
+  .prefs {
+    display:flex; gap:8px; margin:8px 12px 0; flex-wrap:wrap; align-items:center;
+  }
+  .prefs button {
+    background:#143; color:#d7ffd0; border:1px solid #2cff6a; padding:8px 12px;
+    font-size:11px; font-weight:bold; min-height:36px; cursor:pointer;
+  }
+  .prefs button.on { background:#2cff6a; color:#041006; }
+  .streakstat .v { color:#ffd86a; }
+  /* Density: dark street (default) vs bright grove green */
+  body.density-dark {
+    background:#070b08; color:#d7ffd0;
+  }
+  body.density-dark header { background:#071109; border-bottom-color:#2cff6a; }
+  body.density-bright {
+    background:#0e1a12; color:#e8ffe8;
+  }
+  body.density-bright header {
+    background:#12301a; border-bottom-color:#5dff8a;
+  }
+  body.density-bright .livebadge { background:#1a8; }
+  body.density-bright .stat .v, body.density-bright h1 { color:#5dff8a; }
+  body.density-bright .quickbar a, body.density-bright .quickbar button,
+  body.density-bright .actionbtn, body.density-bright .prefs button {
+    border-color:#5dff8a; color:#e8ffe8; background:#1a4028;
+  }
+  body.density-bright .shot, body.density-bright .hero {
+    border-color:#3a8a55;
+  }
+  body.density-bright .composer { background:#12301a; border-top-color:#5dff8a; }
 </style>
 </head>
 <body>
 <div class="shell">
-  <div class="offline" id="offline_banner">Bridge offline — run START_GROVELINK</div>
+  <div class="offline" id="offline_banner">Bridge offline - run START_GROVELINK</div>
   <header>
     <h1>GROVELINK <span class="livebadge" id="livebadge">LIVE</span></h1>
     <div class="sub">Photos from GTA San Andreas on this PC → your real phone · text CJ · file Breaking News</div>
     <div class="stats">
       <div class="stat"><div class="k">VERSION</div><div class="v" id="ver">__VERSION__</div></div>
       <div class="stat"><div class="k">PHOTOS</div><div class="v" id="count">0</div></div>
+      <div class="stat streakstat"><div class="k">STREAK</div><div class="v" id="streak_val">0</div></div>
     </div>
     <div class="hudstrip hidden" id="hud_strip" title="Live second-screen HUD from GTA (STATUS.* in link.ini)">
-      <span class="huditem"><span class="hudk">WANTED</span><span class="hudv" id="hud_wanted">—</span></span>
-      <span class="huditem"><span class="hudk">$</span><span class="hudv" id="hud_money">—</span></span>
-      <span class="huditem"><span class="hudk">ZONE</span><span class="hudv" id="hud_zone">—</span></span>
+      <span class="huditem"><span class="hudk">WANTED</span><span class="hudv" id="hud_wanted">-</span></span>
+      <span class="huditem"><span class="hudk">$</span><span class="hudv" id="hud_money">-</span></span>
+      <span class="huditem"><span class="hudk">ZONE</span><span class="hudv" id="hud_zone">-</span></span>
       <span class="huditem"><span class="hudk">SPEC</span><span class="hudv" id="hud_spec">off</span></span>
     </div>
-    <div class="timestrip hidden" id="time_strip"><strong>SA TIME</strong> <span id="hud_hour">—</span></div>
+    <div class="timestrip hidden" id="time_strip"><strong>SA TIME</strong> <span id="hud_hour">-</span></div>
     <div class="urls">
       <div class="urlrow">
         <span><strong>Phone (LAN):</strong> <span id="lan_url">__LAN_URL__</span></span>
@@ -2108,17 +2488,17 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       <a class="actionbtn" id="news_index" href="/news" style="border-color:#c4a35a;color:#f5e6c8;background:#2a1a08">Grove Street Herald</a>
     </div>
     <div class="bigcopy" id="big_copy" title="Tap to copy IP:port">
-      <div class="label">TAP TO COPY — PHONE ADDRESS</div>
+      <div class="label">TAP TO COPY - PHONE ADDRESS</div>
       <div class="ipport" id="ip_port">__IP_PORT__</div>
       <div class="hint" id="big_copy_hint">Copies host:port for your phone browser</div>
     </div>
-    <div class="smsnote">Same Wi-Fi + bridge running → CJ gets your texts in-game (K → INBOX). No QR lib — open <code>http://</code> + address above. Or <a id="sms_link" href="#">sms: note with URL</a>.</div>
+    <div class="smsnote">Same Wi-Fi + bridge running → CJ gets your texts in-game (K → INBOX). No QR lib - open <code>http://</code> + address above. Or <a id="sms_link" href="#">sms: note with URL</a>.</div>
     <div class="tip"><strong>Tip:</strong> Browser menu → <b>Add to Home Screen</b> (uses <code>/manifest.webmanifest</code>) for a one-tap icon.</div>
-    <div class="status" id="skip_note" style="display:none;margin-top:6px">Hidden from phone: <span id="skip_count">0</span> (deleted skip list — Gallery untouched)</div>
+    <div class="status" id="skip_note" style="display:none;margin-top:6px">Hidden from phone: <span id="skip_count">0</span> (deleted skip list - Gallery untouched)</div>
     <div class="status">
       <span class="pulse live" id="pulse"></span>
       Bridge: <span id="bridge_status" class="ok">online</span>
-      &nbsp;·&nbsp; Last poll: <span id="last_refresh">—</span>
+      &nbsp;·&nbsp; Last poll: <span id="last_refresh">-</span>
       &nbsp;·&nbsp; <span id="refresh_hint">auto every 2s</span>
       &nbsp;·&nbsp; Unread: <span id="unread_count">0</span>
       <span id="last_error_hint" class="bad" style="display:none"></span>
@@ -2133,6 +2513,11 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     <span class="qa-watch" id="qa_watching" title="Spectate viewers (last ~30s)">0 watching</span>
   </div>
   <div class="watching" id="watching_note"></div>
+  <div class="prefs" id="prefs_bar">
+    <button type="button" id="theme_dark" class="on" title="Dark street green">Dark street</button>
+    <button type="button" id="theme_bright" title="Bright grove green">Bright</button>
+  </div>
+  <div class="sect">Companion chat</div>
   <div class="chatbox" id="chatbox">
     <div class="chathead">
       <h3>TEXTS TO CJ</h3>
@@ -2141,17 +2526,20 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     <div class="chatacts">
       <button type="button" id="chat_mark_read">Mark chat read</button>
       <button type="button" id="chat_notify_btn">Enable CJ alerts</button>
+      <button type="button" id="chat_mute_btn" title="Mute chat notifications (localStorage)">Mute alerts</button>
     </div>
     <div class="chatpin" id="chat_pin"><div class="plab">PINNED</div><div id="chat_pin_body"></div></div>
-    <div id="chat_thread"><div class="chatempty">Send a message below — delivered texts show here. CJ replies appear on the right.</div></div>
+    <div id="chat_thread"><div class="chatempty">Send a message below - delivered texts show here. CJ replies appear on the right.</div></div>
   </div>
-  <a class="spectate-link" href="/spectate">LIVE SPECTATE — snapshot view</a>
+  <div class="sect">Live view</div>
+  <a class="spectate-link" href="/spectate">LIVE SPECTATE - snapshot view</a>
   <div class="chips">
     <button type="button" class="chip" data-msg="Where you at?">Where you at?</button>
     <button type="button" class="chip" data-msg="Nice shot">Nice shot</button>
     <button type="button" class="chip" data-msg="Come to Grove">Come to Grove</button>
   </div>
   <div class="okmsg" id="ok"></div>
+  <div class="sect">Gallery</div>
   <div class="searchrow">
     <input id="search" type="search" placeholder="Search filename..." autocomplete="off">
   </div>
@@ -2160,14 +2548,14 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     <button type="button" class="tab" id="tab_today" data-filter="today">Today</button>
     <button type="button" class="tab" id="tab_fav" data-filter="favorites">Favorites</button>
     <button type="button" class="tab" id="tab_place" data-filter="places">By place</button>
-    <button type="button" class="tab" id="tab_sort" data-sort="newest" title="Client-side only — server always sends newest first">Newest</button>
+    <button type="button" class="tab" id="tab_sort" data-sort="newest" title="Client-side only - server always sends newest first">Newest</button>
   </div>
   <div class="moments" id="moments_reel"></div>
   <div id="feed"></div>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
   <div class="helpfoot" id="help_foot">
-    <div class="uptimefoot" id="uptime_foot">Bridge uptime: <b id="uptime_val">—</b></div>
-    <div><strong>Shortcuts</strong> —
+    <div class="uptimefoot" id="uptime_foot">Bridge uptime: <b id="uptime_val">-</b></div>
+    <div><strong>Shortcuts</strong> -
       <kbd>?</kbd> help ·
       <kbd>Esc</kbd> close lightbox ·
       <kbd>/</kbd> search ·
@@ -2211,7 +2599,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     <p>Optional San Andreas location tag for the Herald badge.</p>
     <label for="news_loc_sel">Place</label>
     <select id="news_loc_sel">
-      <option value="">(optional — pick or type)</option>
+      <option value="">(optional - pick or type)</option>
       <option value="Grove Street">Grove Street</option>
       <option value="Ganton">Ganton</option>
       <option value="Idlewood">Idlewood</option>
@@ -2241,6 +2629,8 @@ var LS_KEY = 'grovelink_last_visit';
 var LS_FAV = 'grovelink_favorites';
 var LS_CHAT_READ = 'grovelink_chat_read_ts';
 var LS_NICK = 'grovelink_nickname';
+var LS_MUTE = 'grovelink_mute_chat';
+var LS_DENSITY = 'grovelink_density';
 var FILTER = 'all';
 var SEARCH_Q = '';
 var SORT_ORDER = 'newest'; // client-side only; server /api is always newest-first
@@ -2259,8 +2649,9 @@ function emptyHtml() {
   try { ipPort = (document.getElementById('ip_port') || {}).textContent || ''; } catch (e) {}
   return '<div class="empty">' +
     '<h2>NO PHOTOS YET</h2>' +
+    '<p>Your GTA camera shots land here. Follow the checklist, then snap in-game.</p>' +
     '<div class="empty-lan" id="empty_lan_copy" title="Tap to copy">' +
-    '<div class="label">FIRST VISIT — OPEN ON YOUR PHONE</div>' +
+    '<div class="label">FIRST VISIT - OPEN ON YOUR PHONE</div>' +
     '<div class="ipport">' + escapeHtml(ipPort) + '</div>' +
     '<div class="hint">Tap to copy · same Wi-Fi as this PC · keep Copy above too</div>' +
     '</div>' +
@@ -2269,7 +2660,7 @@ function emptyHtml() {
     '<li>On your phone open <b>http://</b> + the address above (or use Copy).</li>' +
     '<li>In GTA press <b>K</b> → <b>Camera</b> → <b>Enter</b> or <b>Space</b>.</li>' +
     '<li>Phone and PC must be on the <b>same Wi-Fi</b>.</li>' +
-    '<li>Text CJ from the sticky composer — he gets it in-game (INBOX / on-screen notify).</li>' +
+    '<li>Text CJ from the sticky composer - he gets it in-game (INBOX / on-screen notify).</li>' +
     '</ol>' +
     '</div>';
 }
@@ -2294,7 +2685,7 @@ function bindEmptyLanCopy() {
 }
 
 function escapeHtml(s) {
-  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
 
 function getLastVisit() {
@@ -2383,8 +2774,33 @@ function updateChatBadge(inbox) {
     b.className = 'chatbadge';
   }
 }
+function isChatMuted() {
+  try { return localStorage.getItem(LS_MUTE) === '1'; } catch (e) { return false; }
+}
+function setChatMuted(on) {
+  try { localStorage.setItem(LS_MUTE, on ? '1' : '0'); } catch (e) {}
+  paintMuteBtn();
+}
+function paintMuteBtn() {
+  var b = document.getElementById('chat_mute_btn');
+  if (!b) return;
+  var on = isChatMuted();
+  b.textContent = on ? 'Unmute alerts' : 'Mute alerts';
+  b.className = on ? 'on' : '';
+}
+function applyDensity(mode) {
+  mode = (mode === 'bright') ? 'bright' : 'dark';
+  try { localStorage.setItem(LS_DENSITY, mode); } catch (e) {}
+  var cls = (document.body.className || ''); var _p=cls.split(' '); var _o=[]; for(var _i=0;_i<_p.length;_i++){ if(_p[_i] && _p[_i].indexOf('density-')!==0) _o.push(_p[_i]); } cls=_o.join(' ').trim();
+  document.body.className = (cls + ' density-' + mode).trim();
+  var d = document.getElementById('theme_dark');
+  var b = document.getElementById('theme_bright');
+  if (d) d.className = (mode === 'dark') ? 'on' : '';
+  if (b) b.className = (mode === 'bright') ? 'on' : '';
+}
 function maybeNotifyCj(inbox) {
   try {
+    if (isChatMuted()) return;
     if (!('Notification' in window)) return;
     if (Notification.permission !== 'granted') return;
     var readTs = getChatReadTs();
@@ -2424,7 +2840,7 @@ function paintHud(hud) {
       try { m.textContent = Number(hud.money || 0).toLocaleString(); }
       catch (e) { m.textContent = String(hud.money || 0); }
     }
-    if (z) z.textContent = hud.zone || '—';
+    if (z) z.textContent = hud.zone || '-';
     if (s) s.textContent = hud.spectate ? 'ON' : 'off';
   }
   if (tstrip) {
@@ -2473,7 +2889,7 @@ function shareUrl(url, title) {
   url = url || (document.getElementById('lan_url').textContent || window.location.href);
   title = title || 'GroveLink';
   if (navigator.share) {
-    navigator.share({ title: title, url: url, text: title + ' — ' + url }).catch(function(){
+    navigator.share({ title: title, url: url, text: title + ' - ' + url }).catch(function(){
       copyText(url, null);
       flashOk('Link copied');
     });
@@ -2648,7 +3064,7 @@ function sendMsg(msg) {
     if (x.readyState === 4) {
       var okEl = document.getElementById('ok');
       if (x.status === 200) {
-        okEl.textContent = 'Delivered to CJ — open INBOX (or watch on-screen SMS notify).';
+        okEl.textContent = 'Delivered to CJ - open INBOX (or watch on-screen SMS notify).';
         document.getElementById('msg').value = '';
         poll();
       } else {
@@ -2671,6 +3087,24 @@ function saveCaption(name, val) {
         poll();
       } else {
         flashOk('Caption save failed');
+      }
+    }
+  };
+  x.send(body);
+}
+
+function saveComment(name, val) {
+  var body = 'file=' + encodeURIComponent(name) + '&comment=' + encodeURIComponent(val || '');
+  var x = new XMLHttpRequest();
+  x.open('POST', '/comment', true);
+  x.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+  x.onreadystatechange = function() {
+    if (x.readyState === 4) {
+      if (x.status === 200) {
+        flashOk('Comment saved');
+        poll();
+      } else {
+        flashOk('Comment save failed');
       }
     }
   };
@@ -2719,7 +3153,7 @@ function doBreakingNews(name, location) {
         try {
           var j = JSON.parse(x.responseText);
           if (j.id) {
-            flashOk('News filed — opening Herald…');
+            flashOk('News filed - opening Herald…');
             setTimeout(function(){ window.location.href = '/news/' + j.id; }, 400);
             return;
           }
@@ -2788,6 +3222,10 @@ function photoCard(p, isHero) {
           ' · <a href="' + href + '" target="_blank" rel="noopener">full size</a></span></div>';
   html += '<div class="caprow"><input id="cap_' + cid + '" type="text" maxlength="200" placeholder="Optional caption…" value="' + escapeHtml(cap) + '">';
   html += '<button type="button" class="capbtn" onclick="saveCaption(\\'' + safe + '\\', document.getElementById(\\'' + 'cap_' + cid + '\\').value)">Save</button></div>';
+  var cmt = p.comment || '';
+  html += '<div class="commentshow" id="cmtshow_' + cid + '">' + (cmt ? escapeHtml(cmt) : '') + '</div>';
+  html += '<div class="commentrow"><input id="cmt_' + cid + '" type="text" maxlength="140" placeholder="Short comment…" value="' + escapeHtml(cmt) + '">';
+  html += '<button type="button" class="capbtn" onclick="saveComment(\\'' + safe + '\\', document.getElementById(\\'' + 'cmt_' + cid + '\\').value)">Comment</button></div>';
   html += '<div class="btns">';
   html += '<button type="button" class="newsbtn" onclick="breakingNews(\\'' + safe + '\\')">Breaking News</button>';
   var favOn = isFav(name) || !!p.favorite;
@@ -2823,7 +3261,7 @@ function renderChat(inbox, pinned) {
     renderPinned(pinned);
   }
   if (!list.length) {
-    box.innerHTML = '<div class="chatempty">Send a message below — delivered texts show here. CJ replies appear on the right.</div>';
+    box.innerHTML = '<div class="chatempty">Send a message below - delivered texts show here. CJ replies appear on the right.</div>';
     return;
   }
   var html = '';
@@ -3036,7 +3474,7 @@ function paint(data) {
   var nCount = (typeof data.count === 'number') ? data.count : photos.length;
   count.textContent = nCount;
   setCountActions(nCount, data.latest || (photos[0] && (photos[0].file || photos[0])) || '');
-  var lr = data.last_refresh_human || data.last_refresh || '—';
+  var lr = data.last_refresh_human || data.last_refresh || '-';
   document.getElementById('last_refresh').textContent = lr;
   if (data.version) {
     var verEl = document.getElementById('ver');
@@ -3108,7 +3546,9 @@ function paint(data) {
   renderChat(data.inbox || [], data.pinned || null);
   updateChatBadge(data.inbox || []);
   var upEl = document.getElementById('uptime_val');
-  if (upEl) upEl.textContent = data.uptime_human || (data.uptime_sec != null ? (data.uptime_sec + 's') : '—');
+  if (upEl) upEl.textContent = data.uptime_human || (data.uptime_sec != null ? (data.uptime_sec + 's') : '-');
+  var stEl = document.getElementById('streak_val');
+  if (stEl) stEl.textContent = String(parseInt(data.streak || 0, 10) || 0);
   maybeNotifyCj(data.inbox || []);
   if (data.poll_ms && data.spectate_on) {
     var hot = Math.min(parseInt(data.poll_ms, 10) || 2000, 1000);
@@ -3190,12 +3630,12 @@ function poll() {
         setTimeout(function(){ hint.textContent = 'auto every ' + secs + 's'; }, 800);
       }
     } else {
-      setOfflineUI('Bridge offline — run START_GROVELINK');
+      setOfflineUI('Bridge offline - run START_GROVELINK');
     }
   };
-  x.ontimeout = function() { setOfflineUI('Bridge offline — run START_GROVELINK'); };
-  x.onerror = function() { setOfflineUI('Bridge offline — run START_GROVELINK'); };
-  try { x.send(); } catch (e) { setOfflineUI('Bridge offline — run START_GROVELINK'); }
+  x.ontimeout = function() { setOfflineUI('Bridge offline - run START_GROVELINK'); };
+  x.onerror = function() { setOfflineUI('Bridge offline - run START_GROVELINK'); };
+  try { x.send(); } catch (e) { setOfflineUI('Bridge offline - run START_GROVELINK'); }
 }
 function schedulePoll() {
   if (POLL_TIMER) clearTimeout(POLL_TIMER);
@@ -3273,7 +3713,7 @@ document.getElementById('mark_read').onclick = function() {
 (function(){
   var qaCam = document.getElementById('qa_camera');
   if (qaCam) qaCam.onclick = function(){
-    flashOk('In GTA: press K → Camera → Enter/Space. Photos appear here (gallery only — not Herald).');
+    flashOk('In GTA: press K → Camera → Enter/Space. Photos appear here (gallery only - not Herald).');
   };
   var qaText = document.getElementById('qa_text');
   if (qaText) qaText.onclick = function(){
@@ -3288,6 +3728,7 @@ document.getElementById('mark_read').onclick = function() {
   };
   var cnb = document.getElementById('chat_notify_btn');
   if (cnb) cnb.onclick = function(){
+    if (isChatMuted()) { setChatMuted(false); }
     if (!('Notification' in window)) {
       flashOk('Notifications not supported in this browser.');
       return;
@@ -3300,6 +3741,21 @@ document.getElementById('mark_read').onclick = function() {
       flashOk('Notifications unavailable (try HTTPS or supported browser).');
     }
   };
+  var cmb = document.getElementById('chat_mute_btn');
+  if (cmb) cmb.onclick = function(){
+    var next = !isChatMuted();
+    setChatMuted(next);
+    flashOk(next ? 'Chat notifications muted.' : 'Chat notifications unmuted.');
+  };
+  paintMuteBtn();
+  var td = document.getElementById('theme_dark');
+  var tb = document.getElementById('theme_bright');
+  if (td) td.onclick = function(){ applyDensity('dark'); flashOk('Dark street theme'); };
+  if (tb) tb.onclick = function(){ applyDensity('bright'); flashOk('Bright green theme'); };
+  try {
+    var dens = localStorage.getItem(LS_DENSITY) || 'dark';
+    applyDensity(dens === 'bright' ? 'bright' : 'dark');
+  } catch (e3) { applyDensity('dark'); }
 })();
 // Light pull-to-refresh on feed
 (function(){
@@ -3402,7 +3858,7 @@ def render_html():
 
 
 def render_qr_page():
-    """No QR dependency — large tap-to-copy IP:port + sms-style note."""
+    """No QR dependency - large tap-to-copy IP:port + sms-style note."""
     ip = STATE.get("ip", "127.0.0.1")
     port = STATE.get("port", 8088)
     lan = "http://%s:%s" % (ip, port)
@@ -3412,7 +3868,7 @@ def render_qr_page():
     return (
         "<!DOCTYPE html><html><head><meta charset=\"utf-8\">"
         "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
-        "<title>GroveLink — share URL</title>"
+        "<title>GroveLink - share URL</title>"
         "<style>"
         "body{margin:0;background:#070b08;color:#d7ffd0;font-family:Arial,sans-serif;}"
         ".box{max-width:440px;margin:40px auto;padding:20px;text-align:center;}"
@@ -3422,7 +3878,7 @@ def render_qr_page():
         "a{color:#2cff6a;} p{color:#7aaa7a;line-height:1.5;font-size:13px;}"
         "</style></head><body><div class=\"box\">"
         "<h1>GROVELINK</h1>"
-        "<p>No QR code library — tap the address to copy, then open it on your phone "
+        "<p>No QR code library - tap the address to copy, then open it on your phone "
         "(same Wi-Fi as this PC).</p>"
         "<div class=\"ip\" id=\"c\" onclick=\"var t=this.textContent;"
         "if(navigator.clipboard)navigator.clipboard.writeText(t);"
@@ -3444,13 +3900,14 @@ def render_qr_page():
 
 
 def render_recap_html():
-    """Simple HTML session recap for today (photos / news / chat / top place)."""
+    """Simple HTML session recap for today (photos / news / chat / streak / top place)."""
     data = session_recap_data()
     ver = _esc(data.get("version") or "unknown")
     top = data.get("top_location") or ""
     top_s = _esc(top) if top else "(none yet)"
     top_c = int(data.get("top_location_count") or 0)
     up = _esc(data.get("uptime_human") or "0s")
+    streak = int(data.get("streak") or 0)
     top_extra = ""
     if top:
         top_extra = ' <span style="color:#7aaa7a;font-size:14px">&times;%d</span>' % top_c
@@ -3460,23 +3917,28 @@ def render_recap_html():
         '<meta name="theme-color" content="#041006">'
         '<title>GroveLink Session Recap</title>'
         '<style>'
-        'body{margin:0;background:#041006;color:#d7ffd0;font-family:system-ui,sans-serif;padding:20px}'
-        'h1{font-size:18px;letter-spacing:2px;color:#2cff6a;margin:0 0 8px}'
-        'p.sub{color:#7aaa7a;font-size:13px;margin:0 0 18px}'
-        '.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;max-width:520px}'
-        '.card{background:#0b0f0c;border:1px solid #1a4;border-radius:6px;padding:14px}'
-        '.card .k{font-size:11px;letter-spacing:1px;color:#7aaa7a}'
-        '.card .v{font-size:28px;font-weight:bold;color:#2cff6a;margin-top:4px}'
+        'body{margin:0;background:#050805;color:#d7ffd0;font-family:system-ui,-apple-system,Segoe UI,Arial,sans-serif;padding:24px 18px 48px}'
+        '.wrap{max-width:560px;margin:0 auto}'
+        'h1{font-size:20px;letter-spacing:2px;color:#2cff6a;margin:0 0 6px;font-weight:800}'
+        'p.sub{color:#8bbb8b;font-size:13px;margin:0 0 22px;line-height:1.5}'
+        '.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}'
+        '.card{background:#0b120e;border:1px solid #1f5a2a;border-radius:8px;padding:16px}'
+        '.card .k{font-size:10px;letter-spacing:1.5px;color:#7aaa7a;text-transform:uppercase}'
+        '.card .v{font-size:30px;font-weight:800;color:#2cff6a;margin-top:8px;letter-spacing:0.5px}'
         '.card.wide{grid-column:1/-1}'
-        'a.back{display:inline-block;margin-top:18px;color:#2cff6a;font-weight:bold;margin-right:10px}'
-        '.foot{margin-top:16px;font-size:12px;color:#7aaa7a}'
-        '</style></head><body>'
+        '.card.accent{border-color:#2cff6a;background:#0e1a12}'
+        'a.back{display:inline-block;margin-top:20px;margin-right:12px;color:#2cff6a;font-weight:bold;text-decoration:none;'
+        'padding:10px 0;font-size:13px}'
+        '.foot{margin-top:20px;font-size:12px;color:#7aaa7a;line-height:1.5}'
+        '@media(max-width:420px){.grid{grid-template-columns:1fr}}'
+        '</style></head><body><div class="wrap">'
         '<h1>SESSION RECAP</h1>'
-        '<p class="sub">Today on this bridge · GroveLink __VER__</p>'
+        '<p class="sub">Today on this bridge · GroveLink __VER__ · overview of photos, Herald, chat, and streak</p>'
         '<div class="grid">'
         '<div class="card"><div class="k">PHOTOS TODAY</div><div class="v">__P__</div></div>'
         '<div class="card"><div class="k">NEWS TODAY</div><div class="v">__N__</div></div>'
         '<div class="card"><div class="k">CHAT TODAY</div><div class="v">__C__</div></div>'
+        '<div class="card accent"><div class="k">PHOTO STREAK</div><div class="v">__S__</div></div>'
         '<div class="card"><div class="k">BRIDGE UPTIME</div><div class="v" style="font-size:20px">__U__</div></div>'
         '<div class="card wide"><div class="k">TOP LOCATION</div>'
         '<div class="v" style="font-size:20px">__T____TE__</div></div>'
@@ -3484,23 +3946,23 @@ def render_recap_html():
         '<a class="back" href="/">&larr; Back to phone</a>'
         '<a class="back" href="/news">Herald</a>'
         '<a class="back" href="/spectate">Spectate</a>'
-        '<div class="foot">Camera stays gallery-only · NEWS is separate · Win7 stdlib bridge</div>'
-        '</body></html>'
+        '<div class="foot">Camera stays gallery-only · NEWS is separate · Win7 stdlib bridge · crash-safer CLEO</div>'
+        '</div></body></html>'
     )
     return (
         body.replace("__VER__", ver)
         .replace("__P__", str(int(data.get("photo_count_today") or 0)))
         .replace("__N__", str(int(data.get("news_count_today") or 0)))
         .replace("__C__", str(int(data.get("chat_count_today") or 0)))
+        .replace("__S__", str(streak))
         .replace("__U__", up)
         .replace("__T__", top_s)
         .replace("__TE__", top_extra)
     )
 
 
-
 def render_spectate_html():
-    """Snapshot-based live view — refreshes latest bridge photo (not H.264/WebRTC)."""
+    """Snapshot-based live view - refreshes latest bridge photo (not H.264/WebRTC)."""
     ver = STATE.get("version", "unknown") or "unknown"
     return (
         "<!DOCTYPE html><html><head><meta charset=\"utf-8\">"
@@ -3536,11 +3998,12 @@ def render_spectate_html():
         "body.cinema .cinema-hint{display:block}"
         "</style></head><body>"
         "<div class=\"badge\" id=\"badge\">LIVE SPECTATE</div>"
-        "<div class=\"banner\" id=\"banner\"><b>Snapshot live — not video</b> · slideshow of camera stills · same Wi-Fi + bridge · <span id=\"watching\">0 watching</span></div>"
+        "<div class=\"banner\" id=\"banner\"><b>Snapshot live - not video</b> · slideshow of camera stills · same Wi-Fi + bridge · <span id=\"watching\">0 watching</span></div>"
         "<div class=\"controls\">"
         "<button type=\"button\" id=\"btn_pause\">Pause</button>"
         "<button type=\"button\" id=\"btn_fs\">Fullscreen</button>"
         "<button type=\"button\" id=\"btn_cinema\" title=\"Hide chrome (H)\">Cinema</button>"
+        "<button type=\"button\" id=\"btn_dl\" title=\"Download current frame\">Download</button>"
         "<a class=\"back\" href=\"/\">← Phone</a>"
         "</div>"
         "<div class=\"cinema-hint\" id=\"cinema_hint\">Press H to show controls</div>"
@@ -3548,9 +4011,9 @@ def render_spectate_html():
         "<div id=\"wait\">"
         "<h1>WAITING FOR SPECTATE FRAMES</h1>"
         "<p>Enable <b>SPECTATE</b> in-game (K → SPECTATE → Enter). "
-        "Snapshot slideshow only — not real video. Same Wi-Fi + bridge must run.</p>"
+        "Snapshot slideshow only - not real video. Same Wi-Fi + bridge must run.</p>"
         "</div>"
-        "<div class=\"meta\" id=\"meta\">GroveLink __VER__ · snapshot live — not video</div>"
+        "<div class=\"meta\" id=\"meta\">GroveLink __VER__ · snapshot live - not video</div>"
         "<script>"
         "var img=document.getElementById('frame');"
         "var wait=document.getElementById('wait');"
@@ -3592,11 +4055,11 @@ def render_spectate_html():
         "        (name?' · '+name:'') +"
         "        ' · frame '+ ageLabel(j.age_sec) +"
         "        ' · '+w+' watching' +"
-        "        ' · snapshot live — not video';"
+        "        ' · snapshot live - not video';"
         "      schedule();"
         "    }catch(e){ schedule(); }"
         "  };"
-        "  x.onerror=function(){ meta.textContent='Bridge offline — run START_GROVELINK'; schedule(); };"
+        "  x.onerror=function(){ meta.textContent='Bridge offline - run START_GROVELINK'; schedule(); };"
         "  x.ontimeout=function(){ schedule(); };"
         "  x.send();"
         "}"
@@ -3622,8 +4085,17 @@ def render_spectate_html():
         "    }"
         "  }catch(e){}"
         "};"
-        "function setCinema(on){"
-        "  document.body.className=on?'cinema':'';"
+        "document.getElementById('btn_dl').onclick=function(){"
+"  var s=img&&img.src?img.src:'';"
+"  if(!s){ return; }"
+"  try{"
+"    var a=document.createElement('a');"
+"    a.href=s; a.download='grovelink-spectate.jpg'; a.target='_blank'; a.rel='noopener';"
+"    document.body.appendChild(a); a.click(); document.body.removeChild(a);"
+"  }catch(e){ try{ window.open(s,'_blank'); }catch(e2){} }"
+"};"
+"function setCinema(on){"
+"  document.body.className=on?'cinema':'';"
         "  var b=document.getElementById('btn_cinema');"
         "  if(b) b.textContent=on?'Exit cinema':'Cinema';"
         "  try{ localStorage.setItem('grovelink_cinema', on?'1':'0'); }catch(e){}"
@@ -3676,7 +4148,7 @@ def spectate_payload():
         "poll_ms": poll_ms,
         "watching": spectate_watching_count(),
         "version": STATE.get("version", "unknown") or "unknown",
-        "note": "snapshot live — not video",
+        "note": "snapshot live - not video",
     }
 
 
@@ -3697,6 +4169,14 @@ def api_payload():
         photos = attach_locations_to_photos(photos)
     except Exception:
         pass
+    try:
+        photos = attach_comments_to_photos(photos)
+    except Exception:
+        pass
+    try:
+        note_streak_from_photos(photos)
+    except Exception:
+        pass
     latest = ""
     if photos:
         latest = photos[0].get("file") or ""
@@ -3708,6 +4188,10 @@ def api_payload():
     except Exception:
         pass
     latest_url = ("/photo/%s" % latest) if latest else ""
+    try:
+        _streak = streak_payload()
+    except Exception:
+        _streak = {"streak": 0, "photo_days": 0, "dates": []}
     spectate_on = bool(STATE.get("spectate_on"))
     try:
         ini = STATE.get("link_ini") or ""
@@ -3746,6 +4230,9 @@ def api_payload():
         "uptime_human": format_uptime(bridge_uptime_sec()),
         "pinned": get_pinned_chat(),
         "pinned_chat_id": (STATE.get("pinned_chat_id") or ""),
+        "streak": _streak.get("streak", 0),
+        "photo_days": _streak.get("photo_days", 0),
+        "streak_dates": _streak.get("dates") or [],
     }
 
 
@@ -3774,6 +4261,8 @@ def health_payload():
         "uptime_sec": bridge_uptime_sec(),
         "uptime_human": format_uptime(bridge_uptime_sec()),
         "started_at": int(STATE.get("started_at") or 0),
+        "streak": streak_payload().get("streak", 0),
+        "photo_days": streak_payload().get("photo_days", 0),
     }
 
 
@@ -4087,7 +4576,7 @@ class Handler(BaseHTTPRequestHandler):
             text_body = raw.decode("latin-1")
 
         if path == "/clear":
-            # Require confirm=1 (same as GET /clear) — accidental wipe guard
+            # Require confirm=1 (same as GET /clear) - accidental wipe guard
             conf = ""
             if text_body.lstrip().startswith("{"):
                 try:
@@ -4194,6 +4683,33 @@ class Handler(BaseHTTPRequestHandler):
                 pass
             code = 200 if ok else 400
             self._json({"ok": ok, "file": _safe_basename(name), "caption": detail}, code=code)
+            return
+
+        if path == "/comment":
+            name = ""
+            comment = ""
+            if text_body.lstrip().startswith("{"):
+                try:
+                    obj = json.loads(text_body)
+                    name = obj.get("file") or obj.get("name") or ""
+                    comment = obj.get("comment") or obj.get("text") or ""
+                except Exception:
+                    name = ""
+            else:
+                fields = parse_qs(text_body)
+                if "file" in fields and fields["file"]:
+                    name = fields["file"][0]
+                if "comment" in fields and fields["comment"]:
+                    comment = fields["comment"][0]
+                elif "text" in fields and fields["text"]:
+                    comment = fields["text"][0]
+            ok, detail = set_comment(name, comment)
+            try:
+                STATE["photos"] = attach_comments_to_photos(STATE.get("photos", []))
+            except Exception:
+                pass
+            code = 200 if ok else 400
+            self._json({"ok": ok, "file": _safe_basename(name), "comment": detail}, code=code)
             return
 
         if path == "/news":
@@ -4340,7 +4856,7 @@ class Handler(BaseHTTPRequestHandler):
 
 def shutter_burst(cfg, gta_dir, seconds=3.0, interval=0.25):
     """After PHOTO.take / NEWS.make flips, poll/copy aggressively for a few seconds.
-    Never creates news — Camera gallery path stays news-free."""
+    Never creates news - Camera gallery path stays news-free."""
     deadline = time.time() + seconds
     STATE["shutter_burst_until"] = deadline
     while time.time() < deadline:
@@ -4388,11 +4904,11 @@ def process_photo_and_news_flags(cfg, gta_dir, ini, burst_seconds=3.5, burst_int
         label = "News snap"
     elif frame == "1" and take != "1":
         label = "Spectate frame"
-        # Spectate frames: shorter burst — keep live view snappy, still no NEWS
+        # Spectate frames: shorter burst - keep live view snappy, still no NEWS
         burst_seconds = min(burst_seconds, 2.0)
     else:
         label = "Shutter"
-    print("%s — fast poll for new Gallery files..." % label)
+    print("%s - fast poll for new Gallery files..." % label)
     shutter_burst(cfg, gta_dir, seconds=burst_seconds, interval=burst_interval)
     if make == "1":
         newest = None
@@ -4442,7 +4958,7 @@ def watcher(cfg, gta_dir, ini):
                     for g in galleries:
                         print("   ", g)
                 else:
-                    print("Galleries  : still none — waiting for folder/photos")
+                    print("Galleries  : still none - waiting for folder/photos")
                 last_galleries = list(galleries)
             copy_latest(galleries)
             try:
@@ -4450,7 +4966,7 @@ def watcher(cfg, gta_dir, ini):
             except Exception as exc:
                 print("outbox watch error:", exc)
             if process_photo_and_news_flags(cfg, gta_dir, ini):
-                # Race fix: another snap/make/frame may have arrived during burst — loop now
+                # Race fix: another snap/make/frame may have arrived during burst - loop now
                 if (
                     read_ini_key(ini, "PHOTO", "take", "0") == "1"
                     or read_ini_key(ini, "NEWS", "make", "0") == "1"
@@ -4513,7 +5029,7 @@ def main():
     print("  GROVELINK PHONE BRIDGE")
     print("  Version    :", STATE["version"])
     print("================================================")
-    print("GTA folder :", gta_dir or "(not found — edit config.ini)")
+    print("GTA folder :", gta_dir or "(not found - edit config.ini)")
     print("link.ini   :", ini)
     if galleries:
         print("Galleries  :")
@@ -4540,7 +5056,7 @@ def main():
     print("  LIVE SPECTATE (snapshot slideshow):")
     print("      http://127.0.0.1:%s/spectate" % port)
     print("  Camera = gallery only; NEWS menu / web Breaking News = Herald")
-    print("  CJ REPLY (OUTBOX) + SPECTATE.frame — never auto-news")
+    print("  CJ REPLY (OUTBOX) + SPECTATE.frame - never auto-news")
     print("")
     print("  Keep this window open while you play.")
     print("================================================")

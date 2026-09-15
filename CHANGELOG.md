@@ -1,6 +1,18 @@
 # GroveLink changelog
 
-Human-readable highlights from pack **1.0 → 2.2.0**. Full detail also lives in root `README.md` round notes and [grovelink/FEATURES.md](grovelink/FEATURES.md).
+Human-readable highlights from pack **1.0 → 2.3.0**. Full detail also lives in root `README.md` round notes and [grovelink/FEATURES.md](grovelink/FEATURES.md).
+
+## 2.3.0 — Comments, mute, spectate download, density, streak · Herald depth · UI polish
+
+- **Photo comments:** short text via `POST /comment`; `photos_comments.json` (+ sidecar `.comment.txt`); shown under each shot.
+- **Mute chat notifications** toggle (localStorage) next to Enable CJ alerts.
+- **Spectate Download** current frame button on `/spectate`.
+- **Dark street / Bright** density theme toggle (two green variants, localStorage).
+- **Photo streak:** days with ≥1 photo in `photos_streak.json`; header STREAK + `/recap` PHOTO STREAK.
+- **Herald depth:** multi-paragraph bodies, subhead, pull quote, related stub, dateline, byline desk, weather, photo credit; richer `/news` index cards (still offline templates — no AI API).
+- **UI polish:** clearer hierarchy, section headers, spacing/typography, empty states; modernized `/recap` cards (ES5-ish JS, SA green).
+- **Bugfixes:** XSS escape (`'`), density class toggle without regex escapes, streak payload once per `/api`, mute/theme wiring.
+- Camera stays gallery-only; NEWS separate; Win7 stdlib; crash-safer CLEO. Docs + smoke PASS. VERSION **2.3.0**.
 
 ## 2.2.0 — Reactions, pin, cinema, recap, uptime
 

@@ -17,3 +17,5 @@ grovelink/bridge/photos_captions.json
 grovelink/bridge/chat_delivered.json
 grovelink/bridge/photos/*.txt
 grovelink/bridge/photos_favorites.json
+grovelink/bridge/photos_comments.json
+grovelink/bridge/photos_streak.json

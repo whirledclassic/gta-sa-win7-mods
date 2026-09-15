@@ -1,4 +1,4 @@
-# GroveLink research → features (v2.2.0)
+# GroveLink research → features (v2.3.0)
 
 Short summary of companion-phone / gallery UX we studied and why we shipped these enhancements (not a full taxi/homie phone clone).
 
@@ -26,6 +26,7 @@ Short summary of companion-phone / gallery UX we studied and why we shipped thes
 | Companion quick access | **Quick Actions**: Camera tip, Spectate, Herald, Text CJ |
 | Social nick / live crowd / stories | **Chat nicknames**, spectate **N watching**, **Moments** Today reel, wanted toasts, **By place** gallery |
 | Reactions / pin / recap / cinema | **Chat reactions** + **pin**, `/recap`, spectate **cinema** (H), bridge **uptime** (2.2.0) |
+| Comments / mute / streak / density / Herald depth | **Photo comments**, mute alerts, spectate **Download**, density themes, **streak**, richer Herald (2.3.0) |
 
 ## Out of scope (vs Ultimate Interactive Phone)
 

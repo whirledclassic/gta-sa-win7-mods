@@ -1,6 +1,6 @@
 # GroveLink — current features
 
-Pack version: see root **`VERSION`** (`2.2.0`; includes **2.1.0** nicknames/watching/Moments). Crash-safer CLEO (no `hold_cellphone`, no custom GXT `033E`). Bridge is **stdlib-only** (Win7 Python 2.7 / 3.4–3.8).
+Pack version: see root **`VERSION`** (`2.3.0`; includes **2.2.0** reactions/recap + **2.1.0** nicknames/watching/Moments). Crash-safer CLEO (no `hold_cellphone`, no custom GXT `033E`). Bridge is **stdlib-only** (Win7 Python 2.7 / 3.4–3.8).
 
 ## Install / update / verify / test
 
@@ -11,7 +11,7 @@ Pack version: see root **`VERSION`** (`2.2.0`; includes **2.1.0** nicknames/watc
 | **One-click update** | Desktop / repo `UPDATE_GROVELINK.bat` — GitHub zip (no Git), overlays files, re-runs INSTALL |
 | **Health check** | Desktop / repo `VERIFY_GROVELINK.bat` — OK/MISSING for game, CLEO, `.cs`, `link.ini`, Python, config, photos dir, **VERSION** (prints pack version), URLs |
 | **Human changelog** | Root `CHANGELOG.md` — pack 1.0→current highlights |
-| **Smoke test** | `tests/smoke_bridge.py` (Linux/Win7, stdlib) or `grovelink/bridge/TEST_BRIDGE.bat` — asserts `/health` (+ uptime), `/api` (+ `hud`, `watching`, `places`, `pinned`, uptime), `/recap`, `/react`, `/pin`, `/news`, `/send` (+ nickname), `/favorite`, `/manifest.webmanifest`, `/export.zip`, HTML gallery, CLEO static |
+| **Smoke test** | `tests/smoke_bridge.py` (Linux/Win7, stdlib) or `grovelink/bridge/TEST_BRIDGE.bat` — asserts `/health` (+ uptime), `/api` (+ `hud`, `watching`, `places`, `pinned`, uptime), `/recap`, `/react`, `/pin`, `/comment`, `/news`, `/send` (+ nickname), `/favorite`, `/manifest.webmanifest`, `/export.zip`, HTML gallery, CLEO static |
 | **Desktop starters** | **GroveLink Phone**, `START_GROVELINK`, `VERIFY_GROVELINK`, `UPDATE_GROVELINK`, `GroveLink_README.txt`, `GroveLink_PHONE_URL.txt`, `GroveLink_REPO.txt` (not INSTALL itself) |
 | **START bat** | Prints pack **VERSION** (CR-stripped); if Python missing, clear Win7 3.8.10 instructions + opens python.org download page |
 | **Port in use** | Bridge prints plain English **port N busy** if TCP bind fails (close other GroveLink / free the port) |
@@ -82,8 +82,15 @@ Pack version: see root **`VERSION`** (`2.2.0`; includes **2.1.0** nicknames/watc
 | **Spectate cinema** | `/spectate` hide chrome (hotkey **H** / Cinema btn) for bigger frame |
 | **Session recap** | `GET /recap` — today's photo / news / chat counts + top location; Quick Actions link |
 | **Bridge uptime** | `uptime_sec` / `uptime_human` on `/health` + phone footer |
+| **Photo comments** | Short text under each shot; `POST /comment` → `photos_comments.json` (+ `.comment.txt` sidecar) |
+| **Mute chat alerts** | Toggle on phone page; `localStorage` — skips browser `Notification` when muted |
+| **Spectate download** | **Download** button on `/spectate` saves/opens current frame |
+| **Density theme** | **Dark street** / **Bright** green variants (`localStorage`) |
+| **Photo streak** | Days with ≥1 photo (`photos_streak.json`); header + `/recap` |
+| **Herald depth** | Multi-graf articles: subhead, pull quote, related, dateline, desk byline, weather, photo credit; richer index cards |
+| **UI polish** | Section headers, clearer stats/empty states, modernized `/recap` (still ES5-ish / Win7-friendly) |
 | **Web app manifest** | `GET /manifest.webmanifest` + apple meta for Add to Home Screen |
-| **Endpoints** | `/`, `/api`, `/api/chat`, `/api/spectate`, `/spectate`, `/recap`, `/health`, `/send`, `/react`, `/pin`, `/caption`, `/favorite`, `/news`, `/news/<id>`, `/delete`, `/clear`, `/photo/…`, `/qr`, `/export.zip`, `/manifest.webmanifest` |
+| **Endpoints** | `/`, `/api`, `/api/chat`, `/api/spectate`, `/spectate`, `/recap`, `/health`, `/send`, `/react`, `/pin`, `/caption`, `/comment`, `/favorite`, `/news`, `/news/<id>`, `/delete`, `/clear`, `/photo/…`, `/qr`, `/export.zip`, `/manifest.webmanifest` |
 | **Out of scope** | Full taxi/homie spawn/call systems (see [RESEARCH.md](RESEARCH.md)) — conflicts with other CLEO packs |
 
 ## Config (`grovelink/bridge/config.ini`)
