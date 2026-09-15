@@ -104,6 +104,8 @@ Deleted names are remembered in `bridge\photos_deleted.txt` so the watcher does 
 
 - **LIVE** green pulse means `/api` succeeded recently; if the bridge dies, a red banner says **Bridge offline — run START_GROVELINK** until it comes back.
 - Header **VERSION** / **PHOTOS** stats match `/api` + root `VERSION`.
+- Phone page **Shortcuts** footer (`?` / `Esc` / `/`); Clear/Export disabled when empty.
+- `VERIFY_GROVELINK.bat` checks root **VERSION** and prints the pack version.
 - **Export zip** / `GET /export.zip` downloads current `bridge/photos` only (not GTA Gallery).
 - Refresh interval: `config.ini` → `server.poll_ms = 2000` (ms). The page reads `poll_ms` from `/api`.
 - **All / Today** tabs filter by photo modified time (Today = since local midnight).

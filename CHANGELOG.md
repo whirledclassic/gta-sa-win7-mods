@@ -1,0 +1,56 @@
+# GroveLink changelog
+
+Human-readable highlights from pack **1.0 → 1.7**. Full detail also lives in root `README.md` round notes and [grovelink/FEATURES.md](grovelink/FEATURES.md).
+
+## 1.7.0 — Round 7
+
+- **Phone page help footer** — keyboard shortcut hints (`?` toggles detail, `Esc` closes lightbox/confirm, `/` focuses search)
+- **Empty-album UX** — **Clear all** and **Export zip** (and Download latest) stay **disabled** when photo count is 0
+- **VERIFY_GROVELINK.bat** — checks root **`VERSION`** file is present and **prints** the pack version
+- **CHANGELOG.md** — this file (1.0→1.7 highlights)
+- **Smoke tests** — extended for help footer, disabled empty actions, VERIFY VERSION
+- CLEO STATUS still flashes photo count (`LIVE N  PHONE PAGE ON PC`); Camera already shows **PHOTO TAKEN #N**
+
+## 1.6.0 — Round 6
+
+- Newest/Oldest **client-side** sort toggle; **Hidden from phone** skip-list note (`skipped_deleted`)
+- Favicon-free + Add to Home Screen tip; CLEO **Catalina** contact
+- `POST /clear` requires `confirm=1`; `/photo/…` path hardened; START strips VERSION CR
+- INSTALL big red **CLEO.asi missing** warning + https://cleo.li
+
+## 1.5.0 — Round 5
+
+- Empty-state large LAN IP; pinch **Delete this shot?**; filename search; **Clear all** (`/clear`)
+- `/api` **last_error**; START prints VERSION + Python 3.8.10 help
+- CLEO **NO NEW TEXTS**; STATUS **PHONE PAGE ON PC**; UPDATE prints exact zip URL on fail
+- Bugfixes: VERIFY `gta_dir` spaces + REPO CR; shutter `take=1` drain
+- **`tests/smoke_bridge.py`** + `TEST_BRIDGE.bat`
+
+## 1.4.0 — Round 4
+
+- LIVE pulse + offline reconnect banner; **Export zip**; `server.poll_ms`
+- Version + photo stats on page; docs / FEATURES; Win7 mkdir harden
+
+## 1.3.0 — Round 3+update
+
+- Album All/Today tabs; quick-reply chips; tap-to-copy IP + `/qr` (no QR lib)
+- `max_photos` prune; CLEO HELP menu; INSTALL Desktop README
+- One-click **UPDATE_GROVELINK.bat** (GitHub zip, no Git) + root `VERSION` / `update.ini`
+
+## 1.2.x — Round 2
+
+- **VERIFY_GROVELINK.bat**; phone delete (bridge cache only) + NEW unread badges
+- CLEO menu CAMERA / INBOX / CONTACTS / STATUS / CLOSE
+
+## 1.1.x — Round 1 enhance
+
+- One-click **INSTALL.bat**; bridge LAN/localhost, `/health`, lightbox, shutter burst
+- CLEO inbox from ini, bridge-down remind, **PHOTO TAKEN #count**
+- Docs + TROUBLESHOOTING
+
+## 1.0.x — Foundation / safety
+
+- Crash-safer CLEO: **no** `hold_cellphone`, **no** custom GXT `033E`
+- Bridge gallery watch; INSTALL never deletes working `.cs` without replacement
+- Stdlib-only Python bridge for **Windows 7** (2.7.18 / 3.8.10)
+- No fake full prebuilt `.cs` stub for daily use

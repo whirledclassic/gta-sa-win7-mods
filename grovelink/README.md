@@ -38,6 +38,8 @@ Until PR #1 merges, `update.ini` defaults to branch `fix/grovelink-camera-snapsh
 ## Bridge page (phone / PC browser)
 
 - Header shows prominent **VERSION** + **PHOTOS** stats, **LIVE** pulse badge, **LAN** + **localhost** URLs, last poll time, unread count
+- Keyboard **Shortcuts** footer (`?` help detail, `Esc` close lightbox, `/` focus search)
+- **Clear all** / **Export zip** / Download latest **disabled** when photo count is 0
 - If `/api` fails: red banner **Bridge offline — run START_GROVELINK** (reconnects automatically when the bridge is back)
 - **Copy** buttons for URLs; large **tap-to-copy IP:port** block + `sms:` note (no QR library); **`GET /qr`** share page with the same
 - **Download latest** opens newest `/photo/…`; **Export zip** downloads `GET /export.zip` (bridge/photos only); **Mark all read** clears NEW badges

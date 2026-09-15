@@ -91,6 +91,32 @@ if exist "%CFG%" (
   )
 )
 
+echo --- Pack version ---
+set "GL_VER=unknown"
+if exist "%REPO%\VERSION" (
+  set /p GL_VER=<"%REPO%\VERSION"
+  if defined GL_VER (
+    for /f "delims=" %%A in ("!GL_VER!") do set "GL_VER=%%A"
+  )
+  echo   [OK]      VERSION file
+  echo            %REPO%\VERSION
+  echo            Pack version: !GL_VER!
+  set /a OK+=1
+) else if exist "%~dp0VERSION" (
+  set /p GL_VER=<"%~dp0VERSION"
+  if defined GL_VER (
+    for /f "delims=" %%A in ("!GL_VER!") do set "GL_VER=%%A"
+  )
+  echo   [OK]      VERSION file
+  echo            %~dp0VERSION
+  echo            Pack version: !GL_VER!
+  set /a OK+=1
+) else (
+  echo   [MISSING] VERSION file  — keep the pack root VERSION next to INSTALL.bat
+  set /a BAD+=1
+)
+echo.
+
 echo --- Game ---
 if defined GTA (
   if exist "%GTA%\gta_sa.exe" (

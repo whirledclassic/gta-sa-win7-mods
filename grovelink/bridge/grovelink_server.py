@@ -765,6 +765,21 @@ HTML_TEMPLATE = """<!DOCTYPE html>
   }
   #confirm_dlg .btn-yes { background:#3a1212; color:#ffb0b0; border:2px solid #a44 !important; }
   #confirm_dlg .btn-no { background:#2cff6a; color:#041006; }
+  .helpfoot {
+    margin:8px 12px 20px; padding:12px 14px; background:#0b0f0c; border:1px solid #1a4;
+    font-size:11px; color:#7aaa7a; line-height:1.55; border-radius:2px;
+  }
+  .helpfoot strong { color:#2cff6a; }
+  .helpfoot kbd {
+    display:inline-block; padding:1px 6px; border:1px solid #2cff6a; color:#2cff6a;
+    font-family:Arial,sans-serif; font-size:10px; border-radius:2px; margin:0 1px;
+  }
+  .helpfoot .help-detail { margin-top:8px; padding-top:8px; border-top:1px solid #1a4; display:none; }
+  .helpfoot .help-detail.show { display:block; }
+  .helpfoot .helptoggle {
+    background:none; border:0; color:#2cff6a; font-size:11px; font-weight:bold;
+    cursor:pointer; padding:0; text-decoration:underline; min-height:28px;
+  }
 </style>
 </head>
 <body>
@@ -788,10 +803,10 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       </div>
     </div>
     <div class=\"actions\">
-      <a class=\"actionbtn\" id=\"dl_latest\" href=\"#\" target=\"_blank\" rel=\"noopener\">Download latest</a>
-      <a class=\"actionbtn\" id=\"export_zip\" href=\"/export.zip\">Export zip</a>
+      <a class=\"actionbtn\" id=\"dl_latest\" href=\"#\" target=\"_blank\" rel=\"noopener\" disabled style=\"opacity:0.4;pointer-events:none\">Download latest</a>
+      <a class=\"actionbtn\" id=\"export_zip\" href=\"#\" disabled style=\"opacity:0.4;pointer-events:none\">Export zip</a>
       <button type=\"button\" class=\"actionbtn\" id=\"mark_read\">Mark all read</button>
-      <button type=\"button\" class=\"actionbtn\" id=\"clear_all\" style=\"background:#3a1212;border-color:#a44;color:#ffb0b0\">Clear all phone copies</button>
+      <button type=\"button\" class=\"actionbtn\" id=\"clear_all\" disabled style=\"background:#3a1212;border-color:#a44;color:#ffb0b0\">Clear all phone copies</button>
     </div>
     <div class=\"bigcopy\" id=\"big_copy\" title=\"Tap to copy IP:port\">
       <div class=\"label\">TAP TO COPY — PHONE ADDRESS</div>
@@ -829,6 +844,19 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     <button type=\"button\" class=\"tab\" id=\"tab_sort\" data-sort=\"newest\" title=\"Client-side only — server always sends newest first\">Newest</button>
   </div>
   <div id=\"feed\"></div>
+  <div class=\"helpfoot\" id=\"help_foot\">
+    <div><strong>Shortcuts</strong> —
+      <kbd>?</kbd> help ·
+      <kbd>Esc</kbd> close lightbox ·
+      <kbd>/</kbd> search ·
+      <button type=\"button\" class=\"helptoggle\" id=\"help_toggle\">more</button>
+    </div>
+    <div class=\"help-detail\" id=\"help_detail\">
+      <div><strong>GTA:</strong> <kbd>K</kbd> phone · Up/Down menu · Enter/Space select · Backspace close · Camera snaps to this page</div>
+      <div><strong>This page:</strong> Copy LAN/PC URL · Export zip / Clear all (enabled when photos &gt; 0) · Newest/Oldest sort · All/Today tabs</div>
+      <div><strong>Tip:</strong> Keep START_GROVELINK open; phone + PC on same Wi-Fi. Press <kbd>?</kbd> anytime to show/hide this row.</div>
+    </div>
+  </div>
 </div>
 <div id=\"lightbox\" onclick=\"closeLb(event)\">
   <button type=\"button\" class=\"close\" onclick=\"closeLb(event)\">&times;</button>
@@ -1122,7 +1150,10 @@ function paint(data) {
   var count = document.getElementById('count');
   var photos = data.photos || [];
   LAST_PHOTOS = photos;
-  count.textContent = (typeof data.count === 'number') ? data.count : photos.length;
+  var nCount = (typeof data.count === 'number') ? data.count : photos.length;
+  count.textContent = nCount;
+  // Disable Clear all / Export / Download latest when no photos (UX)
+  setCountActions(nCount, data.latest || (photos[0] && (photos[0].file || photos[0])) || '');
   var lr = data.last_refresh_human || data.last_refresh || '—';
   document.getElementById('last_refresh').textContent = lr;
   if (data.version) {
@@ -1184,20 +1215,46 @@ function paint(data) {
     }
   }
 
-  var latest = data.latest || (photos[0] && (photos[0].file || photos[0])) || '';
-  var dl = document.getElementById('dl_latest');
-  if (latest) {
-    dl.href = '/photo/' + latest;
-    dl.removeAttribute('disabled');
-    dl.style.opacity = '1';
-    dl.style.pointerEvents = 'auto';
-  } else {
-    dl.href = '#';
-    dl.setAttribute('disabled', 'disabled');
-    dl.style.opacity = '0.4';
-    dl.style.pointerEvents = 'none';
-  }
   renderFeed(photos);
+}
+function setCountActions(n, latest) {
+  var has = (parseInt(n, 10) || 0) > 0;
+  var dl = document.getElementById('dl_latest');
+  var ex = document.getElementById('export_zip');
+  var cl = document.getElementById('clear_all');
+  if (dl) {
+    if (has && latest) {
+      dl.href = '/photo/' + latest;
+      dl.removeAttribute('disabled');
+      dl.style.opacity = '1';
+      dl.style.pointerEvents = 'auto';
+    } else {
+      dl.href = '#';
+      dl.setAttribute('disabled', 'disabled');
+      dl.style.opacity = '0.4';
+      dl.style.pointerEvents = 'none';
+    }
+  }
+  if (ex) {
+    if (has) {
+      ex.href = '/export.zip';
+      ex.removeAttribute('disabled');
+      ex.style.opacity = '1';
+      ex.style.pointerEvents = 'auto';
+    } else {
+      ex.href = '#';
+      ex.setAttribute('disabled', 'disabled');
+      ex.style.opacity = '0.4';
+      ex.style.pointerEvents = 'none';
+    }
+  }
+  if (cl) {
+    if (has) {
+      cl.removeAttribute('disabled');
+    } else {
+      cl.setAttribute('disabled', 'disabled');
+    }
+  }
 }
 var POLL_MS = 2000;
 var POLL_TIMER = null;
@@ -1263,7 +1320,8 @@ document.getElementById('tab_today').onclick = function() { setFilter('today'); 
     SORT_ORDER = (SORT_ORDER === 'newest') ? 'oldest' : 'newest';
     btn.setAttribute('data-sort', SORT_ORDER);
     btn.textContent = (SORT_ORDER === 'newest') ? 'Newest' : 'Oldest';
-    btn.className = 'tab on';
+    // Do not steal All/Today 'on' state — sort is a separate toggle
+    btn.className = 'tab';
     renderFeed(LAST_PHOTOS);
   };
 })();
@@ -1277,7 +1335,11 @@ document.getElementById('tab_today').onclick = function() { setFilter('today'); 
     t = setTimeout(function(){ renderFeed(LAST_PHOTOS); }, 120);
   };
 })();
-document.getElementById('clear_all').onclick = function() { clearAllPhotos(); };
+document.getElementById('clear_all').onclick = function() {
+  if (this.disabled) return;
+  if (!(LAST_PHOTOS && LAST_PHOTOS.length)) return;
+  clearAllPhotos();
+};
 (function() {
   var chips = document.querySelectorAll('.chip');
   for (var i = 0; i < chips.length; i++) {
@@ -1304,8 +1366,48 @@ if (!getLastVisit()) {
 }
 document.getElementById('confirm_yes').onclick = function(ev){ if(ev)ev.stopPropagation(); confirmYes(); };
 document.getElementById('confirm_no').onclick = function(ev){ if(ev)ev.stopPropagation(); confirmCancel(ev); };
+function toggleHelpDetail(force) {
+  var d = document.getElementById('help_detail');
+  var t = document.getElementById('help_toggle');
+  if (!d) return;
+  var open;
+  if (typeof force === 'boolean') open = force;
+  else open = !/\bshow\b/.test(d.className || '');
+  d.className = open ? 'help-detail show' : 'help-detail';
+  if (t) t.textContent = open ? 'less' : 'more';
+}
+(function() {
+  var t = document.getElementById('help_toggle');
+  if (t) t.onclick = function() { toggleHelpDetail(); };
+})();
+document.addEventListener('keydown', function(ev) {
+  var tag = (ev.target && ev.target.tagName) ? ev.target.tagName.toUpperCase() : '';
+  var typing = (tag === 'INPUT' || tag === 'TEXTAREA');
+  var key = ev.key || '';
+  var code = ev.keyCode || ev.which || 0;
+  // Esc closes lightbox / confirm
+  if (code === 27 || key === 'Escape') {
+    var lb = document.getElementById('lightbox');
+    if (lb && lb.className === 'show') { closeLb(ev); return; }
+    var dlg = document.getElementById('confirm_dlg');
+    if (dlg && dlg.className === 'show') { confirmCancel(ev); return; }
+  }
+  if (typing) return;
+  // ? toggles help footer detail
+  if (key === '?' || (ev.shiftKey && code === 191)) {
+    toggleHelpDetail();
+    if (ev.preventDefault) ev.preventDefault();
+    return;
+  }
+  // / focuses search
+  if (key === '/' || code === 191) {
+    var s = document.getElementById('search');
+    if (s) { s.focus(); if (ev.preventDefault) ev.preventDefault(); }
+  }
+});
 document.getElementById('feed').innerHTML = emptyHtml();
 bindEmptyLanCopy();
+setCountActions(0, '');
 poll();
 schedulePoll();
 </script>

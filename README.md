@@ -12,6 +12,15 @@ Not affiliated with Rockstar Games. Single-player only.
 Pack version is in the root **`VERSION`** file (also shown on the phone page header and `/health`).
 
 
+## Changelog — 1.7.0 (Round 7)
+
+- **Phone page:** keyboard **shortcut help footer** (`?` / `Esc` / `/`); **Clear all** + **Export zip** disabled when count=0
+- **VERIFY:** checks root **VERSION** file present and prints pack version
+- **Docs:** root **`CHANGELOG.md`** (1.0→1.7 highlights); FEATURES synced
+- **Smoke:** help footer, empty-action disable, VERIFY VERSION checks
+- CLEO STATUS photo count flash unchanged (Camera already shows PHOTO TAKEN #)
+- Prior 1.6.0 notes below remain relevant
+
 ## Changelog — 1.6.0 (Round 6)
 
 - **Phone page:** **Newest/Oldest** sort toggle (client-side); **Hidden from phone** note when delete skip list non-empty (`skipped_deleted`); favicon-free + Add to Home Screen tip kept

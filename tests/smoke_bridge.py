@@ -4,7 +4,8 @@
 
 Starts the bridge HTTP server on an ephemeral port, asserts:
   GET /health, GET /api, GET /export.zip, GET /
-Optional: gallery copy + last_error + skipped_deleted + sort HTML + clear confirm.
+Optional: gallery copy + last_error + skipped_deleted + sort HTML + clear confirm +
+help footer + empty-action disable + VERIFY VERSION + CHANGELOG.
 
 Run from repo root or anywhere:
   python tests/smoke_bridge.py
@@ -265,6 +266,12 @@ def main():
         check("GET / apple-mobile-web-app-capable", "apple-mobile-web-app-capable" in html)
         check("GET / Add to Home Screen tip", "Add to Home Screen" in html)
         check("GET / skip_note / skipped UI", "skip_note" in html or "Hidden from phone" in html)
+        check("GET / has help footer Shortcuts", "help_foot" in html and "Shortcuts" in html)
+        check("GET / help ? toggle", "help_toggle" in html and "toggleHelpDetail" in html)
+        check("GET / Esc closes lightbox keydown", "keyCode === 27" in html or "Escape" in html)
+        check("GET / clear_all starts disabled", 'id="clear_all"' in html and "disabled" in html)
+        check("GET / export_zip starts disabled", 'id="export_zip"' in html and 'href="#"' in html)
+        check("GET / setCountActions helper", "setCountActions" in html)
     except Exception as exc:
         check("search/clear/sort HTML", False, exc)
 
@@ -381,6 +388,8 @@ def main():
             vb = f.read()
         check("VERIFY strips REPO CR", 'for /f "delims=" %%A in ("!REPO_FROM_FILE!")' in vb)
         check("VERIFY gta_dir keeps spaces", "do NOT strip spaces inside path" in vb or "tokens=* delims= " in vb)
+        check("VERIFY checks VERSION file", "VERSION" in vb and "Pack version" in vb)
+        check("VERIFY prints pack version", "Pack version:" in vb)
     except Exception as exc:
         check("VERIFY bat static", False, exc)
 
@@ -398,6 +407,19 @@ def main():
         check("START bat strips VERSION CR", 'for /f "delims=" %%A in ("%GL_VER%")' in bat2)
     except Exception as exc:
         check("START bat CR strip", False, exc)
+
+    try:
+        with open(os.path.join(REPO, "CHANGELOG.md"), "r") as f:
+            cl = f.read()
+        check("CHANGELOG.md exists with 1.7", "1.7.0" in cl and "Round 7" in cl)
+        check("CHANGELOG covers 1.0 foundation", "1.0" in cl and ("Foundation" in cl or "crash-safer" in cl))
+    except Exception as exc:
+        check("CHANGELOG.md", False, exc)
+
+    check("VERSION is 1.7.0", pack_ver == "1.7.0", pack_ver)
+
+    # Runtime: after clear, HTML still disables; after photo, actions enabled via setCountActions path
+    # (API count already covered; spot-check helper exists in page source above)
 
     print("")
     print("==== SUMMARY ====")

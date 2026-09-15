@@ -1,11 +1,11 @@
 {$USE ini}
 {$USE CLEO}
 {$CLEO .cs}
-// GroveLink Phone v8 — crash-safer. No #model names, no 033E GXT, no hold_cellphone.
+// GroveLink Phone v9 — crash-safer. No #model names, no 033E GXT, no hold_cellphone.
 // K toggle | UP/DOWN wrap | ENTER or SPACE select | BACKSPACE close
 // Menu: CAMERA / INBOX / CONTACTS / STATUS / HELP / CLOSE — labels via 0ACD only.
 // INBOX plays 018C when new=1. CONTACTS cycles static flavor lines (no models).
-// STATUS LIVE includes PHONE PAGE ON PC; INBOX shows NO NEW TEXTS when empty.
+// STATUS LIVE flashes photo count + PHONE PAGE ON PC; INBOX shows NO NEW TEXTS when empty.
 // HELP mentions UPDATE_GROVELINK for outdated installs.
 0000: NOP
 03A4: name_thread 'GROVELNK'

@@ -1,6 +1,6 @@
 # GroveLink — current features
 
-Pack version: see root **`VERSION`** (`1.6.0`). Crash-safer CLEO (no `hold_cellphone`, no custom GXT `033E`). Bridge is **stdlib-only** (Win7 Python 2.7 / 3.4–3.8).
+Pack version: see root **`VERSION`** (`1.7.0`). Crash-safer CLEO (no `hold_cellphone`, no custom GXT `033E`). Bridge is **stdlib-only** (Win7 Python 2.7 / 3.4–3.8).
 
 ## Install / update / verify / test
 
@@ -9,7 +9,8 @@ Pack version: see root **`VERSION`** (`1.6.0`). Crash-safer CLEO (no `hold_cellp
 | **One-click install** | Root `INSTALL.bat` (Run as admin) — finds GTA, copies fxt/ini, compiles with Sanny when found, Gallery folders, firewall TCP **8088**, Desktop starters |
 | **CLEO.asi missing** | Big red warning + **https://cleo.li** link; pause before continuing (support files still copy) |
 | **One-click update** | Desktop / repo `UPDATE_GROVELINK.bat` — GitHub zip (no Git), overlays files, re-runs INSTALL |
-| **Health check** | Desktop / repo `VERIFY_GROVELINK.bat` — OK/MISSING for game, CLEO, `.cs`, `link.ini`, Python, config, photos dir, URLs |
+| **Health check** | Desktop / repo `VERIFY_GROVELINK.bat` — OK/MISSING for game, CLEO, `.cs`, `link.ini`, Python, config, photos dir, **VERSION** (prints pack version), URLs |
+| **Human changelog** | Root `CHANGELOG.md` — pack 1.0→current highlights |
 | **Smoke test** | `tests/smoke_bridge.py` (Linux/Win7, stdlib) or `grovelink/bridge/TEST_BRIDGE.bat` — asserts `/health`, `/api`, `/export.zip`, `/clear` confirm, HTML sort, CLEO static |
 | **Desktop starters** | **GroveLink Phone**, `START_GROVELINK`, `VERIFY_GROVELINK`, `UPDATE_GROVELINK`, `GroveLink_README.txt`, `GroveLink_PHONE_URL.txt`, `GroveLink_REPO.txt` (not INSTALL itself) |
 | **START bat** | Prints pack **VERSION** (CR-stripped); if Python missing, clear Win7 3.8.10 instructions + opens python.org download page |
@@ -36,6 +37,8 @@ Pack version: see root **`VERSION`** (`1.6.0`). Crash-safer CLEO (no `hold_cellp
 | **Version + photo count** | Prominent stats on the page header (also in `/api` + `/health`) |
 | **Empty-state LAN IP** | First visit with no photos: **large LAN IP:port** (tap to copy) + checklist; header Copy buttons kept |
 | **Sort toggle** | **Newest / Oldest** tab — **client-side only** (server `/api` always newest-first) |
+| **Help / shortcuts footer** | Compact footer: `?` toggles detail, `Esc` closes lightbox/confirm, `/` focuses search; GTA key reminders |
+| **Empty actions disabled** | **Clear all**, **Export zip**, and **Download latest** disabled (dimmed) when photo count is 0 |
 | **Hidden / skipped note** | If delete skip list non-empty: shows **Hidden from phone: N** (`skipped_deleted` in `/api` + `/health`) |
 | **Delete confirm** | Pinch-friendly modal **“Delete this shot?”** (big Cancel / Delete) — SA green theme; bridge cache only |
 | **Filename search** | Search box filters the feed by photo filename (client-side) |
