@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GroveLink</title>
+<style>
+  body { margin:0; background:#070b08; color:#d7ffd0; font-family: Arial, Helvetica, sans-serif; }
+  .shell { max-width: 440px; margin: 0 auto; min-height: 100vh; background:#10180f; display:flex; flex-direction:column; }
+  header { padding:14px 16px 10px; background:#071109; border-bottom:2px solid #2cff6a; }
+  h1 { margin:0; font-size:18px; letter-spacing:3px; color:#2cff6a; }
+  .sub { font-size:12px; color:#7aaa7a; margin-top:6px; }
+  .tabs { display:flex; }
+  .tabs button { flex:1; background:#0b140c; color:#7aaa7a; border:0; padding:10px; font-weight:bold; }
+  .tabs button.on { color:#041006; background:#2cff6a; }
+  #chatbox { flex:1; overflow-y:auto; padding:12px; min-height: 48vh; }
+  .row { margin:0 0 10px; max-width:82%; }
+  .row.me { margin-left:auto; }
+  .bub { padding:10px 12px; border-radius:12px; font-size:15px; line-height:1.35; }
+  .them .bub { background:#1a2a1c; border:1px solid #2a4; }
+  .me .bub { background:#2cff6a; color:#041006; }
+  .who { font-size:10px; color:#7aaa7a; margin-bottom:3px; letter-spacing:1px; }
+  .me .who { text-align:right; }
+  form { display:flex; gap:8px; padding:12px; background:#10180f; border-top:1px solid #1a4; }
+  input[type=text] { flex:1; padding:12px; border:1px solid #2cff6a; background:#0b0f0c; color:#d7ffd0; font-size:16px; }
+  button.go { background:#2cff6a; color:#041006; border:0; padding:12px 14px; font-weight:bold; }
+  .ok { padding:0 12px 8px; color:#2cff6a; font-size:12px; min-height:16px; }
+  .shot { margin:12px; background:#000; border:1px solid #1a4; }
+  .shot img { width:100%; display:block; }
+  .meta { padding:6px 10px; font-size:11px; color:#7aaa7a; }
+  .empty { padding:28px 16px; color:#7aaa7a; }
+  #photos { display:none; }
+</style>
+</head>
+<body>
+<div class="shell">
+  <header>
+    <h1>GROVELINK</h1>
+    <div class="sub">Text CJ in San Andreas &nbsp;·&nbsp; <span id="count">0</span> shots</div>
+  </header>
+  <div class="tabs">
+    <button id="tchat" class="on" type="button">CHAT</button>
+    <button id="tphoto" type="button">PHOTOS</button>
+  </div>
+  <div id="chatbox"><div class="empty">Say something. In GTA press K, MESSAGES, ENTER to reply.</div></div>
+  <div id="photos"></div>
+  <div class="ok" id="ok"></div>
+  <form id="f">
+    <input id="msg" type="text" maxlength="80" placeholder="Text CJ..." required>
+    <button class="go" type="submit">SEND</button>
+  </form>
+</div>
+<script>
+function bubble(row) {
+  var me = row.from === 'CJ';
+  var who = me ? 'CJ' : (row.from || 'PHONE');
+  var cls = me ? 'row me' : 'row them';
+  return '<div class="'+cls+'"><div class="who">'+who+'</div><div class="bub"></div></div>';
+}
+function paint(data) {
+  var chat = data.chat || [];
+  var photos = data.photos || [];
+  document.getElementById('count').textContent = photos.length;
+  var box = document.getElementById('chatbox');
+  if (!chat.length) {
+    box.innerHTML = '<div class="empty">Say something. In GTA press K, MESSAGES, ENTER to reply.</div>';
+  } else {
+    box.innerHTML = '';
+    for (var i = 0; i < chat.length; i++) {
+      var wrap = document.createElement('div');
+      wrap.innerHTML = bubble(chat[i]);
+      var node = wrap.firstChild;
+      node.querySelector('.bub').textContent = chat[i].text || '';
+      box.appendChild(node);
+    }
+    box.scrollTop = box.scrollHeight;
+  }
+  var feed = document.getElementById('photos');
+  if (!photos.length) {
+    feed.innerHTML = '<div class="empty">In GTA: K, CAMERA, ENTER.</div>';
+  } else {
+    var html = '';
+    for (var j = 0; j < photos.length && j < 20; j++) {
+      var name = photos[j].file || photos[j];
+      html += '<div class="shot"><img src="/photo/' + name + '" alt="shot"><div class="meta">' + name + '</div></div>';
+    }
+    feed.innerHTML = html;
+  }
+}
+function poll() {
+  var x = new XMLHttpRequest();
+  x.open('GET', '/api', true);
+  x.onreadystatechange = function() {
+    if (x.readyState === 4 && x.status === 200) {
+      try { paint(JSON.parse(x.responseText)); } catch (e) {}
+    }
+  };
+  x.send();
+}
+document.getElementById('tchat').onclick = function() {
+  document.getElementById('tchat').className = 'on';
+  document.getElementById('tphoto').className = '';
+  document.getElementById('chatbox').style.display = 'block';
+  document.getElementById('photos').style.display = 'none';
+};
+document.getElementById('tphoto').onclick = function() {
+  document.getElementById('tphoto').className = 'on';
+  document.getElementById('tchat').className = '';
+  document.getElementById('chatbox').style.display = 'none';
+  document.getElementById('photos').style.display = 'block';
+};
+document.getElementById('f').onsubmit = function(ev) {
+  ev.preventDefault();
+  var msg = document.getElementById('msg').value;
+  var body = 'msg=' + encodeURIComponent(msg);
+  var x = new XMLHttpRequest();
+  x.open('POST', '/send', true);
+  x.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+  x.onreadystatechange = function() {
+    if (x.readyState === 4) {
+      document.getElementById('ok').textContent = 'Sent to CJ.';
+      document.getElementById('msg').value = '';
+      poll();
+      setTimeout(function(){ document.getElementById('ok').textContent = ''; }, 2000);
+    }
+  };
+  x.send(body);
+};
+poll();
+setInterval(poll, 1500);
+</script>
+</body>
+</html>
