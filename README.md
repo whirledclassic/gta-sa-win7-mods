@@ -12,6 +12,17 @@ Not affiliated with Rockstar Games. Single-player only.
 Pack version is in the root **`VERSION`** file (also shown on the phone page header and `/health`).
 
 
+## Changelog — 1.6.0 (Round 6)
+
+- **Phone page:** **Newest/Oldest** sort toggle (client-side); **Hidden from phone** note when delete skip list non-empty (`skipped_deleted`); favicon-free + Add to Home Screen tip kept
+- **Clear auth:** `POST /clear` now requires `confirm=1` (same as GET)
+- **Photo path:** `/photo/…` rejects path tricks (basename + stay inside `bridge/photos`)
+- **INSTALL:** big red **CLEO.asi missing** warning + https://cleo.li before continuing
+- **CLEO:** CONTACTS adds **Catalina** (cycle Sweet→Smoke→Ryder→Cesar→Catalina)
+- **START:** strip trailing CR from VERSION print
+- **Smoke:** extended for sort HTML, clear confirm, last_error via bad gallery, Catalina, INSTALL warning
+- Prior 1.5.0 notes below remain relevant
+
 ## Changelog — 1.5.0 (Round 5)
 
 - **Phone page:** large LAN IP on empty first visit; pinch-friendly **Delete this shot?** confirm; filename **search**; **Clear all phone copies** (`/clear`); `/api` `last_error` when Gallery unreadable
@@ -75,7 +86,7 @@ Offline / no network? See [grovelink/TROUBLESHOOTING.md](grovelink/TROUBLESHOOTI
 4. Health check: **http://127.0.0.1:8088/health** (includes pack `version`) or Desktop **VERIFY_GROVELINK.bat**.
 5. In GTA: **K** → Camera → **Enter** or **Space** — shot appears within a couple of seconds. Menu includes **HELP** (START GROVELINK + UPDATE_GROVELINK tips). **STATUS** shows **BRIDGE LIVE** / **NO BRIDGE** + shot count.
 
-Phone page extras: **LIVE** pulse + reconnect banner, prominent **version / photo count**, **Export zip**, filename **search**, **Clear all phone copies**, empty-state **large LAN IP**, pinch-friendly delete confirm, **All / Today** tabs, quick replies, `/api` `last_error`, `server.poll_ms` (default **2000**). Double-test: `tests/smoke_bridge.py` or `grovelink/bridge/TEST_BRIDGE.bat`.
+Phone page extras: **LIVE** pulse + reconnect banner, prominent **version / photo count**, **Newest/Oldest** sort, **Hidden from phone** skip note, **Export zip**, filename **search**, **Clear all phone copies** (confirm required), empty-state **large LAN IP**, pinch-friendly delete confirm, **All / Today** tabs, quick replies, `/api` `last_error` + `skipped_deleted`, `server.poll_ms` (default **2000**). Double-test: `tests/smoke_bridge.py` or `grovelink/bridge/TEST_BRIDGE.bat`.
 
 Feature list: [grovelink/FEATURES.md](grovelink/FEATURES.md). Stuck? See [grovelink/TROUBLESHOOTING.md](grovelink/TROUBLESHOOTING.md).
 

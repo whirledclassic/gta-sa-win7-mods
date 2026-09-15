@@ -799,7 +799,8 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       <div class=\"hint\" id=\"big_copy_hint\">Copies host:port for your phone browser</div>
     </div>
     <div class=\"smsnote\">No QR lib needed — open <code>http://</code> + the address above on your phone (same Wi-Fi). Or text yourself: <a id=\"sms_link\" href=\"#\">sms: note with URL</a>.</div>
-    <div class=\"tip\"><strong>Tip:</strong> On your phone, use the browser menu → <b>Add to Home Screen</b> for a one-tap GroveLink icon. Theme color matches this green HUD.</div>
+    <div class=\"tip\"><strong>Tip:</strong> On your phone, use the browser menu → <b>Add to Home Screen</b> for a one-tap GroveLink icon (no app install / no favicon needed). Theme color matches this green HUD.</div>
+    <div class=\"status\" id=\"skip_note\" style=\"display:none;margin-top:6px\">Hidden from phone: <span id=\"skip_count\">0</span> (deleted skip list — Gallery untouched)</div>
     <div class=\"status\">
       <span class=\"pulse live\" id=\"pulse\"></span>
       Bridge: <span id=\"bridge_status\" class=\"ok\">online</span>
@@ -825,6 +826,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
   <div class=\"tabs\">
     <button type=\"button\" class=\"tab on\" id=\"tab_all\" data-filter=\"all\">All</button>
     <button type=\"button\" class=\"tab\" id=\"tab_today\" data-filter=\"today\">Today</button>
+    <button type=\"button\" class=\"tab\" id=\"tab_sort\" data-sort=\"newest\" title=\"Client-side only — server always sends newest first\">Newest</button>
   </div>
   <div id=\"feed\"></div>
 </div>
@@ -846,6 +848,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 var LS_KEY = 'grovelink_last_visit';
 var FILTER = 'all';
 var SEARCH_Q = '';
+var SORT_ORDER = 'newest'; // client-side only; server /api is always newest-first
 var LAST_PHOTOS = [];
 var PENDING_ACTION = ''; // 'delete:NAME' or 'clear'
 function emptyHtml() {
@@ -1068,6 +1071,10 @@ function renderFeed(photos) {
     }
     list = filtered2;
   }
+  // Client-side sort toggle (server always returns newest-first)
+  if (SORT_ORDER === 'oldest') {
+    list = list.slice().reverse();
+  }
   if (!photos || !photos.length) {
     document.getElementById('unread_count').textContent = '0';
     feed.innerHTML = emptyHtml();
@@ -1151,6 +1158,18 @@ function paint(data) {
     } else {
       errHint.textContent = '';
       errHint.style.display = 'none';
+    }
+  }
+  var skipNote = document.getElementById('skip_note');
+  var skipCount = document.getElementById('skip_count');
+  var skipped = parseInt(data.skipped_deleted || 0, 10) || 0;
+  if (skipNote && skipCount) {
+    if (skipped > 0) {
+      skipCount.textContent = String(skipped);
+      skipNote.style.display = '';
+    } else {
+      skipCount.textContent = '0';
+      skipNote.style.display = 'none';
     }
   }
   if (data.lan_url) document.getElementById('lan_url').textContent = data.lan_url;
@@ -1237,6 +1256,17 @@ document.getElementById('big_copy').onclick = function() {
 };
 document.getElementById('tab_all').onclick = function() { setFilter('all'); };
 document.getElementById('tab_today').onclick = function() { setFilter('today'); };
+(function() {
+  var btn = document.getElementById('tab_sort');
+  if (!btn) return;
+  btn.onclick = function() {
+    SORT_ORDER = (SORT_ORDER === 'newest') ? 'oldest' : 'newest';
+    btn.setAttribute('data-sort', SORT_ORDER);
+    btn.textContent = (SORT_ORDER === 'newest') ? 'Newest' : 'Oldest';
+    btn.className = 'tab on';
+    renderFeed(LAST_PHOTOS);
+  };
+})();
 (function() {
   var s = document.getElementById('search');
   if (!s) return;
@@ -1367,6 +1397,7 @@ def api_payload():
         "poll_ms": int(STATE.get("poll_ms") or 2000),
         "version": STATE.get("version", "unknown") or "unknown",
         "last_error": STATE.get("last_error", "") or "",
+        "skipped_deleted": len(DELETED),
     }
 
 
@@ -1389,6 +1420,7 @@ def health_payload():
         "poll_ms": int(STATE.get("poll_ms") or 2000),
         "max_photos": int(STATE.get("max_photos") or 40),
         "last_error": STATE.get("last_error", "") or "",
+        "skipped_deleted": len(DELETED),
     }
 
 
@@ -1602,7 +1634,19 @@ class Handler(BaseHTTPRequestHandler):
             return
         if path.startswith("/photo/"):
             name = os.path.basename(unquote(path[len("/photo/"):]))
+            if not name or name in (".", "..") or ".." in name or "/" in name or "\\" in name:
+                self.send_error(404)
+                return
             full = os.path.join(WEB_PHOTOS, name)
+            try:
+                web_abs = os.path.abspath(WEB_PHOTOS)
+                full_abs = os.path.abspath(full)
+                if not full_abs.startswith(web_abs + os.sep) and full_abs != web_abs:
+                    self.send_error(404)
+                    return
+            except Exception:
+                self.send_error(404)
+                return
             if not os.path.isfile(full):
                 self.send_error(404)
                 return
@@ -1637,6 +1681,24 @@ class Handler(BaseHTTPRequestHandler):
             text_body = raw.decode("latin-1")
 
         if path == "/clear":
+            # Require confirm=1 (same as GET /clear) — accidental wipe guard
+            conf = ""
+            if text_body.lstrip().startswith("{"):
+                try:
+                    conf = str(json.loads(text_body).get("confirm") or "")
+                except Exception:
+                    conf = ""
+            else:
+                fields = parse_qs(text_body)
+                if "confirm" in fields and fields["confirm"]:
+                    conf = fields["confirm"][0]
+            if not conf and "?" in self.path:
+                qfields = parse_qs(self.path.split("?", 1)[1])
+                if "confirm" in qfields and qfields["confirm"]:
+                    conf = qfields["confirm"][0]
+            if conf not in ("1", "yes", "true"):
+                self._json({"ok": False, "detail": "confirm=1 required"}, code=400)
+                return
             ok, n = clear_all_bridge_photos()
             code = 200 if ok else 500
             self._json({"ok": ok, "cleared": n, "detail": "cleared %d" % n}, code=code)

@@ -16,7 +16,7 @@
 23@ = 0 // K debounce
 24@ = 0 // temp int (INBOX.new / STATUS.bridge)
 25@ = 0 // PHOTO.count
-26@ = 0 // contacts cycle index 0=Sweet 1=Smoke 2=Ryder 3=Cesar
+26@ = 0 // contacts cycle index 0=Sweet 1=Smoke 2=Ryder 3=Cesar 4=Catalina
 27@ = 0 // phone-just-opened edge (remind / setup once per open)
 
 :MAIN
@@ -228,7 +228,14 @@
 0006: 26@ = 3
 0002: jump @KEY_BACK
 :CONTACT3
+00D6: if
+0039:   26@ == 3
+004D: jf @CONTACT4
 0ACD: show_text_highpriority "CESAR: Vatos forever" time 2800
+0006: 26@ = 4
+0002: jump @KEY_BACK
+:CONTACT4
+0ACD: show_text_highpriority "CATALINA: You coming or what?" time 2800
 0006: 26@ = 0
 0002: jump @KEY_BACK
 

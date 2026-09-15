@@ -7,8 +7,9 @@ set "GL_VER=unknown"
 if exist "%~dp0..\..\VERSION" (
   set /p GL_VER=<"%~dp0..\..\VERSION"
 )
-REM Strip possible trailing CR (Win7 set /p quirk)
+REM Strip quotes + trailing CR (Win7 set /p quirk)
 if defined GL_VER set "GL_VER=%GL_VER:"=%"
+for /f "delims=" %%A in ("%GL_VER%") do set "GL_VER=%%A"
 echo.
 echo ================================================================
 echo  GROVELINK PHONE BRIDGE

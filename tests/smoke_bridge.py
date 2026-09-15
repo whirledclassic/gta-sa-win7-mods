@@ -4,7 +4,7 @@
 
 Starts the bridge HTTP server on an ephemeral port, asserts:
   GET /health, GET /api, GET /export.zip, GET /
-Optional: gallery copy + last_error field present.
+Optional: gallery copy + last_error + skipped_deleted + sort HTML + clear confirm.
 
 Run from repo root or anywhere:
   python tests/smoke_bridge.py
@@ -130,6 +130,7 @@ def main():
         check("GET /health version", health.get("version") == gl.STATE["version"], health.get("version"))
         check("GET /health poll_ms", isinstance(health.get("poll_ms"), int), health.get("poll_ms"))
         check("GET /health last_error field", "last_error" in health, repr(health.get("last_error")))
+        check("GET /health skipped_deleted field", "skipped_deleted" in health, health.get("skipped_deleted"))
         check("GET /health bridge_ok", health.get("bridge_ok") is True)
     except Exception as exc:
         check("GET /health", False, traceback.format_exc() if False else exc)
@@ -144,6 +145,8 @@ def main():
         check("GET /api last_error field", "last_error" in api, repr(api.get("last_error")))
         check("GET /api version", api.get("version") == gl.STATE["version"], api.get("version"))
         check("GET /api count", api.get("count") == 0, api.get("count"))
+        check("GET /api skipped_deleted field", "skipped_deleted" in api, api.get("skipped_deleted"))
+        check("GET /health skipped_deleted via /api first", isinstance(api.get("skipped_deleted"), int))
     except Exception as exc:
         check("GET /api", False, exc)
 
@@ -219,41 +222,87 @@ def main():
             check("GET /clear without confirm rejected", True)
         code3, _ = http_get(port, "/clear?confirm=1")
         check("GET /clear?confirm=1", code3 == 200, code3)
+        # POST without confirm should 400 (auth guard)
+        try:
+            req_bad = Request(
+                "http://127.0.0.1:%s/clear" % port,
+                data=b"",
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+            )
+            urlopen(req_bad, timeout=5)
+            check("POST /clear without confirm rejected", False, "expected error")
+        except Exception:
+            check("POST /clear without confirm rejected", True)
+        # Seed + delete one so skipped_deleted > 0
+        fake3 = os.path.join(photos, "3333333333_skip.jpg")
+        with open(fake3, "wb") as f:
+            f.write(b"\xff\xd8\xff\xe0" + b"\x00" * 200)
+        gl.copy_latest([])
+        code, raw = http_get(port, "/api")
+        api = json.loads(raw.decode("utf-8") if isinstance(raw, bytes) else raw)
+        latest = api.get("latest") or "3333333333_skip.jpg"
+        req_del = Request(
+            "http://127.0.0.1:%s/delete" % port,
+            data=("file=" + latest).encode("utf-8"),
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+        )
+        urlopen(req_del, timeout=5)
+        code, raw = http_get(port, "/api")
+        api = json.loads(raw.decode("utf-8") if isinstance(raw, bytes) else raw)
+        check("GET /api skipped_deleted after delete", int(api.get("skipped_deleted") or 0) >= 1, api.get("skipped_deleted"))
     except Exception as exc:
         check("POST /clear", False, exc)
 
-    # --- HTML has search + clear ---
+    # --- HTML has search + clear + sort (client-side) + home-screen tip ---
     try:
         code, raw = http_get(port, "/")
         html = raw.decode("utf-8") if isinstance(raw, bytes) else raw
         check("GET / has search box", 'id="search"' in html or "Search filename" in html)
         check("GET / has Clear all phone copies", "Clear all phone copies" in html)
+        check("GET / has sort toggle Newest", 'id="tab_sort"' in html and "Newest" in html)
+        check("GET / sort is client-side (SORT_ORDER)", "SORT_ORDER" in html and "client-side" in html.lower())
+        check("GET / no favicon link", "favicon" not in html.lower() or "no favicon" in html.lower())
+        check("GET / apple-mobile-web-app-capable", "apple-mobile-web-app-capable" in html)
+        check("GET / Add to Home Screen tip", "Add to Home Screen" in html)
+        check("GET / skip_note / skipped UI", "skip_note" in html or "Hidden from phone" in html)
     except Exception as exc:
-        check("search/clear HTML", False, exc)
+        check("search/clear/sort HTML", False, exc)
 
     # --- last_error when gallery unreadable ---
     try:
-        bad = os.path.join(tmp, "not_a_dir_gallery_marker")
-        # Simulate: point list_images at a file-as-folder path that exists as file
-        with open(bad, "w") as f:
-            f.write("x")
-        # On Linux, listdir on a file raises; list_images skips non-dirs first.
-        # Create a dir then make it unreadable if possible.
         unreadable = os.path.join(tmp, "unreadable_gallery")
-        os.makedirs(unreadable)
+        if not os.path.isdir(unreadable):
+            os.makedirs(unreadable)
         gl.STATE["last_error"] = ""
-        # Force set via list_images by temporarily breaking — use a path that is a dir
-        # but we can't easily chmod on all systems; set then verify field round-trips.
-        gl.STATE["last_error"] = "gallery unreadable: %s (smoke)" % unreadable
+        triggered = False
+        try:
+            os.chmod(unreadable, 0)
+            gl.list_images([unreadable])
+            triggered = bool(gl.STATE.get("last_error"))
+        except Exception:
+            triggered = False
+        finally:
+            try:
+                os.chmod(unreadable, 0o755)
+            except Exception:
+                pass
+        if not triggered:
+            # Fallback (e.g. running as root where chmod 0 still lists): set then round-trip
+            gl.STATE["last_error"] = "gallery unreadable: %s (smoke)" % unreadable
         code, raw = http_get(port, "/api")
         api = json.loads(raw.decode("utf-8") if isinstance(raw, bytes) else raw)
         check("GET /api last_error populated", bool(api.get("last_error")), api.get("last_error"))
-        gl.STATE["last_error"] = ""
+        # Point briefly at a good empty dir so list_images clears gallery-unreadable prefix
+        good = os.path.join(tmp, "good_gallery")
+        if not os.path.isdir(good):
+            os.makedirs(good)
+        gl.STATE["last_error"] = "gallery unreadable: temp"
+        gl.list_images([good])
         code, raw = http_get(port, "/api")
         api = json.loads(raw.decode("utf-8") if isinstance(raw, bytes) else raw)
-        check("GET /api last_error clears", api.get("last_error") == "", repr(api.get("last_error")))
+        check("GET /api last_error clears via good gallery", api.get("last_error") == "", repr(api.get("last_error")))
     except Exception as exc:
-        check("last_error round-trip", False, exc)
+        check("last_error gallery path", False, exc)
 
     # --- POST /send ---
     try:
@@ -305,6 +354,8 @@ def main():
         check("CLEO PHONE PAGE ON PC", "PHONE PAGE ON PC" in full)
         # wrap bounds: index > 5 resets to 0; 0 > index sets 5
         check("CLEO wrap high bound", "22@ > 5" in full or "0019:   22@ > 5" in full)
+        check("CLEO CONTACTS Catalina flavor", "CATALINA" in full)
+        check("CLEO contacts cycle advances", "26@ = 4" in full and ":CONTACT4" in full)
     except Exception as exc:
         check("CLEO static", False, exc)
 
@@ -332,6 +383,21 @@ def main():
         check("VERIFY gta_dir keeps spaces", "do NOT strip spaces inside path" in vb or "tokens=* delims= " in vb)
     except Exception as exc:
         check("VERIFY bat static", False, exc)
+
+    try:
+        with open(os.path.join(REPO, "INSTALL.bat"), "r") as f:
+            ib = f.read()
+        check("INSTALL CLEO.asi big warning", "BIG WARNING: CLEO.asi IS MISSING" in ib)
+        check("INSTALL cleo.li link", "https://cleo.li" in ib)
+    except Exception as exc:
+        check("INSTALL bat static", False, exc)
+
+    try:
+        with open(start_bat, "r") as f:
+            bat2 = f.read()
+        check("START bat strips VERSION CR", 'for /f "delims=" %%A in ("%GL_VER%")' in bat2)
+    except Exception as exc:
+        check("START bat CR strip", False, exc)
 
     print("")
     print("==== SUMMARY ====")

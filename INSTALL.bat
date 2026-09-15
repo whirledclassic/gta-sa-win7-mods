@@ -91,8 +91,26 @@ if exist "%GTA%\CLEO.asi" (
 ) else if exist "%GTA%\cleo.asi" (
   echo    CLEO.asi: FOUND
 ) else (
-  echo    WARNING: CLEO.asi missing — install CLEO 4.3/4.4 from https://cleo.li
-  echo    Put IniFiles.cleo inside the CLEO folder too.
+  color 0C
+  echo.
+  echo ################################################
+  echo #                                              #
+  echo #   BIG WARNING: CLEO.asi IS MISSING           #
+  echo #                                              #
+  echo #   GroveLink will NOT work in GTA without     #
+  echo #   CLEO. Download CLEO 4.3 or 4.4 here:       #
+  echo #                                              #
+  echo #     https://cleo.li                          #
+  echo #                                              #
+  echo #   Install CLEO into your GTA folder, then    #
+  echo #   put IniFiles.cleo inside the CLEO folder.  #
+  echo #   Re-run INSTALL after CLEO is installed.    #
+  echo #                                              #
+  echo ################################################
+  echo.
+  echo Press any key to continue install anyway ^(support files only^)...
+  pause >nul
+  color 0A
 )
 
 echo.

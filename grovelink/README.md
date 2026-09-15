@@ -10,7 +10,7 @@ Crash-safer CLEO: no `hold_cellphone`, no custom GXT `033E` draws. Labels use `0
 2. Wait for the green SUCCESS screen.
 3. Desktop → **GroveLink Phone** → launch GTA → **K** → Camera → **Enter** / **Space**.
 
-INSTALL finds GTA, copies support files, compiles with Sanny when available, creates Gallery folders, opens firewall **8088**, and places Desktop shortcuts + **`VERIFY_GROVELINK.bat`** + **`UPDATE_GROVELINK.bat`** + **`GroveLink_README.txt`** (same 3 steps + link to TROUBLESHOOTING) + `GroveLink_PHONE_URL.txt`. If Sanny is missing it prints exact F7 steps and **keeps** any existing `.cs`.
+INSTALL finds GTA (big red **CLEO.asi missing** warning + cleo.li if needed), copies support files, compiles with Sanny when available, creates Gallery folders, opens firewall **8088**, and places Desktop shortcuts + **`VERIFY_GROVELINK.bat`** + **`UPDATE_GROVELINK.bat`** + **`GroveLink_README.txt`** (same 3 steps + link to TROUBLESHOOTING) + `GroveLink_PHONE_URL.txt`. If Sanny is missing it prints exact F7 steps and **keeps** any existing `.cs`.
 
 Double-click **VERIFY_GROVELINK.bat** (Desktop or repo root) anytime for an OK/MISSING checklist: `gta_sa.exe`, CLEO, `GroveLinkPhone.cs`, `link.ini`, Python, `config.ini`, `GroveLinkPhone.txt`, writable `bridge/photos`, firewall note, and the URLs to try.
 
@@ -29,7 +29,7 @@ Until PR #1 merges, `update.ini` defaults to branch `fix/grovelink-camera-snapsh
 - **Backspace** — close
 - **CAMERA** — snap; shutter sound (`018C`); shows **PHOTO TAKEN #N** (count from `link.ini`)
 - **INBOX** — when `new=1` shows SMS + sound; otherwise **NO NEW TEXTS**
-- **CONTACTS** — flavor only: cycles Sweet / Smoke / Ryder / Cesar lines via `0ACD` (static text, no ped models)
+- **CONTACTS** — flavor only: cycles Sweet / Smoke / Ryder / Cesar / **Catalina** lines via `0ACD` (static text, no ped models; advances each select)
 - **STATUS** — **LIVE N  PHONE PAGE ON PC** / **NO BRIDGE** + shot count from `link.ini` when readable
 - **HELP** — K / Camera tips, **OPEN START GROVELINK ON PC**, and **Outdated? UPDATE_GROVELINK**
 - **CLOSE** — put the phone away
@@ -41,7 +41,7 @@ Until PR #1 merges, `update.ini` defaults to branch `fix/grovelink-camera-snapsh
 - If `/api` fails: red banner **Bridge offline — run START_GROVELINK** (reconnects automatically when the bridge is back)
 - **Copy** buttons for URLs; large **tap-to-copy IP:port** block + `sms:` note (no QR library); **`GET /qr`** share page with the same
 - **Download latest** opens newest `/photo/…`; **Export zip** downloads `GET /export.zip` (bridge/photos only); **Mark all read** clears NEW badges
-- **All / Today** album tabs (pure JS filter by photo `mtime`)
+- **All / Today** album tabs (pure JS filter by photo `mtime`); **Newest / Oldest** sort toggle (client-side only)
 - Quick-reply chips: **Where you at?**, **Nice shot**, **Come to Grove** → fill + `POST /send`
 - Meta line shows timestamp, **file size**, and filename
 - **Delete** on each shot → pinch-friendly **Delete this shot?** confirm; removes **bridge/photos only** (not GTA Gallery)
@@ -50,16 +50,18 @@ Until PR #1 merges, `update.ini` defaults to branch `fix/grovelink-camera-snapsh
 - Empty first visit shows **large LAN IP:port** (tap to copy) above the checklist
 - `server.max_photos` (default **40**) — bridge prunes oldest files under `bridge/photos` only
 - Unread badge: shots newer than your last visit (`localStorage` timestamp) get a **NEW** highlight
-- Meta `theme-color` + short **Add to Home Screen** tip for phones
+- Favicon-free; Meta `theme-color` + `apple-mobile-web-app-capable` + **Add to Home Screen** tip for phones
 - Empty state checklist if no photos yet
 - Tap a shot to enlarge (lightbox) or open **/photo/…** full size
-- Newest first with human-readable timestamps
+- Server list newest-first; optional Oldest toggle on the page; human-readable timestamps
+- If skip list non-empty: **Hidden from phone: N** note under the status line
 - Auto-refresh interval from `server.poll_ms` (default **2000** ms), exposed in `/api` as `poll_ms`
 - SMS box still posts to `/send` → `link.ini` INBOX for the in-game phone
 - First load of `/` logs **Phone page opened** in the bridge window
 - **`GET /api`** → JSON with `photos`, `latest`, `count`, `bridge_ok`, `poll_ms`, `version`, **`last_error`**, URLs, refresh time
 - **`GET /health`** → same core fields + `galleries`, `gta_dir`, **`last_error`**
-- **`POST /clear`** (or `GET /clear?confirm=1`) → wipe all `bridge/photos` copies
+- **`POST /clear`** / **`GET /clear?confirm=1`** → wipe all `bridge/photos` copies (**confirm=1 required** on both)
+- **`skipped_deleted`** in `/api` + `/health` — count of names hidden by the phone delete skip list
 - **`GET /export.zip`** → zip of current `bridge/photos` (stdlib `zipfile`; Gallery untouched)
 - **`POST /delete`** (or careful `GET /delete?file=…`) → remove from bridge cache only
 - On start: writes `bridge/OPEN_ON_PHONE.txt`, sets `STATUS.bridge=1`, optional browser open (`server.open_browser=1` default)

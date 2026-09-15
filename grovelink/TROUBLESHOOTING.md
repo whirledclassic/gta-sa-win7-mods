@@ -55,6 +55,7 @@ INSTALL only replaces the `.cs` when Sanny successfully compiles a new one. It n
 3. Press **F7** (Compile)  
 4. Copy `GroveLinkPhone.cs` into `[GTA]\CLEO\`  
 5. Confirm CLEO is installed (`CLEO.asi` next to `gta_sa.exe`) and `IniFiles.cleo` is in the CLEO folder  
+   (INSTALL shows a **big red CLEO.asi missing** screen with https://cleo.li if it is absent)  
 
 Do **not** decode `prebuilt/GroveLinkPhone.cs.b64` for the camera phone — that blob is an old “GROVELINK OK” stub only.
 
