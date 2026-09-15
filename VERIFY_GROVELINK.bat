@@ -195,6 +195,41 @@ if exist "%REPO%\grovelink\bridge\grovelink_server.py" (
 )
 
 echo.
+echo --- Source + photos folder ---
+if exist "%REPO%\grovelink\GroveLinkPhone.txt" (
+  echo   [OK]      GroveLinkPhone.txt  ^(CLEO source in repo^)
+  echo            %REPO%\grovelink\GroveLinkPhone.txt
+  set /a OK+=1
+) else if exist "%~dp0grovelink\GroveLinkPhone.txt" (
+  echo   [OK]      GroveLinkPhone.txt
+  set /a OK+=1
+) else (
+  echo   [MISSING] GroveLinkPhone.txt  — needed to compile the phone with Sanny F7
+  set /a BAD+=1
+)
+
+set "PHOTOS=%REPO%\grovelink\bridge\photos"
+if not exist "%PHOTOS%" (
+  mkdir "%PHOTOS%" >nul 2>&1
+)
+if exist "%PHOTOS%" (
+  echo writable > "%PHOTOS%\.grovelink_write_test" 2>nul
+  if exist "%PHOTOS%\.grovelink_write_test" (
+    del /f /q "%PHOTOS%\.grovelink_write_test" >nul 2>&1
+    echo   [OK]      bridge\photos writable
+    echo            %PHOTOS%
+    set /a OK+=1
+  ) else (
+    echo   [MISSING] bridge\photos not writable — check folder permissions
+    echo            %PHOTOS%
+    set /a BAD+=1
+  )
+) else (
+  echo   [MISSING] bridge\photos  — could not create under repo bridge folder
+  set /a BAD+=1
+)
+
+echo.
 echo --- Firewall note ---
 echo   [NOTE]    INSTALL adds rule "GroveLink Phone" for TCP port 8088.
 echo            If the phone cannot connect, allow Python / port 8088 in
@@ -208,7 +243,7 @@ echo   On your phone:  http://YOUR-PC-LAN-IP:8088
 echo                   ^(LAN IP is printed when you start the bridge^)
 echo.
 echo   Start bridge:   Desktop "GroveLink Phone" or START_GROVELINK.bat
-echo   In GTA:         K → Camera → Enter or Space
+echo   In GTA:         K → Camera / Help → Enter or Space
 echo.
 
 echo ================================================

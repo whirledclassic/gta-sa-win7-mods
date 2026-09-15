@@ -19,14 +19,14 @@ Not affiliated with Rockstar Games. Single-player only.
    - Compile **GroveLinkPhone** with Sanny Builder if `sanny.exe` is found
    - Optionally compile **MissionSwitcher_SkinOnly** (safer switcher)
    - Create Gallery folders, write bridge `config.ini`, open firewall TCP **8088**
-   - Put **GroveLink Phone** shortcut, `START_GROVELINK`, **`VERIFY_GROVELINK.bat`**, and `GroveLink_PHONE_URL.txt` on the Desktop
+   - Put **GroveLink Phone** shortcut, `START_GROVELINK`, **`VERIFY_GROVELINK.bat`**, **`GroveLink_README.txt`**, and `GroveLink_PHONE_URL.txt` on the Desktop
 4. Follow the green **SUCCESS** screen — only **3 steps**:
 
    1. Double-click Desktop **GroveLink Phone** (keep the bridge window open)  
    2. Launch GTA San Andreas  
    3. Press **K** → **Camera** → **Enter** (or **Space**)
 
-Optional: double-click Desktop **`VERIFY_GROVELINK.bat`** anytime for a plain-English OK/MISSING health check (game, CLEO, phone script, `link.ini`, Python, `config.ini`, firewall note, URLs).
+Optional: double-click Desktop **`VERIFY_GROVELINK.bat`** anytime for a plain-English OK/MISSING health check (game, CLEO, phone script, `link.ini`, Python, `config.ini`, `GroveLinkPhone.txt`, writable `bridge/photos`, firewall note, URLs). Desktop **`GroveLink_README.txt`** repeats the 3 steps and points at `grovelink/TROUBLESHOOTING.md`.
 
 If Sanny was not found, INSTALL prints exact download + F7 steps. It **never deletes** a working `GroveLinkPhone.cs` without a newly compiled replacement. Do **not** use the tiny old stub in `grovelink/prebuilt/`.
 
@@ -43,7 +43,9 @@ If Sanny was not found, INSTALL prints exact download + F7 steps. It **never del
 2. On the PC: **http://127.0.0.1:8088** (often opens automatically).
 3. On your phone (same Wi-Fi): **http://LAN-IP:8088** (printed by the bridge / `OPEN_ON_PHONE.txt`).
 4. Health check: **http://127.0.0.1:8088/health** or Desktop **VERIFY_GROVELINK.bat**.
-5. In GTA: **K** → Camera → **Enter** or **Space** — shot appears within a couple of seconds.
+5. In GTA: **K** → Camera → **Enter** or **Space** — shot appears within a couple of seconds. Menu includes **HELP** (reminds you to open START GROVELINK on the PC).
+
+Phone page extras: **All / Today** album tabs, quick-reply chips, file size in the meta line, large tap-to-copy **IP:port** (and `/qr` share page — no QR library), Delete (bridge cache only), auto-prune when `server.max_photos` (default **40**) is exceeded.
 
 Stuck? See [grovelink/TROUBLESHOOTING.md](grovelink/TROUBLESHOOTING.md).
 

@@ -3,7 +3,7 @@
 {$CLEO .cs}
 // GroveLink Phone v7 — crash-safer. No #model names, no 033E GXT, no hold_cellphone.
 // K toggle | UP/DOWN wrap | ENTER or SPACE select | BACKSPACE close
-// Menu: CAMERA / INBOX / CONTACTS / STATUS / CLOSE — labels via 0ACD only.
+// Menu: CAMERA / INBOX / CONTACTS / STATUS / HELP / CLOSE — labels via 0ACD only.
 // INBOX plays 018C when new=1. CONTACTS cycles static flavor lines (no models).
 // STATUS reads STATUS.bridge + PHOTO.count from link.ini.
 0000: NOP
@@ -11,7 +11,7 @@
 
 20@ = 0 // phone open
 21@ = 0
-22@ = 0 // menu index 0=CAMERA 1=INBOX 2=CONTACTS 3=STATUS 4=CLOSE
+22@ = 0 // menu index 0=CAMERA 1=INBOX 2=CONTACTS 3=STATUS 4=HELP 5=CLOSE
 23@ = 0 // K debounce
 24@ = 0 // temp int (INBOX.new / STATUS.bridge)
 25@ = 0 // PHOTO.count
@@ -41,7 +41,7 @@
 0006: 21@ = 0
 0006: 22@ = 0
 0006: 27@ = 1
-0ACD: show_text_highpriority "CAM INBOX CONTACTS STATUS CLOSE" time 1800
+0ACD: show_text_highpriority "CAM INBOX CONTACTS STATUS HELP CLOSE" time 1800
 018C: play_sound 1138 at 0.0 0.0 0.0
 0002: jump @AFTER_TOGGLE
 
@@ -100,7 +100,7 @@
 0001: wait 160
 000A: 22@ += 1
 00D6: if
-0019:   22@ > 4
+0019:   22@ > 5
 004D: jf @SHOW_SEL
 0006: 22@ = 0
 0002: jump @SHOW_SEL
@@ -113,7 +113,7 @@
 00D6: if
 001B:   0 > 22@
 004D: jf @SHOW_SEL
-0006: 22@ = 4
+0006: 22@ = 5
 
 :SHOW_SEL
 00D6: if
@@ -140,6 +140,12 @@
 0ACD: show_text_highpriority "STATUS" time 1200
 0002: jump @PHONE_LOGIC2
 :SHOW_SEL5
+00D6: if
+0039:   22@ == 4
+004D: jf @SHOW_SEL6
+0ACD: show_text_highpriority "HELP" time 1200
+0002: jump @PHONE_LOGIC2
+:SHOW_SEL6
 0ACD: show_text_highpriority "CLOSE" time 1200
 
 :PHONE_LOGIC2
@@ -157,6 +163,7 @@
 0A1E: take_photo 1
 0001: wait 200
 0A2F: set_photo_camera_effect 0
+018C: play_sound 1132 at 0.0 0.0 0.0
 00D6: if
 0AAB:   file_exists "cleo\GroveLink\link.ini"
 004D: jf @SNAP_NOINI
@@ -225,7 +232,7 @@
 :SEL_STATUS
 00D6: if
 0039:   22@ == 3
-004D: jf @SEL_CLOSE
+004D: jf @SEL_HELP
 00D6: if
 0AAB:   file_exists "cleo\GroveLink\link.ini"
 004D: jf @STATUS_NOINI
@@ -241,6 +248,18 @@
 0002: jump @KEY_BACK
 :STATUS_NOINI
 0ACD: show_text_highpriority "NO link.ini  run INSTALL" time 2200
+0002: jump @KEY_BACK
+
+:SEL_HELP
+00D6: if
+0039:   22@ == 4
+004D: jf @SEL_CLOSE
+// HELP: short 0ACD tips — K, Camera, remind real phone URL / start bridge
+0ACD: show_text_highpriority "HELP: K opens phone" time 1800
+0001: wait 1900
+0ACD: show_text_highpriority "Camera: Enter or Space" time 1800
+0001: wait 1900
+0ACD: show_text_highpriority "OPEN START GROVELINK ON PC" time 2500
 0002: jump @KEY_BACK
 
 :SEL_CLOSE

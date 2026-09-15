@@ -76,6 +76,8 @@ STATE = {
     "last_refresh": 0,
     "last_refresh_human": "",
     "shutter_burst_until": 0,
+    "max_photos": 40,
+    "phone_page_logged": False,
 }
 
 
@@ -218,6 +220,29 @@ def human_time(mtime):
         return str(int(mtime))
 
 
+def human_size(nbytes):
+    """Short file size for phone meta line."""
+    try:
+        n = int(nbytes)
+    except Exception:
+        return "?"
+    if n < 1024:
+        return "%d B" % n
+    if n < 1024 * 1024:
+        return "%.1f KB" % (n / 1024.0)
+    return "%.1f MB" % (n / (1024.0 * 1024.0))
+
+
+def cfg_int(cfg, section, key, default):
+    raw = cfg_get(cfg, section, key, "")
+    if raw == "":
+        return default
+    try:
+        return int(raw)
+    except Exception:
+        return default
+
+
 def stamp_now():
     now = time.time()
     STATE["last_refresh"] = int(now)
@@ -260,10 +285,54 @@ def list_images(folders):
     return out
 
 
+def prune_bridge_photos(max_photos):
+    """Keep only newest max_photos files under bridge/photos (never Gallery)."""
+    try:
+        max_photos = int(max_photos)
+    except Exception:
+        max_photos = 40
+    if max_photos < 1:
+        max_photos = 1
+    if not os.path.isdir(WEB_PHOTOS):
+        return
+    entries = []
+    try:
+        names = os.listdir(WEB_PHOTOS)
+    except Exception:
+        return
+    for name in names:
+        low = name.lower()
+        if not (
+            low.endswith(".jpg")
+            or low.endswith(".jpeg")
+            or low.endswith(".bmp")
+            or low.endswith(".png")
+        ):
+            continue
+        full = os.path.join(WEB_PHOTOS, name)
+        if not os.path.isfile(full):
+            continue
+        try:
+            mtime = os.path.getmtime(full)
+        except Exception:
+            continue
+        entries.append((mtime, full, name))
+    entries.sort(key=lambda x: x[0], reverse=True)
+    for _mtime, full, name in entries[max_photos:]:
+        try:
+            os.remove(full)
+            print("Pruned old bridge photo:", name)
+        except Exception:
+            pass
+
+
 def copy_latest(folders):
     images = list_images(folders)
+    max_photos = int(STATE.get("max_photos") or 40)
+    if max_photos < 1:
+        max_photos = 1
     copied = []
-    for mtime, full, name in images[:40]:
+    for mtime, full, name in images[:max_photos]:
         dest_name = "%d_%s" % (int(mtime), name.replace(" ", "_"))
         if dest_name in DELETED:
             continue
@@ -273,15 +342,66 @@ def copy_latest(folders):
                 shutil.copy2(full, dest)
             except Exception:
                 continue
+        try:
+            size = os.path.getsize(dest)
+        except Exception:
+            try:
+                size = os.path.getsize(full)
+            except Exception:
+                size = 0
         copied.append({
             "file": dest_name,
             "mtime": int(mtime),
             "when": human_time(mtime),
+            "size": int(size),
+            "size_h": human_size(size),
         })
-    # Also list any leftover bridge photos not yet in DELETED (manual drops etc.)
-    STATE["photos"] = copied
+    prune_bridge_photos(max_photos)
+    # Drop any pruned/deleted from list; re-scan bridge folder for leftovers
+    kept = []
+    seen = set()
+    for item in copied:
+        name = item.get("file")
+        dest = os.path.join(WEB_PHOTOS, name)
+        if name in DELETED or not os.path.isfile(dest):
+            continue
+        kept.append(item)
+        seen.add(name)
+    # Also list bridge photos not from gallery copy (manual drops) up to max
+    try:
+        for name in os.listdir(WEB_PHOTOS):
+            if name in seen or name in DELETED:
+                continue
+            low = name.lower()
+            if not (
+                low.endswith(".jpg")
+                or low.endswith(".jpeg")
+                or low.endswith(".bmp")
+                or low.endswith(".png")
+            ):
+                continue
+            dest = os.path.join(WEB_PHOTOS, name)
+            if not os.path.isfile(dest):
+                continue
+            try:
+                mtime = os.path.getmtime(dest)
+                size = os.path.getsize(dest)
+            except Exception:
+                continue
+            kept.append({
+                "file": name,
+                "mtime": int(mtime),
+                "when": human_time(mtime),
+                "size": int(size),
+                "size_h": human_size(size),
+            })
+    except Exception:
+        pass
+    kept.sort(key=lambda x: x.get("mtime", 0), reverse=True)
+    kept = kept[:max_photos]
+    STATE["photos"] = kept
     stamp_now()
-    return copied
+    return kept
 
 
 def write_ini_kv(path, section, data):
@@ -451,6 +571,30 @@ HTML_TEMPLATE = """<!DOCTYPE html>
   .actionbtn[disabled] { opacity:0.4; pointer-events:none; }
   .actions { display:flex; gap:8px; margin-top:10px; flex-wrap:wrap; }
   .actions .actionbtn { flex:1; min-width:140px; }
+  .bigcopy {
+    margin-top:12px; padding:14px; background:#0b1a0e; border:2px solid #2cff6a;
+    border-radius:4px; text-align:center; cursor:pointer; user-select:all;
+  }
+  .bigcopy .label { font-size:11px; color:#7aaa7a; letter-spacing:1px; }
+  .bigcopy .ipport {
+    font-size:22px; font-weight:bold; color:#2cff6a; margin:8px 0 4px;
+    word-break:break-all; letter-spacing:1px;
+  }
+  .bigcopy .hint { font-size:11px; color:#7aaa7a; }
+  .smsnote { margin-top:8px; font-size:11px; color:#7aaa7a; line-height:1.45; }
+  .smsnote a { color:#2cff6a; }
+  .tabs { display:flex; gap:0; margin:8px 12px 0; border:1px solid #1a4; }
+  .tab {
+    flex:1; background:#0b0f0c; color:#7aaa7a; border:0; border-right:1px solid #1a4;
+    padding:12px; font-size:13px; font-weight:bold; min-height:44px; cursor:pointer;
+  }
+  .tab:last-child { border-right:0; }
+  .tab.on { background:#143; color:#2cff6a; }
+  .chips { display:flex; gap:8px; padding:0 12px 8px; flex-wrap:wrap; }
+  .chip {
+    background:#1a2a1a; color:#d7ffd0; border:1px solid #2cff6a; padding:10px 12px;
+    font-size:12px; font-weight:bold; min-height:40px; cursor:pointer; border-radius:20px;
+  }
   .tip { margin-top:10px; font-size:11px; color:#7aaa7a; line-height:1.45; }
   .tip strong { color:#2cff6a; }
   .status { margin-top:8px; font-size:11px; color:#7aaa7a; }
@@ -517,6 +661,12 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       <a class=\"actionbtn\" id=\"dl_latest\" href=\"#\" target=\"_blank\" rel=\"noopener\">Download latest</a>
       <button type=\"button\" class=\"actionbtn\" id=\"mark_read\">Mark all read</button>
     </div>
+    <div class=\"bigcopy\" id=\"big_copy\" title=\"Tap to copy IP:port\">
+      <div class=\"label\">TAP TO COPY — PHONE ADDRESS</div>
+      <div class=\"ipport\" id=\"ip_port\">__IP_PORT__</div>
+      <div class=\"hint\" id=\"big_copy_hint\">Copies host:port for your phone browser</div>
+    </div>
+    <div class=\"smsnote\">No QR lib needed — open <code>http://</code> + the address above on your phone (same Wi-Fi). Or text yourself: <a id=\"sms_link\" href=\"#\">sms: note with URL</a>.</div>
     <div class=\"tip\"><strong>Tip:</strong> On your phone, use the browser menu → <b>Add to Home Screen</b> for a one-tap GroveLink icon. Theme color matches this green HUD.</div>
     <div class=\"status\">
       <span class=\"pulse\" id=\"pulse\"></span>
@@ -530,7 +680,16 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     <input id=\"msg\" type=\"text\" maxlength=\"80\" placeholder=\"Message to CJ...\" required>
     <button class=\"send\" type=\"submit\">SEND</button>
   </form>
+  <div class=\"chips\">
+    <button type=\"button\" class=\"chip\" data-msg=\"Where you at?\">Where you at?</button>
+    <button type=\"button\" class=\"chip\" data-msg=\"Nice shot\">Nice shot</button>
+    <button type=\"button\" class=\"chip\" data-msg=\"Come to Grove\">Come to Grove</button>
+  </div>
   <div class=\"okmsg\" id=\"ok\"></div>
+  <div class=\"tabs\">
+    <button type=\"button\" class=\"tab on\" id=\"tab_all\" data-filter=\"all\">All</button>
+    <button type=\"button\" class=\"tab\" id=\"tab_today\" data-filter=\"today\">Today</button>
+  </div>
   <div id=\"feed\"></div>
 </div>
 <div id=\"lightbox\" onclick=\"closeLb(event)\">
@@ -539,6 +698,8 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 </div>
 <script>
 var LS_KEY = 'grovelink_last_visit';
+var FILTER = 'all';
+var LAST_PHOTOS = [];
 var EMPTY_HTML =
   '<div class=\"empty\">' +
   '<h2>NO PHOTOS YET</h2>' +
@@ -548,6 +709,11 @@ var EMPTY_HTML =
   '<li>Select <b>Camera</b>, then <b>Enter</b> or <b>Space</b>.</li>' +
   '<li>Phone and PC must be on the <b>same Wi-Fi</b>.</li>' +
   '</ol>' +
+  '</div>';
+var EMPTY_TODAY =
+  '<div class=\"empty\">' +
+  '<h2>NO SHOTS TODAY</h2>' +
+  '<p>Switch to <b>All</b>, or take a new photo in GTA (K → Camera → Enter).</p>' +
   '</div>';
 
 function escapeHtml(s) {
@@ -562,6 +728,12 @@ function getLastVisit() {
 }
 function setLastVisit(ts) {
   try { localStorage.setItem(LS_KEY, String(ts || Math.floor(Date.now()/1000))); } catch (e) {}
+}
+
+function startOfTodaySec() {
+  var d = new Date();
+  d.setHours(0,0,0,0);
+  return Math.floor(d.getTime() / 1000);
 }
 
 function copyText(text, btn) {
@@ -620,12 +792,88 @@ function deletePhoto(name) {
   x.send(body);
 }
 
-function paint(data) {
+function sendMsg(msg) {
+  msg = (msg || '').trim();
+  if (!msg) return;
+  var body = 'msg=' + encodeURIComponent(msg);
+  var x = new XMLHttpRequest();
+  x.open('POST', '/send', true);
+  x.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+  x.onreadystatechange = function() {
+    if (x.readyState === 4) {
+      document.getElementById('ok').textContent = 'Sent to CJ — open INBOX on the in-game phone.';
+      document.getElementById('msg').value = '';
+      setTimeout(function(){ document.getElementById('ok').textContent = ''; }, 3000);
+    }
+  };
+  x.send(body);
+}
+
+function setFilter(f) {
+  FILTER = f;
+  var all = document.getElementById('tab_all');
+  var today = document.getElementById('tab_today');
+  if (all) all.className = (f === 'all') ? 'tab on' : 'tab';
+  if (today) today.className = (f === 'today') ? 'tab on' : 'tab';
+  renderFeed(LAST_PHOTOS);
+}
+
+function renderFeed(photos) {
   var feed = document.getElementById('feed');
-  var count = document.getElementById('count');
-  var photos = data.photos || [];
   var lastVisit = getLastVisit();
   var unread = 0;
+  var today0 = startOfTodaySec();
+  var list = photos || [];
+  if (FILTER === 'today') {
+    var filtered = [];
+    for (var j = 0; j < list.length; j++) {
+      var mt = parseInt(list[j].mtime || 0, 10) || 0;
+      if (mt >= today0) filtered.push(list[j]);
+    }
+    list = filtered;
+  }
+  if (!photos || !photos.length) {
+    document.getElementById('unread_count').textContent = '0';
+    feed.innerHTML = EMPTY_HTML;
+    return;
+  }
+  if (!list.length) {
+    document.getElementById('unread_count').textContent = '0';
+    feed.innerHTML = EMPTY_TODAY;
+    return;
+  }
+  var html = '';
+  for (var i = 0; i < list.length && i < 40; i++) {
+    var p = list[i];
+    var name = p.file || p;
+    var when = p.when || '';
+    var mtime = parseInt(p.mtime || 0, 10) || 0;
+    var sizeH = p.size_h || '';
+    var isNew = mtime > lastVisit;
+    if (isNew) unread++;
+    var href = '/photo/' + name;
+    html += '<div class=\"shot' + (isNew ? ' unread' : '') + '\">';
+    if (isNew) html += '<div class=\"badge\">NEW</div>';
+    html += '<a class=\"imgwrap\" href=\"' + href + '\" target=\"_blank\" rel=\"noopener\" onclick=\"openLb(\\'' + href + '\\'); return false;\">';
+    html += '<img src=\"' + href + '\" alt=\"shot\">';
+    html += '</a>';
+    var metaBits = [];
+    if (when) metaBits.push(when);
+    if (sizeH) metaBits.push(sizeH);
+    metaBits.push(name);
+    html += '<div class=\"meta\"><span class=\"grow\">' + escapeHtml(metaBits.join(' · ')) +
+            ' · <a href=\"' + href + '\" target=\"_blank\" rel=\"noopener\">full size</a></span>';
+    html += '<button type=\"button\" class=\"delbtn\" onclick=\"deletePhoto(\\'' + String(name).replace(/'/g, '') + '\\')\">Delete</button>';
+    html += '</div></div>';
+  }
+  document.getElementById('unread_count').textContent = String(unread);
+  feed.innerHTML = html;
+}
+
+function paint(data) {
+  var count = document.getElementById('count');
+  var photos = data.photos || [];
+  LAST_PHOTOS = photos;
   count.textContent = (typeof data.count === 'number') ? data.count : photos.length;
   var lr = data.last_refresh_human || data.last_refresh || '—';
   document.getElementById('last_refresh').textContent = lr;
@@ -643,6 +891,15 @@ function paint(data) {
   }
   if (data.lan_url) document.getElementById('lan_url').textContent = data.lan_url;
   if (data.local_url) document.getElementById('local_url').textContent = data.local_url;
+  var ipPort = (data.ip || '') + ':' + (data.port || '');
+  if (data.ip) {
+    document.getElementById('ip_port').textContent = ipPort;
+    var sms = document.getElementById('sms_link');
+    if (sms) {
+      var note = 'GroveLink phone page: ' + (data.lan_url || ('http://' + ipPort));
+      sms.href = 'sms:?&body=' + encodeURIComponent(note);
+    }
+  }
 
   var latest = data.latest || (photos[0] && (photos[0].file || photos[0])) || '';
   var dl = document.getElementById('dl_latest');
@@ -657,33 +914,7 @@ function paint(data) {
     dl.style.opacity = '0.4';
     dl.style.pointerEvents = 'none';
   }
-
-  if (!photos.length) {
-    document.getElementById('unread_count').textContent = '0';
-    feed.innerHTML = EMPTY_HTML;
-    return;
-  }
-  var html = '';
-  for (var i = 0; i < photos.length && i < 20; i++) {
-    var p = photos[i];
-    var name = p.file || p;
-    var when = p.when || '';
-    var mtime = parseInt(p.mtime || 0, 10) || 0;
-    var isNew = mtime > lastVisit;
-    if (isNew) unread++;
-    var href = '/photo/' + name;
-    html += '<div class=\"shot' + (isNew ? ' unread' : '') + '\">';
-    if (isNew) html += '<div class=\"badge\">NEW</div>';
-    html += '<a class=\"imgwrap\" href=\"' + href + '\" target=\"_blank\" rel=\"noopener\" onclick=\"openLb(\\'' + href + '\\'); return false;\">';
-    html += '<img src=\"' + href + '\" alt=\"shot\">';
-    html += '</a>';
-    html += '<div class=\"meta\"><span class=\"grow\">' + escapeHtml(when ? when + ' · ' + name : name) +
-            ' · <a href=\"' + href + '\" target=\"_blank\" rel=\"noopener\">full size</a></span>';
-    html += '<button type=\"button\" class=\"delbtn\" onclick=\"deletePhoto(\\'' + String(name).replace(/'/g, '') + '\\')\">Delete</button>';
-    html += '</div></div>';
-  }
-  document.getElementById('unread_count').textContent = String(unread);
-  feed.innerHTML = html;
+  renderFeed(photos);
 }
 function poll() {
   var x = new XMLHttpRequest();
@@ -706,6 +937,26 @@ document.getElementById('copy_lan').onclick = function() {
 document.getElementById('copy_local').onclick = function() {
   copyText(document.getElementById('local_url').textContent, this);
 };
+document.getElementById('big_copy').onclick = function() {
+  var t = document.getElementById('ip_port').textContent;
+  copyText(t, null);
+  var hint = document.getElementById('big_copy_hint');
+  var old = hint.textContent;
+  hint.textContent = 'Copied! Open http://' + t + ' on your phone';
+  setTimeout(function(){ hint.textContent = old; }, 2000);
+};
+document.getElementById('tab_all').onclick = function() { setFilter('all'); };
+document.getElementById('tab_today').onclick = function() { setFilter('today'); };
+(function() {
+  var chips = document.querySelectorAll('.chip');
+  for (var i = 0; i < chips.length; i++) {
+    chips[i].onclick = function() {
+      var m = this.getAttribute('data-msg') || this.textContent;
+      document.getElementById('msg').value = m;
+      sendMsg(m);
+    };
+  }
+})();
 document.getElementById('mark_read').onclick = function() {
   setLastVisit(Math.floor(Date.now()/1000));
   poll();
@@ -715,21 +966,8 @@ document.getElementById('mark_read').onclick = function() {
 };
 document.getElementById('f').onsubmit = function(ev) {
   ev.preventDefault();
-  var msg = document.getElementById('msg').value;
-  var body = 'msg=' + encodeURIComponent(msg);
-  var x = new XMLHttpRequest();
-  x.open('POST', '/send', true);
-  x.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
-  x.onreadystatechange = function() {
-    if (x.readyState === 4) {
-      document.getElementById('ok').textContent = 'Sent to CJ — open INBOX on the in-game phone.';
-      document.getElementById('msg').value = '';
-      setTimeout(function(){ document.getElementById('ok').textContent = ''; }, 3000);
-    }
-  };
-  x.send(body);
+  sendMsg(document.getElementById('msg').value);
 };
-// First visit: treat nothing as unread until user sees the page once
 if (!getLastVisit()) {
   try { /* leave 0 so existing shots show NEW on first open */ } catch (e) {}
 }
@@ -744,12 +982,57 @@ setInterval(poll, 2000);
 
 
 def render_html():
-    lan = "http://%s:%s" % (STATE.get("ip", "127.0.0.1"), STATE.get("port", 8088))
-    local = "http://127.0.0.1:%s" % STATE.get("port", 8088)
+    ip = STATE.get("ip", "127.0.0.1")
+    port = STATE.get("port", 8088)
+    lan = "http://%s:%s" % (ip, port)
+    local = "http://127.0.0.1:%s" % port
+    ip_port = "%s:%s" % (ip, port)
     return (
         HTML_TEMPLATE
         .replace("__LAN_URL__", lan)
         .replace("__LOCAL_URL__", local)
+        .replace("__IP_PORT__", ip_port)
+    )
+
+
+def render_qr_page():
+    """No QR dependency — large tap-to-copy IP:port + sms-style note."""
+    ip = STATE.get("ip", "127.0.0.1")
+    port = STATE.get("port", 8088)
+    lan = "http://%s:%s" % (ip, port)
+    ip_port = "%s:%s" % (ip, port)
+    sms_body = "GroveLink phone page: %s" % lan
+    # Keep HTML simple, stdlib only, no SVG QR
+    return (
+        "<!DOCTYPE html><html><head><meta charset=\"utf-8\">"
+        "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
+        "<title>GroveLink — share URL</title>"
+        "<style>"
+        "body{margin:0;background:#070b08;color:#d7ffd0;font-family:Arial,sans-serif;}"
+        ".box{max-width:440px;margin:40px auto;padding:20px;text-align:center;}"
+        "h1{color:#2cff6a;letter-spacing:2px;font-size:18px;}"
+        ".ip{font-size:28px;font-weight:bold;color:#2cff6a;margin:24px 0;padding:20px;"
+        "border:2px solid #2cff6a;cursor:pointer;word-break:break-all;}"
+        "a{color:#2cff6a;} p{color:#7aaa7a;line-height:1.5;font-size:13px;}"
+        "</style></head><body><div class=\"box\">"
+        "<h1>GROVELINK</h1>"
+        "<p>No QR code library — tap the address to copy, then open it on your phone "
+        "(same Wi-Fi as this PC).</p>"
+        "<div class=\"ip\" id=\"c\" onclick=\"var t=this.textContent;"
+        "if(navigator.clipboard)navigator.clipboard.writeText(t);"
+        "else{var a=document.createElement('textarea');a.value=t;document.body.appendChild(a);"
+        "a.select();document.execCommand('copy');document.body.removeChild(a);}"
+        "this.style.background='#143';\">%s</div>"
+        "<p>Full URL: <a href=\"%s\">%s</a></p>"
+        "<p><a href=\"sms:?&amp;body=%s\">Text yourself this URL (sms:)</a></p>"
+        "<p><a href=\"/\">&larr; Back to GroveLink</a></p>"
+        "</div></body></html>"
+    ) % (
+        ip_port,
+        lan,
+        lan,
+        # url-encode lightly for href
+        sms_body.replace(" ", "%20").replace(":", "%3A").replace("/", "%2F"),
     )
 
 
@@ -774,6 +1057,7 @@ def api_payload():
         "local_url": "http://127.0.0.1:%s" % port,
         "ip": ip,
         "port": port,
+        "max_photos": int(STATE.get("max_photos") or 40),
     }
 
 
@@ -861,7 +1145,14 @@ class Handler(BaseHTTPRequestHandler):
         if "?" in self.path:
             qs = self.path.split("?", 1)[1]
         if path == "/" or path == "/index.html":
+            if not STATE.get("phone_page_logged"):
+                STATE["phone_page_logged"] = True
+                print("Phone page opened")
+                sys.stdout.flush()
             self._html(render_html())
+            return
+        if path == "/qr":
+            self._html(render_qr_page())
             return
         if path == "/api":
             self._json(api_payload())
@@ -1022,13 +1313,18 @@ def main():
         port = int(cfg_get(cfg, "server", "port", "8088") or "8088")
     except Exception:
         port = 8088
+    max_photos = cfg_int(cfg, "server", "max_photos", 40)
+    if max_photos < 1:
+        max_photos = 40
 
     ip = lan_ip()
     STATE["ip"] = ip
     STATE["port"] = port
+    STATE["max_photos"] = max_photos
     STATE["gta_dir"] = gta_dir or ""
     STATE["galleries"] = list(galleries)
     STATE["bridge_ok"] = True
+    STATE["phone_page_logged"] = False
 
     print("================================================")
     print("  GROVELINK PHONE BRIDGE")
@@ -1049,6 +1345,9 @@ def main():
     print("      http://127.0.0.1:%s" % port)
     print("  Health JSON:")
     print("      http://127.0.0.1:%s/health" % port)
+    print("  Share URL page (tap-to-copy, no QR lib):")
+    print("      http://127.0.0.1:%s/qr" % port)
+    print("  Max bridge photos (prune oldest):", max_photos)
     print("")
     print("  Keep this window open while you play.")
     print("================================================")

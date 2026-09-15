@@ -6,7 +6,8 @@ Double-click **`VERIFY_GROVELINK.bat`** (Desktop after INSTALL, or repo root). I
 
 - `gta_sa.exe`, `CLEO.asi`, `GroveLinkPhone.cs`, `link.ini`
 - Python, `config.ini`, bridge script
-- Firewall note + URLs to try (`http://127.0.0.1:8088`, `/health`, phone LAN URL)
+- `GroveLinkPhone.txt` in the repo + writable `bridge/photos`
+- Firewall note + URLs to try (`http://127.0.0.1:8088`, `/health`, `/qr`, phone LAN URL)
 
 Fix anything marked MISSING, then run VERIFY again.
 
@@ -59,6 +60,18 @@ Also checked: `My Documents\...`, Public Documents, and paths in `bridge\config.
 
 Deleted names are remembered in `bridge\photos_deleted.txt` so the watcher does not immediately re-copy the same shot from Gallery while you still want it hidden on the phone page.
 
+## Too many bridge photos / prune
+
+`config.ini` → `[server] max_photos = 40` (default). The bridge keeps at most that many files under `bridge\photos` and **deletes the oldest bridge copies** when over the limit. Gallery originals are never pruned.
+
+## Phone page tips (All / Today, quick replies, share URL)
+
+- **All / Today** tabs filter the album in the browser by photo modified time (Today = since local midnight).
+- Quick-reply chips (**Where you at?**, **Nice shot**, **Come to Grove**) fill the SMS box and `POST /send`.
+- Large **tap-to-copy IP:port** block (and **`/qr`**) — no QR code library; use `sms:` link or copy into your phone browser on the same Wi-Fi.
+- Meta line shows timestamp + **file size**.
+- Bridge console prints **Phone page opened** the first time someone loads `/`.
+
 
 ## Sanny F7 steps
 
@@ -67,7 +80,7 @@ Deleted names are remembered in `bridge\photos_deleted.txt` so the watcher does 
 3. **F7** Compile. Fix any opcode/plugin errors (IniFiles.cleo / CLEO must match).  
 4. Output `.cs` → copy to `[GTA]\CLEO\GroveLinkPhone.cs`.
 
-Menu after compile: **CAMERA / INBOX / CONTACTS / STATUS / CLOSE** (Up/Down wrap, K toggle).
+Menu after compile: **CAMERA / INBOX / CONTACTS / STATUS / HELP / CLOSE** (Up/Down wrap, K toggle). **HELP** shows tips + **OPEN START GROVELINK ON PC**. Camera snap plays a short shutter sound (`018C`).
 
 Mission Switcher (optional): compile **one** of `switcher\MissionSwitcher_SkinOnly.txt` (safer) or `MissionSwitcher.txt`, copy `.cs` to CLEO. INSTALL auto-compiles SkinOnly when Sanny is found (SUCCESS mentions it only if installed).
 
@@ -88,7 +101,7 @@ Bridge is **stdlib only** (no pip packages).
 
 1. Bridge must be running (`STATUS.bridge=1` in `link.ini`).  
 2. Send from the web page SEND box.  
-3. In GTA: **K** → **INBOX** → Enter/Space — shows `INBOX.msg`, clears `INBOX.new`, plays a short sound when the message was new.
+3. In GTA: **K** → **INBOX** → Enter/Space — shows `INBOX.msg`, clears `INBOX.new`, plays a short sound when the message was new. Or tap a quick-reply chip on the phone page.
 
 ## STATUS says BRIDGE DOWN
 

@@ -218,9 +218,10 @@ if not exist "%GAL2%" mkdir "%GAL2%" >nul 2>&1
   echo host = 0.0.0.0
   echo port = 8088
   echo open_browser = 1
+  echo max_photos = 40
 ) > "%~dp0grovelink\bridge\config.ini"
 echo    Gallery: %GAL1%
-echo    config.ini written ^(port 8088, open_browser=1^).
+echo    config.ini written ^(port 8088, open_browser=1, max_photos=40^).
 
 echo.
 echo [6/8] Opening firewall for TCP 8088...
@@ -272,13 +273,37 @@ powershell -NoProfile -Command ^
   echo Also see: grovelink\bridge\OPEN_ON_PHONE.txt after the bridge runs once.
   echo Health check:     http://127.0.0.1:8088/health
   echo.
-  echo In GTA: K → Camera / Inbox / Contacts / Status / Close
+  echo In GTA: K → Camera / Inbox / Contacts / Status / Help / Close
   echo         Camera: Enter or Space to snap
   echo.
   echo Stuck? Double-click VERIFY_GROVELINK.bat on the Desktop.
 ) > "%USERPROFILE%\Desktop\GroveLink_PHONE_URL.txt"
 
-echo    Desktop: GroveLink Phone, START_GROVELINK, VERIFY_GROVELINK, PHONE_URL + REPO pointer
+(
+  echo GroveLink — quick start
+  echo ======================
+  echo.
+  echo Do these 3 steps:
+  echo.
+  echo   1. Double-click Desktop shortcut  "GroveLink Phone"
+  echo      ^(keep the black bridge window open^)
+  echo.
+  echo   2. Launch GTA San Andreas
+  echo.
+  echo   3. Press K → Camera → Enter ^(or Space^)
+  echo      Shot appears on the phone page in a couple seconds.
+  echo.
+  echo In-game menu: CAMERA / INBOX / CONTACTS / STATUS / HELP / CLOSE
+  echo HELP reminds you: OPEN START GROVELINK ON PC
+  echo.
+  echo Stuck? See TROUBLESHOOTING in the repo folder:
+  echo   %~dp0grovelink\TROUBLESHOOTING.md
+  echo.
+  echo Or run Desktop VERIFY_GROVELINK.bat for an OK/MISSING checklist.
+) > "%USERPROFILE%\Desktop\GroveLink_README.txt"
+if exist "%PUBLIC%\Desktop\" copy /Y "%USERPROFILE%\Desktop\GroveLink_README.txt" "%PUBLIC%\Desktop\GroveLink_README.txt" >nul 2>&1
+
+echo    Desktop: GroveLink Phone, START_GROVELINK, VERIFY_GROVELINK, README, PHONE_URL + REPO pointer
 
 echo.
 echo [8/8] Done
@@ -301,6 +326,7 @@ echo   3. Press K → Camera → Enter ^(or Space^)
 echo      Shot appears on the phone page in a couple seconds.
 echo.
 echo   Optional: VERIFY_GROVELINK.bat on Desktop checks everything.
+echo   Readme   : Desktop GroveLink_README.txt  ^(same 3 steps + TROUBLESHOOTING^)
 echo.
 echo ------------------------------------------------
 echo Game folder : %GTA%
