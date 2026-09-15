@@ -16,20 +16,24 @@ Not affiliated with Rockstar Games.
 | **INSTALL.bat** | First time. Right-click → Run as administrator. |
 | **PATCH.bat** | Already installed, this folder is newer. Safe to run again. |
 | **UPDATE.bat** | `git pull` then patch. Use this if you missed a release. |
-| **CHECK.bat** | Compares pack version vs `[GTA]\\CLEO\\GroveLink\\installed.txt`. Patches if you are behind. |
+| **CHECK.bat** | Compares pack version vs `[GTA]\CLEO\GroveLink\installed.txt`. Patches if you are behind. |
 
 Full steps: [docs/INSTALL.md](docs/INSTALL.md)  
 Phone keys and screens: [docs/PHONE.md](docs/PHONE.md)  
 If the screen is blank: [docs/TROUBLESHOOT.md](docs/TROUBLESHOOT.md)  
 History: [CHANGELOG.md](CHANGELOG.md)
 
-Current pack version is in `VERSION.txt` (**8**). After a successful install the same number is in `[GTA]\\CLEO\\GroveLink\\installed.txt`.
+Current pack version is in `VERSION.txt` (**9**). After a successful install the same number is in `[GTA]\CLEO\GroveLink\installed.txt`.
 
 Missed a week of updates? Run **UPDATE.bat**. No Git? Download a fresh zip, extract over this folder, run **PATCH.bat** or **CHECK.bat**.
 
 ## In game
 
 **K** opens the green GroveLink handset on the right.
+
+Home: Contacts, Messages, Camera, **Tools**, Close.
+Tools: Grove GPS marker, next radio station.
+Browser **RING** makes the in-game phone ring.
 
 Browser chat: start Desktop **START_GROVELINK.bat**, open `http://LAN-IP:8088`.
 

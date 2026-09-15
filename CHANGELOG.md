@@ -1,5 +1,14 @@
 # Changelog
 
+## 9 — tools, incoming ring, live status
+
+- Home menu adds **TOOLS** (Grove GPS waypoint, next radio station)
+- Browser **RING** button opens an incoming-call screen in-game (Enter answer / Backspace decline)
+- Status strip shows game clock + a wanted pip
+- Controller/keyboard rumble on new SMS and incoming ring
+- Chat page: quick chips, RING, live header
+- `link.ini` INBOX `kind=0` text / `kind=1` call
+
 ## 8 — usable handset + missed-update tools
 
 - Phone HUD redrawn: bezel, speaker grill, LCD, signal bars, battery, home button, SELECT/BACK soft keys
@@ -11,7 +20,7 @@
 - Highlight bar lines up with menu rows
 - `CHECK.bat` compares installed vs pack version and patches if you missed an update
 - `INSTALL.bat` / `PATCH.bat` find Steam and Rockstar Launcher folders
-- Desktop launchers now point at the real `grovelink\\bridge` folder (v7 desktop copy was broken)
+- Desktop launchers now point at the real `grovelink\bridge` folder (v7 desktop copy was broken)
 - Patch no longer wipes `link.ini` mid-conversation
 - Docs: INSTALL, PHONE, TROUBLESHOOT
 

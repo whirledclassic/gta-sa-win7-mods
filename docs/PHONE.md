@@ -11,7 +11,7 @@
 
 ## Screens
 
-**Home** — Contacts, Messages, Camera, Close. Green highlight bar follows the cursor. Soft keys: SELECT / BACK.
+**Home** — Contacts, Messages, Camera, Tools, Close. Green highlight bar follows the cursor. Soft keys: SELECT / BACK.
 
 **Contacts** — Sweet, Smoke, Ryder, Cesar, OG Loc, Kendl. Enter starts a real SCRIPT-SFX call (ring + voice + subtitles). The ON CALL screen stays up for the whole conversation.
 
@@ -22,6 +22,10 @@
 **Camera** — Enter takes a snapshot. Photos show on the browser PHOTOS tab if the bridge is running.
 
 **Call** — Contact name + ON CALL. Backspace hangs up immediately. When the last voice line ends the phone returns to Contacts.
+
+**Tools** — Grove GPS drops (or clears) a marker on Grove Street. Next Radio cycles the walkman/car radio.
+
+**Incoming** — Browser RING opens this screen automatically. Enter answers (Sweet voice line as the pickup), Backspace declines.
 
 ## Incoming text
 
@@ -38,13 +42,14 @@ Dark handset on the right of the HUD:
 - home button
 - SELECT / BACK labels
 
-Missing labels almost always means `GroveLink.fxt` is not in `[GTA]\\CLEO\\`. Run **PATCH.bat**.
+Missing labels almost always means `GroveLink.fxt` is not in `[GTA]\CLEO\`. Run **PATCH.bat**.
 
 The player uses the stock SA cellphone animation (`0729`) on foot. Driving skips the hand anim so the camera does not fight the car.
 
 ## Bridge
 
-Desktop **START_GROVELINK.bat** must stay open. It serves `index.html` on port 8088 and syncs `CLEO\\GroveLink\\link.ini` both ways.
+Desktop **START_GROVELINK.bat** must stay open. It serves `index.html` on port 8088 and syncs `CLEO\GroveLink\link.ini` both ways.
 
 Type in the browser → CJ sees a pager + Messages.  
-Pick a reply in-game → the browser shows a CJ bubble.
+Pick a reply in-game → the browser shows a CJ bubble.  
+**RING** on the web page → in-game incoming call.
