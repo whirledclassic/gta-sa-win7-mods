@@ -1,11 +1,12 @@
 {$USE ini}
 {$USE CLEO}
 {$CLEO .cs}
-// GroveLink Phone v9 — crash-safer. No #model names, no 033E GXT, no hold_cellphone.
+// GroveLink Phone v10 — crash-safer. No #model names, no 033E GXT, no hold_cellphone.
 // K toggle | UP/DOWN wrap | ENTER or SPACE select | BACKSPACE close
 // Menu: CAMERA / INBOX / CONTACTS / STATUS / HELP / CLOSE — labels via 0ACD only.
 // INBOX plays 018C when new=1. CONTACTS cycles static flavor lines (no models).
 // STATUS LIVE flashes photo count + PHONE PAGE ON PC; INBOX shows NO NEW TEXTS when empty.
+// Closed-phone: SMS FROM REAL PHONE notify (once per new) + optional NEWS FILED toast.
 // HELP mentions UPDATE_GROVELINK for outdated installs.
 0000: NOP
 03A4: name_thread 'GROVELNK'
@@ -14,10 +15,11 @@
 21@ = 0
 22@ = 0 // menu index 0=CAMERA 1=INBOX 2=CONTACTS 3=STATUS 4=HELP 5=CLOSE
 23@ = 0 // K debounce
-24@ = 0 // temp int (INBOX.new / STATUS.bridge)
+24@ = 0 // temp int (INBOX.new / STATUS.bridge / NEWS.new)
 25@ = 0 // PHOTO.count
 26@ = 0 // contacts cycle index 0=Sweet 1=Smoke 2=Ryder 3=Cesar 4=Catalina
 27@ = 0 // phone-just-opened edge (remind / setup once per open)
+28@ = 0 // SMS closed-phone notify latch (1 = already shown for current new=1)
 
 :MAIN
 0001: wait 0
@@ -67,6 +69,42 @@
 8AB0:   not key_pressed 75
 004D: jf @PHONE_LOGIC
 0006: 23@ = 0
+
+:NOTIFY_CHECK
+// Phone closed OR open: if new SMS and not yet latched, highpriority + sound.
+// When closed, message is "SMS FROM REAL PHONE" so user knows to open K.
+00D6: if
+0AAB:   file_exists "cleo\GroveLink\link.ini"
+004D: jf @PHONE_LOGIC
+0AF0: 24@ = read_int_from_ini_file "cleo\GroveLink\link.ini" section "INBOX" key "new"
+00D6: if
+0039:   24@ == 1
+004D: jf @SMS_LATCH_CLEAR
+00D6: if
+0039:   28@ == 0
+004D: jf @NEWS_CHECK
+0006: 28@ = 1
+018C: play_sound 1052 at 0.0 0.0 0.0
+00D6: if
+0039:   20@ == 0
+004D: jf @SMS_OPEN_TOAST
+0ACD: show_text_highpriority "SMS FROM REAL PHONE" time 2500
+0002: jump @NEWS_CHECK
+:SMS_OPEN_TOAST
+0ACD: show_text_highpriority "NEW SMS  OPEN INBOX" time 2000
+0002: jump @NEWS_CHECK
+:SMS_LATCH_CLEAR
+0006: 28@ = 0
+
+:NEWS_CHECK
+// Optional one-shot NEWS FILED when bridge sets NEWS.new=1 (auto Breaking News)
+0AF0: 24@ = read_int_from_ini_file "cleo\GroveLink\link.ini" section "NEWS" key "new"
+00D6: if
+0039:   24@ == 1
+004D: jf @PHONE_LOGIC
+0AF1: write_int 0 to_ini_file "cleo\GroveLink\link.ini" section "NEWS" key "new"
+0ACD: show_text_highpriority "NEWS FILED" time 2000
+018C: play_sound 1052 at 0.0 0.0 0.0
 
 :PHONE_LOGIC
 00D6: if

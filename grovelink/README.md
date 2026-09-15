@@ -29,6 +29,8 @@ Until PR #1 merges, `update.ini` defaults to branch `fix/grovelink-camera-snapsh
 - **Backspace** — close
 - **CAMERA** — snap; shutter sound (`018C`); shows **PHOTO TAKEN #N** (count from `link.ini`)
 - **INBOX** — when `new=1` shows SMS + sound; otherwise **NO NEW TEXTS**
+- **Closed phone** — new SMS still shows **SMS FROM REAL PHONE** (once) so you open **K**
+- **NEWS FILED** — optional toast when bridge auto-drafts Breaking News (`NEWS.new=1`)
 - **CONTACTS** — flavor only: cycles Sweet / Smoke / Ryder / Cesar / **Catalina** lines via `0ACD` (static text, no ped models; advances each select)
 - **STATUS** — **LIVE N  PHONE PAGE ON PC** / **NO BRIDGE** + shot count from `link.ini` when readable
 - **HELP** — K / Camera tips, **OPEN START GROVELINK ON PC**, and **Outdated? UPDATE_GROVELINK**
@@ -37,7 +39,10 @@ Until PR #1 merges, `update.ini` defaults to branch `fix/grovelink-camera-snapsh
 
 ## Bridge page (phone / PC browser)
 
+- **Hero + grid** photo feed (latest large, grid below); optional **caption** per shot; **Breaking News** → Grove Street Herald
+- Sticky **composer** with optional **From:**; chat thread shows **Delivered to CJ**
 - Header shows prominent **VERSION** + **PHOTOS** stats, **LIVE** pulse badge, **LAN** + **localhost** URLs, last poll time, unread count
+- **Grove Street Herald** link → `GET /news` (fake newspaper; articles embed `/photo/…`)
 - Keyboard **Shortcuts** footer (`?` help detail, `Esc` close lightbox, `/` focus search)
 - **Clear all** / **Export zip** / Download latest **disabled** when photo count is 0
 - If `/api` fails: red banner **Bridge offline — run START_GROVELINK** (reconnects automatically when the bridge is back)
@@ -58,7 +63,9 @@ Until PR #1 merges, `update.ini` defaults to branch `fix/grovelink-camera-snapsh
 - Server list newest-first; optional Oldest toggle on the page; human-readable timestamps
 - If skip list non-empty: **Hidden from phone: N** note under the status line
 - Auto-refresh interval from `server.poll_ms` (default **2000** ms), exposed in `/api` as `poll_ms`
-- SMS box still posts to `/send` → `link.ini` INBOX for the in-game phone
+- SMS box posts to `/send` → `link.ini` INBOX (`new=1`, `from=`, `msg=`) for the in-game phone — **same Wi-Fi, bridge running, CJ gets texts**
+- `POST /caption`, `POST /news`, `GET /api/chat` for captions / Herald / delivered thread
+- Config `[news] auto=0` (default off); `auto=1` auto-drafts Herald story after shutter burst
 - First load of `/` logs **Phone page opened** in the bridge window
 - **`GET /api`** → JSON with `photos`, `latest`, `count`, `bridge_ok`, `poll_ms`, `version`, **`last_error`**, URLs, refresh time
 - **`GET /health`** → same core fields + `galleries`, `gta_dir`, **`last_error`**
@@ -93,7 +100,7 @@ See [FEATURES.md](FEATURES.md) for the full install / camera / inbox / phone-pag
 ```
 python tests/smoke_bridge.py
 ```
-Or double-click `grovelink/bridge/TEST_BRIDGE.bat` on Windows. Asserts `/health`, `/api`, `/export.zip`, `/clear`, HTML, CLEO static.
+Or double-click `grovelink/bridge/TEST_BRIDGE.bat` on Windows. Asserts `/health`, `/api`, `/news`, `/send`, `/export.zip`, HTML, CLEO static.
 
 ## Troubleshooting
 

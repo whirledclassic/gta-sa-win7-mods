@@ -10,3 +10,9 @@ desktop.ini
 grovelink/bridge/OPEN_ON_PHONE.txt
 grovelink/bridge/photos/
 grovelink/bridge/photos_deleted.txt
+
+# Runtime Breaking News articles (keep folder)
+grovelink/bridge/news/*.json
+grovelink/bridge/photos_captions.json
+grovelink/bridge/chat_delivered.json
+grovelink/bridge/photos/*.txt

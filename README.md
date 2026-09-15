@@ -11,6 +11,13 @@ CLEO mods for **GTA SA PC 1.0** on **Windows 7** (pack version: root **`VERSION`
 
 Docs: [FEATURES](grovelink/FEATURES.md) · [CHANGELOG](CHANGELOG.md) · [TROUBLESHOOTING](grovelink/TROUBLESHOOTING.md). Not affiliated with Rockstar. Single-player only.
 
+## Changelog — 1.8.0 (gallery + Breaking News + SMS→CJ)
+
+- **Phone gallery:** hero/latest + grid; optional captions; sticky composer; Share improved
+- **Breaking News / Grove Street Herald:** offline satirical articles at `/news` + `/news/<id>`; `POST /news`; optional `news.auto=1`
+- **Text CJ:** From: field; chat **Delivered to CJ**; CLEO **SMS FROM REAL PHONE** even if phone closed; **NEWS FILED** toast
+- Smoke extended; FEATURES / TROUBLESHOOTING / CHANGELOG synced
+
 ## Changelog — 1.7.1 (polish)
 
 - Bridge: plain English **port N busy** if TCP 8088 (or configured port) is already in use

@@ -6,6 +6,7 @@ Starts the bridge HTTP server on an ephemeral port, asserts:
   GET /health, GET /api, GET /export.zip, GET /
 Optional: gallery copy + last_error + skipped_deleted + sort HTML + clear confirm +
 help footer + empty-action disable + VERIFY VERSION + CHANGELOG + port-busy + README polish.
+1.8.0: /news index + POST /news + /news/id + /send ini + /api/chat + gallery hero HTML.
 
 Run from repo root or anywhere:
   python tests/smoke_bridge.py
@@ -104,6 +105,12 @@ def main():
     gl.DELETED_PATH = os.path.join(tmp, "photos_deleted.txt")
     gl.DELETED.clear()
     gl.OPEN_PHONE_TXT = os.path.join(tmp, "OPEN_ON_PHONE.txt")
+    gl.WEB_NEWS = os.path.join(tmp, "news")
+    os.makedirs(gl.WEB_NEWS)
+    gl.CAPTIONS_PATH = os.path.join(tmp, "photos_captions.json")
+    gl.CHAT_LOG_PATH = os.path.join(tmp, "chat_delivered.json")
+    gl.STATE["news_auto"] = False
+    gl.STATE["link_ini"] = os.path.join(tmp, "link.ini")
 
     port = free_port()
     gl.STATE["ip"] = "127.0.0.1"
@@ -130,7 +137,12 @@ def main():
     server.link_ini = os.path.join(tmp, "link.ini")
     # seed a minimal ini so POST /send works
     with open(server.link_ini, "w") as f:
-        f.write("[INBOX]\nnew=0\nfrom=\nmsg=\n[PHOTO]\ntake=0\n[STATUS]\nbridge=1\n")
+        f.write(
+            "[INBOX]\nnew=0\nfrom=\nmsg=\n"
+            "[PHOTO]\ntake=0\n"
+            "[STATUS]\nbridge=1\n"
+            "[NEWS]\nnew=0\n"
+        )
 
     t = threading.Thread(target=server.serve_forever)
     t.daemon = True
@@ -337,7 +349,7 @@ def main():
     except Exception as exc:
         check("last_error gallery path", False, exc)
 
-    # --- POST /send ---
+    # --- POST /send (ini + chat) ---
     try:
         try:
             from urllib.request import Request, urlopen
@@ -345,15 +357,108 @@ def main():
             from urllib2 import Request, urlopen
         req = Request(
             "http://127.0.0.1:%s/send" % port,
-            data=b"msg=Smoke+test",
+            data=b"msg=Smoke+test&from=Smoke+Tester",
             headers={"Content-Type": "application/x-www-form-urlencoded"},
         )
         resp = urlopen(req, timeout=5)
         body = resp.read()
         code = getattr(resp, "status", None) or resp.getcode()
-        check("POST /send", code == 200 and b"ok" in body, code)
+        jsend = json.loads(body.decode("utf-8") if isinstance(body, bytes) else body)
+        check("POST /send", code == 200 and jsend.get("ok") is True, code)
+        check("POST /send delivered flag", jsend.get("delivered") is True, jsend)
+        # link.ini INBOX written
+        ini_txt = ""
+        try:
+            with open(server.link_ini, "r") as f:
+                ini_txt = f.read()
+        except Exception as exc:
+            ini_txt = str(exc)
+        check("POST /send writes INBOX.new=1", "new=1" in ini_txt, ini_txt[:200])
+        check("POST /send writes from=", "from=Smoke Tester" in ini_txt or "from=Smoke+Tester" in ini_txt
+              or "Smoke Tester" in ini_txt, ini_txt[:300])
+        check("POST /send writes msg=", "Smoke test" in ini_txt or "Smoke+test" in ini_txt, ini_txt[:300])
+        # chat API
+        code_c, raw_c = http_get(port, "/api/chat")
+        chat = json.loads(raw_c.decode("utf-8") if isinstance(raw_c, bytes) else raw_c)
+        check("GET /api/chat status 200", code_c == 200, code_c)
+        check("GET /api/chat inbox list", isinstance(chat.get("inbox"), list) and len(chat.get("inbox") or []) >= 1, chat)
+        code_a, raw_a = http_get(port, "/api")
+        api_chat = json.loads(raw_a.decode("utf-8") if isinstance(raw_a, bytes) else raw_a)
+        check("GET /api inbox has delivered", isinstance(api_chat.get("inbox"), list) and len(api_chat.get("inbox") or []) >= 1)
     except Exception as exc:
-        check("POST /send", False, exc)
+        check("POST /send + chat", False, exc)
+
+    # --- gallery HTML 1.8.0 (hero / Breaking News / composer) ---
+    try:
+        code, raw = http_get(port, "/")
+        html = raw.decode("utf-8") if isinstance(raw, bytes) else raw
+        check("GET / has hero / LATEST", "LATEST" in html or 'class="hero"' in html or "sectionlab" in html)
+        check("GET / has Breaking News", "Breaking News" in html)
+        check("GET / has sticky composer", 'id="composer"' in html or "composer" in html)
+        check("GET / has From: field", 'id="from_name"' in html and "From:" in html)
+        check("GET / has chat thread", 'id="chat_thread"' in html or "TEXTS TO CJ" in html)
+        check("GET / has Grove Street Herald link", "/news" in html and "Herald" in html)
+        check("GET / has Share page / sharePhoto", "share_page" in html or "sharePhoto" in html)
+    except Exception as exc:
+        check("gallery HTML 1.8.0", False, exc)
+
+    # --- /news + POST /news ---
+    try:
+        try:
+            from urllib.request import Request, urlopen
+        except ImportError:
+            from urllib2 import Request, urlopen
+        # Ensure a photo exists for news
+        fake_n = os.path.join(photos, "4444444444_news.jpg")
+        with open(fake_n, "wb") as f:
+            f.write(b"\xff\xd8\xff\xe0" + b"\x00" * 200)
+        gl.copy_latest([])
+        code, raw = http_get(port, "/api")
+        api = json.loads(raw.decode("utf-8") if isinstance(raw, bytes) else raw)
+        latest = api.get("latest") or "4444444444_news.jpg"
+        code_n, raw_n = http_get(port, "/news")
+        html_n = raw_n.decode("utf-8") if isinstance(raw_n, bytes) else raw_n
+        check("GET /news index 200", code_n == 200, code_n)
+        check("GET /news Herald masthead", "Grove Street Herald" in html_n)
+        check("GET /news Los Santos Weather", "Los Santos Weather" in html_n)
+        req = Request(
+            "http://127.0.0.1:%s/news" % port,
+            data=("file=" + latest + "&caption=Smoke+Herald+caption").encode("utf-8"),
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+        )
+        resp = urlopen(req, timeout=5)
+        body = resp.read()
+        code = getattr(resp, "status", None) or resp.getcode()
+        jn = json.loads(body.decode("utf-8") if isinstance(body, bytes) else body)
+        check("POST /news status 200", code == 200, code)
+        check("POST /news ok + id", jn.get("ok") is True and bool(jn.get("id")), jn)
+        art_id = jn.get("id") or ""
+        if art_id:
+            code_a, raw_a = http_get(port, "/news/" + art_id)
+            html_a = raw_a.decode("utf-8") if isinstance(raw_a, bytes) else raw_a
+            check("GET /news/<id> 200", code_a == 200, code_a)
+            check("GET /news/<id> has headline", bool(jn.get("headline")) and (jn.get("headline") in html_a), jn.get("headline"))
+            check("GET /news/<id> embeds photo img", ("/photo/" + latest) in html_a or 'src="/photo/' in html_a, html_a[:200])
+            # NEWS.new flag in ini
+            with open(server.link_ini, "r") as f:
+                ini2 = f.read()
+            check("POST /news sets NEWS.new=1", "new=1" in ini2.split("[NEWS]")[-1] if "[NEWS]" in ini2 else False, ini2[-200:])
+        # caption endpoint
+        req_c = Request(
+            "http://127.0.0.1:%s/caption" % port,
+            data=("file=" + latest + "&caption=Smoke+cap").encode("utf-8"),
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+        )
+        resp_c = urlopen(req_c, timeout=5)
+        body_c = resp_c.read()
+        jc = json.loads(body_c.decode("utf-8") if isinstance(body_c, bytes) else body_c)
+        check("POST /caption ok", jc.get("ok") is True, jc)
+        code, raw = http_get(port, "/api")
+        api = json.loads(raw.decode("utf-8") if isinstance(raw, bytes) else raw)
+        caps = [p.get("caption") for p in (api.get("photos") or []) if p.get("file") == latest]
+        check("GET /api photo caption", caps and caps[0] == "Smoke cap", caps)
+    except Exception as exc:
+        check("news/caption suite", False, exc)
 
     try:
         server.shutdown()
@@ -389,6 +494,8 @@ def main():
         check("CLEO wrap high bound", "22@ > 5" in full or "0019:   22@ > 5" in full)
         check("CLEO CONTACTS Catalina flavor", "CATALINA" in full)
         check("CLEO contacts cycle advances", "26@ = 4" in full and ":CONTACT4" in full)
+        check("CLEO SMS FROM REAL PHONE notify", "SMS FROM REAL PHONE" in full)
+        check("CLEO NEWS FILED toast", "NEWS FILED" in full)
     except Exception as exc:
         check("CLEO static", False, exc)
 
@@ -437,7 +544,7 @@ def main():
     try:
         with open(os.path.join(REPO, "CHANGELOG.md"), "r") as f:
             cl = f.read()
-        check("CHANGELOG.md exists with 1.7.1", "1.7.1" in cl and ("Polish" in cl or "release-ready" in cl))
+        check("CHANGELOG.md exists with 1.8.0", "1.8.0" in cl and ("Breaking News" in cl or "Herald" in cl or "gallery" in cl.lower()))
         check("CHANGELOG covers 1.0 foundation", "1.0" in cl and ("Foundation" in cl or "crash-safer" in cl))
     except Exception as exc:
         check("CHANGELOG.md", False, exc)
@@ -468,7 +575,7 @@ def main():
     except Exception as exc:
         check("README polish", False, exc)
 
-    check("VERSION is 1.7.1", pack_ver == "1.7.1", pack_ver)
+    check("VERSION is 1.8.0", pack_ver == "1.8.0", pack_ver)
 
     # Runtime: after clear, HTML still disables; after photo, actions enabled via setCountActions path
     # (API count already covered; spot-check helper exists in page source above)

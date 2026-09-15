@@ -44,6 +44,10 @@ DELETED_PATH = os.path.join(HERE, "photos_deleted.txt")
 # Repo-root VERSION (bridge is grovelink/bridge → ../..)
 VERSION_PATH = os.path.normpath(os.path.join(HERE, "..", "..", "VERSION"))
 DELETED = set()  # basenames in bridge/photos the user removed from the phone UI
+# 1.8.0 paths (also defined in helpers; keep early aliases for smoke overrides)
+WEB_NEWS = os.path.join(HERE, "news")
+CAPTIONS_PATH = os.path.join(HERE, "photos_captions.json")
+CHAT_LOG_PATH = os.path.join(HERE, "chat_delivered.json")
 
 
 def read_pack_version():
@@ -102,6 +106,8 @@ STATE = {
     "phone_page_logged": False,
     "version": "unknown",
     "last_error": "",
+    "news_auto": False,
+    "link_ini": "",
 }
 
 
@@ -244,6 +250,7 @@ def ensure_gallery_dirs(cfg, gta_dir):
 
 def ensure_dirs(cfg, gta_dir):
     _mkdir(WEB_PHOTOS)
+    _mkdir(WEB_NEWS)
     ensure_gallery_dirs(cfg, gta_dir)
     if not gta_dir:
         return
@@ -256,7 +263,8 @@ def ensure_dirs(cfg, gta_dir):
                 f.write(
                     "[PHOTO]\ntake=0\ncount=0\n\n"
                     "[INBOX]\nnew=0\nfrom=REAL PHONE\nmsg=\n\n"
-                    "[STATUS]\nbridge=1\nip=0.0.0.0\n"
+                    "[STATUS]\nbridge=1\nip=0.0.0.0\n\n"
+                    "[NEWS]\nnew=0\n"
                 )
         except Exception:
             pass
@@ -463,6 +471,10 @@ def copy_latest(folders):
         pass
     kept.sort(key=lambda x: x.get("mtime", 0), reverse=True)
     kept = kept[:max_photos]
+    try:
+        kept = attach_captions_to_photos(kept)
+    except Exception:
+        pass
     STATE["photos"] = kept
     stamp_now()
     return kept
@@ -604,20 +616,514 @@ def try_open_browser(url):
     return False
 
 
+# --- GroveLink 1.8.0: captions, Breaking News, chat helpers (injected) ---
+
+WEB_NEWS = os.path.join(HERE, "news")
+CAPTIONS_PATH = os.path.join(HERE, "photos_captions.json")
+CHAT_LOG_PATH = os.path.join(HERE, "chat_delivered.json")
+
+# Keyword pools for satirical SA-style headlines (offline, no AI)
+_NEWS_PLACES = (
+    "Grove Street", "Ganton", "Idlewood", "Los Santos", "San Andreas",
+    "East Beach", "Vinewood", "Verdant Meadows", "Area 69", "Mount Chiliad",
+    "Angel Pine", "Las Venturas", "San Fierro", "Flint County", "Red County",
+)
+_NEWS_VERBS = (
+    "Spotted", "Caught", "Seen", "Photographed", "Reported", "Witnessed",
+    "Tracked", "Busted", "Hailed", "Exposed",
+)
+_NEWS_SUBJECTS = (
+    "local hero", "mystery rider", "Grove soldier", "street legend",
+    "camera-happy civilian", "unidentified Ballas lookout", "CJ lookalike",
+    "tourist with a phone", "hood paparazzo", "midnight wanderer",
+)
+_NEWS_ANGLES = (
+    "sources say the shot was pure San Andreas chaos",
+    "neighbors claim the flash scared the cats off the roof",
+    "SPD declined to comment, citing 'ongoing vibes'",
+    "Sweet reportedly muttered 'stay Grove' under his breath",
+    "Ryder insists he was 'just checking the scenery'",
+    "weather desk notes clear skies and questionable decisions",
+    "editors remind readers: this is satire, not a wanted poster",
+    "byline desk filed this under BREAKING / probably fine",
+)
+_NEWS_WEATHER = (
+    "Sunny with a chance of drive-bys (figuratively)",
+    "Low smog, high drama",
+    "Partly cloudy over Grove; Ballas outlook: unsettled",
+    "Heat advisory for anyone standing near a camera flash",
+    "Clear skies; keep your phone charged, CJ",
+)
+
+
+def _safe_basename(name):
+    name = os.path.basename(name or "")
+    if not name or name in (".", "..") or ".." in name or "/" in name or "\\" in name:
+        return ""
+    return name
+
+
+def _load_json_file(path, default):
+    if not os.path.isfile(path):
+        return default
+    try:
+        with open(path, "r") as f:
+            raw = f.read()
+        if not raw.strip():
+            return default
+        obj = json.loads(raw)
+        return obj if obj is not None else default
+    except Exception:
+        return default
+
+
+def _save_json_file(path, obj):
+    try:
+        _mkdir(os.path.dirname(path) or HERE)
+        tmp = path + ".tmp"
+        with open(tmp, "w") as f:
+            f.write(json.dumps(obj, indent=2, sort_keys=True))
+            f.write("\n")
+        try:
+            if os.path.isfile(path):
+                os.remove(path)
+        except Exception:
+            pass
+        os.rename(tmp, path)
+        return True
+    except Exception as exc:
+        try:
+            with open(path, "w") as f:
+                f.write(json.dumps(obj))
+            return True
+        except Exception as exc2:
+            print("Could not save JSON", path, exc2)
+            return False
+
+
+def load_captions():
+    data = _load_json_file(CAPTIONS_PATH, {})
+    if not isinstance(data, dict):
+        return {}
+    return data
+
+
+def save_captions(data):
+    return _save_json_file(CAPTIONS_PATH, data if isinstance(data, dict) else {})
+
+
+def get_caption(name):
+    name = _safe_basename(name)
+    if not name:
+        return ""
+    caps = load_captions()
+    val = caps.get(name) or ""
+    # Sidecar .txt fallback
+    if not val:
+        side = os.path.join(WEB_PHOTOS, name + ".txt")
+        if os.path.isfile(side):
+            try:
+                with open(side, "r") as f:
+                    val = f.read().strip()[:200]
+            except Exception:
+                val = ""
+    return val
+
+
+def set_caption(name, caption):
+    name = _safe_basename(name)
+    if not name:
+        return False, "bad name"
+    caption = (caption or "").strip().replace("\r", " ").replace("\n", " ")[:200]
+    caps = load_captions()
+    if caption:
+        caps[name] = caption
+        # Also write sidecar .txt for easy browsing on disk
+        try:
+            side = os.path.join(WEB_PHOTOS, name + ".txt")
+            with open(side, "w") as f:
+                f.write(caption + "\n")
+        except Exception:
+            pass
+    else:
+        if name in caps:
+            del caps[name]
+        try:
+            side = os.path.join(WEB_PHOTOS, name + ".txt")
+            if os.path.isfile(side):
+                os.remove(side)
+        except Exception:
+            pass
+    save_captions(caps)
+    return True, caption
+
+
+def load_chat_log():
+    data = _load_json_file(CHAT_LOG_PATH, [])
+    if not isinstance(data, list):
+        return []
+    return data[:50]
+
+
+def append_chat_delivered(frm, msg):
+    log = load_chat_log()
+    entry = {
+        "from": (frm or "REAL PHONE")[:40],
+        "msg": (msg or "")[:80],
+        "ts": int(time.time()),
+        "when": human_time(time.time()),
+        "delivered": True,
+    }
+    log.insert(0, entry)
+    log = log[:40]
+    _save_json_file(CHAT_LOG_PATH, log)
+    STATE["inbox"] = log
+    return entry
+
+
+def _pick(seq, seed):
+    if not seq:
+        return ""
+    try:
+        idx = abs(int(seed)) % len(seq)
+    except Exception:
+        idx = 0
+    return seq[idx]
+
+
+def _keywords_from_photo(photo_name, mtime=0):
+    """Derive light keywords from filename + time (stdlib only)."""
+    name = _safe_basename(photo_name) or "shot"
+    base = name.rsplit(".", 1)[0]
+    bits = []
+    for part in base.replace("-", "_").split("_"):
+        part = part.strip()
+        if not part:
+            continue
+        if part.isdigit() and len(part) >= 8:
+            continue
+        if len(part) >= 3:
+            bits.append(part[:24])
+    hour = 12
+    try:
+        hour = int(time.localtime(mtime or time.time()).tm_hour)
+    except Exception:
+        hour = 12
+    if hour < 5:
+        bits.append("late night")
+    elif hour < 11:
+        bits.append("morning")
+    elif hour < 17:
+        bits.append("afternoon")
+    else:
+        bits.append("evening")
+    return bits[:6]
+
+
+def generate_news_article(photo_name, caption="", auto=False):
+    """Build satirical Grove Street Herald article from templates + keywords."""
+    photo_name = _safe_basename(photo_name)
+    if not photo_name:
+        return None
+    full = os.path.join(WEB_PHOTOS, photo_name)
+    mtime = 0
+    if os.path.isfile(full):
+        try:
+            mtime = int(os.path.getmtime(full))
+        except Exception:
+            mtime = int(time.time())
+    else:
+        mtime = int(time.time())
+    if not caption:
+        caption = get_caption(photo_name)
+    kws = _keywords_from_photo(photo_name, mtime)
+    seed = mtime ^ (len(photo_name) * 17) ^ (len(caption) * 31)
+    place = _pick(_NEWS_PLACES, seed)
+    verb = _pick(_NEWS_VERBS, seed // 3)
+    subject = _pick(_NEWS_SUBJECTS, seed // 5)
+    angle = _pick(_NEWS_ANGLES, seed // 7)
+    weather = _pick(_NEWS_WEATHER, seed // 11)
+    kw_bit = ""
+    if kws:
+        kw_bit = kws[0]
+    if caption:
+        # Prefer a short caption fragment in the headline
+        frag = caption[:48]
+        headline = "BREAKING: %s — %s near %s" % (verb, frag, place)
+    elif kw_bit and not kw_bit.isdigit():
+        headline = "BREAKING: %s %s %s near %s" % (verb, subject, kw_bit, place)
+    else:
+        headline = "BREAKING: %s %s near %s" % (verb, subject, place)
+    headline = headline[:120]
+    byline = "By Grove Street Herald Staff"
+    stamp = human_time(mtime)
+    filed = human_time(time.time())
+    body_parts = [
+        "LOS SANTOS — In a development that surprised absolutely nobody on %s, "
+        "a %s was %s with what witnesses describe as 'a very phone-looking phone.'"
+        % (place, subject, verb.lower()),
+        "",
+        angle[0].upper() + angle[1:] + ".",
+        "",
+    ]
+    if caption:
+        body_parts.append('On-scene caption from the real-phone feed: "%s"' % caption[:160])
+        body_parts.append("")
+    if kws:
+        body_parts.append(
+            "Filename desk notes keywords: %s." % ", ".join(kws[:4])
+        )
+        body_parts.append("")
+    body_parts.append(
+        "The Grove Street Herald reminds readers this column is satirical fan content "
+        "for single-player San Andreas shenanigans — not real news, not a police blotter."
+    )
+    body_parts.append("")
+    body_parts.append(
+        "Photo desk embedded the still via GroveLink bridge (/photo/%s)." % photo_name
+    )
+    if auto:
+        body_parts.append("")
+        body_parts.append("(Auto-drafted when a new shutter burst landed. Edit anytime.)")
+    art_id = "n%d_%s" % (int(time.time()), abs(seed) % 100000)
+    article = {
+        "id": art_id,
+        "headline": headline,
+        "byline": byline,
+        "body": "\n".join(body_parts),
+        "photo": photo_name,
+        "caption": caption or "",
+        "timestamp": stamp,
+        "filed": filed,
+        "mtime": mtime,
+        "weather": weather,
+        "place": place,
+        "auto": bool(auto),
+        "keywords": kws,
+    }
+    return article
+
+
+def save_news_article(article):
+    if not article or not article.get("id"):
+        return False, "bad article"
+    _mkdir(WEB_NEWS)
+    path = os.path.join(WEB_NEWS, article["id"] + ".json")
+    if not _save_json_file(path, article):
+        return False, "write failed"
+    return True, article["id"]
+
+
+def load_news_article(art_id):
+    art_id = os.path.basename(art_id or "").replace("..", "")
+    if not art_id:
+        return None
+    if not art_id.endswith(".json"):
+        path = os.path.join(WEB_NEWS, art_id + ".json")
+    else:
+        path = os.path.join(WEB_NEWS, art_id)
+        art_id = art_id[:-5]
+    data = _load_json_file(path, None)
+    if not isinstance(data, dict):
+        return None
+    if not data.get("id"):
+        data["id"] = art_id
+    return data
+
+
+def list_news_articles(limit=40):
+    _mkdir(WEB_NEWS)
+    out = []
+    try:
+        names = os.listdir(WEB_NEWS)
+    except Exception:
+        return []
+    for name in names:
+        if not name.endswith(".json"):
+            continue
+        art = load_news_article(name[:-5])
+        if art:
+            out.append(art)
+    out.sort(key=lambda a: int(a.get("mtime") or 0), reverse=True)
+    return out[:limit]
+
+
+def create_news_from_photo(photo_name, caption="", auto=False, link_ini=None):
+    article = generate_news_article(photo_name, caption=caption, auto=auto)
+    if not article:
+        return False, None, "bad photo"
+    ok, art_id = save_news_article(article)
+    if not ok:
+        return False, None, "save failed"
+    # Optional CLEO toast flag
+    if link_ini:
+        try:
+            write_ini_kv(link_ini, "NEWS", {"new": "1"})
+        except Exception:
+            pass
+    return True, article, "ok"
+
+
+def _esc(s):
+    s = "" if s is None else str(s)
+    return (
+        s.replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace('"', "&quot;")
+    )
+
+
+def render_news_index():
+    arts = list_news_articles(40)
+    ip = STATE.get("ip", "127.0.0.1")
+    port = STATE.get("port", 8088)
+    rows = []
+    if not arts:
+        rows.append(
+            '<p class="empty">No stories filed yet. Open the phone page, pick a shot, '
+            "tap <b>Breaking News</b>.</p>"
+        )
+    for a in arts:
+        aid = _esc(a.get("id") or "")
+        hl = _esc(a.get("headline") or "Untitled")
+        when = _esc(a.get("filed") or a.get("timestamp") or "")
+        photo = _esc(a.get("photo") or "")
+        thumb = ""
+        if photo:
+            thumb = (
+                '<a href="/news/%s"><img class="thumb" src="/photo/%s" alt=""></a>'
+                % (aid, photo)
+            )
+        rows.append(
+            '<article class="card">%s<div class="body">'
+            '<a class="hl" href="/news/%s">%s</a>'
+            '<div class="meta">%s · Grove Street Herald</div></div></article>'
+            % (thumb, aid, hl, when)
+        )
+    weather = _pick(_NEWS_WEATHER, int(time.time()) // 3600)
+    return (
+        "<!DOCTYPE html><html><head><meta charset=\"utf-8\">"
+        "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
+        "<title>Grove Street Herald</title>"
+        "<style>"
+        "body{margin:0;background:#1a1510;color:#f5e6c8;font-family:Georgia,'Times New Roman',serif;}"
+        ".mast{background:#0d0a08;border-bottom:4px solid #c4a35a;padding:18px 16px;text-align:center;}"
+        ".mast h1{margin:0;font-size:28px;letter-spacing:3px;color:#c4a35a;font-variant:small-caps;}"
+        ".mast .sub{font-size:12px;color:#a89060;margin-top:6px;letter-spacing:1px;}"
+        ".weather{max-width:720px;margin:12px auto;padding:10px 14px;background:#241c14;"
+        "border:1px solid #c4a35a;font-size:13px;color:#e8d4a8;}"
+        ".wrap{max-width:720px;margin:0 auto;padding:12px 14px 40px;}"
+        ".card{display:flex;gap:14px;padding:14px 0;border-bottom:1px solid #3a2e22;}"
+        ".thumb{width:96px;height:72px;object-fit:cover;border:2px solid #c4a35a;background:#000;}"
+        ".hl{color:#f5e6c8;font-size:18px;font-weight:bold;text-decoration:none;line-height:1.3;}"
+        ".hl:hover{color:#c4a35a;}"
+        ".meta{font-size:11px;color:#a89060;margin-top:6px;}"
+        ".empty{color:#a89060;line-height:1.5;}"
+        ".nav{text-align:center;margin:16px;font-size:13px;}"
+        ".nav a{color:#c4a35a;}"
+        "</style></head><body>"
+        "<div class=\"mast\"><h1>Grove Street Herald</h1>"
+        "<div class=\"sub\">Los Santos · San Andreas · Satirical edition</div></div>"
+        "<div class=\"weather\"><b>Los Santos Weather:</b> %s</div>"
+        "<div class=\"wrap\">%s</div>"
+        "<div class=\"nav\"><a href=\"/\">&larr; Back to GroveLink phone</a>"
+        " · <a href=\"/qr\">Share URL</a></div>"
+        "</body></html>"
+    ) % (_esc(weather), "\n".join(rows))
+
+
+def render_news_article_page(art_id):
+    art = load_news_article(art_id)
+    if not art:
+        return None
+    hl = _esc(art.get("headline") or "")
+    byline = _esc(art.get("byline") or "")
+    body = _esc(art.get("body") or "").replace("\n", "<br>\n")
+    photo = _esc(art.get("photo") or "")
+    when = _esc(art.get("filed") or art.get("timestamp") or "")
+    weather = _esc(art.get("weather") or "")
+    caption = _esc(art.get("caption") or "")
+    img = ""
+    if photo:
+        img = (
+            '<figure><img src="/photo/%s" alt="story photo">'
+            '<figcaption>%s</figcaption></figure>'
+            % (photo, caption or photo)
+        )
+    return (
+        "<!DOCTYPE html><html><head><meta charset=\"utf-8\">"
+        "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
+        "<title>%s — Grove Street Herald</title>"
+        "<style>"
+        "body{margin:0;background:#1a1510;color:#f5e6c8;font-family:Georgia,'Times New Roman',serif;}"
+        ".mast{background:#0d0a08;border-bottom:4px solid #c4a35a;padding:14px 16px;text-align:center;}"
+        ".mast h1{margin:0;font-size:22px;letter-spacing:2px;color:#c4a35a;font-variant:small-caps;}"
+        ".wrap{max-width:680px;margin:0 auto;padding:18px 16px 48px;}"
+        "h2{font-size:26px;line-height:1.25;margin:0 0 10px;color:#fff8e8;}"
+        ".by{font-size:13px;color:#a89060;margin-bottom:18px;}"
+        "figure{margin:0 0 18px;}"
+        "figure img{width:100%%;display:block;border:3px solid #c4a35a;background:#000;}"
+        "figcaption{font-size:12px;color:#a89060;margin-top:8px;font-style:italic;}"
+        ".story{font-size:16px;line-height:1.65;color:#f0e2c4;}"
+        ".weather{margin:18px 0;padding:10px 12px;border:1px solid #c4a35a;background:#241c14;"
+        "font-size:13px;color:#e8d4a8;}"
+        ".nav{margin-top:28px;font-size:13px;}"
+        ".nav a{color:#c4a35a;}"
+        "</style></head><body>"
+        "<div class=\"mast\"><h1>Grove Street Herald</h1></div>"
+        "<div class=\"wrap\">"
+        "<h2>%s</h2>"
+        "<div class=\"by\">%s · Filed %s</div>"
+        "%s"
+        "<div class=\"story\">%s</div>"
+        "<div class=\"weather\"><b>Los Santos Weather:</b> %s</div>"
+        "<div class=\"nav\"><a href=\"/news\">&larr; All stories</a> · "
+        "<a href=\"/\">Phone feed</a></div>"
+        "</div></body></html>"
+    ) % (hl, hl, byline, when, img, body, weather)
+
+
+def attach_captions_to_photos(photos):
+    """Enrich photo dicts with caption field from JSON index / sidecars."""
+    caps = load_captions()
+    out = []
+    for p in photos or []:
+        if not isinstance(p, dict):
+            out.append(p)
+            continue
+        item = dict(p)
+        name = item.get("file") or ""
+        cap = caps.get(name) or ""
+        if not cap and name:
+            side = os.path.join(WEB_PHOTOS, name + ".txt")
+            if os.path.isfile(side):
+                try:
+                    with open(side, "r") as f:
+                        cap = f.read().strip()[:200]
+                except Exception:
+                    cap = ""
+        item["caption"] = cap
+        out.append(item)
+    return out
+
+# --- end 1.8.0 helpers ---
+
+
 # HTML is assembled with placeholders for URLs injected at request time via
 # a thin wrapper — keep static shell + JS that pulls /api for live data.
 HTML_TEMPLATE = """<!DOCTYPE html>
 <html>
 <head>
-<meta charset=\"utf-8\">
-<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">
-<meta name=\"theme-color\" content=\"#071109\">
-<meta name=\"apple-mobile-web-app-capable\" content=\"yes\">
-<meta name=\"mobile-web-app-capable\" content=\"yes\">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#071109">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
 <title>GroveLink</title>
 <style>
   body { margin:0; background:#070b08; color:#d7ffd0; font-family: Arial, Helvetica, sans-serif; }
-  .shell { max-width: 440px; margin: 0 auto; min-height: 100vh; background:#10180f; }
+  .shell { max-width: 440px; margin: 0 auto; min-height: 100vh; background:#10180f; padding-bottom: 88px; }
   header { padding:16px; background:#071109; border-bottom:2px solid #2cff6a; }
   h1 { margin:0; font-size:18px; letter-spacing:3px; color:#2cff6a; }
   .sub { font-size:12px; color:#7aaa7a; margin-top:6px; line-height:1.5; }
@@ -686,9 +1192,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     color:#2cff6a; font-size:10px; letter-spacing:2px; font-weight:bold; vertical-align:middle;
   }
   .livebadge.off { border-color:#a44; color:#ff6a6a; }
-  .stats {
-    margin-top:10px; display:flex; gap:10px; flex-wrap:wrap;
-  }
+  .stats { margin-top:10px; display:flex; gap:10px; flex-wrap:wrap; }
   .stat {
     flex:1; min-width:110px; background:#0b1a0e; border:1px solid #1a4; padding:10px 12px;
   }
@@ -699,8 +1203,18 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     color:#ffb0b0; font-size:14px; font-weight:bold; line-height:1.4; text-align:center;
   }
   .offline.show { display:block; }
-  form { display:flex; gap:8px; padding:12px; position:sticky; top:0; background:#10180f; z-index:2; }
-  input[type=text] {
+  .composer {
+    position:sticky; bottom:0; z-index:5; background:#0c140e; border-top:2px solid #2cff6a;
+    padding:10px 12px 12px; box-shadow:0 -6px 16px rgba(0,0,0,0.35);
+  }
+  .composer .fromrow { display:flex; gap:8px; margin-bottom:8px; align-items:center; }
+  .composer .fromrow label { font-size:11px; color:#7aaa7a; white-space:nowrap; }
+  .composer .fromrow input {
+    flex:1; padding:10px; border:1px solid #1a4; background:#0b0f0c; color:#d7ffd0;
+    font-size:14px; min-height:40px; box-sizing:border-box;
+  }
+  .composer form { display:flex; gap:8px; padding:0; position:static; background:transparent; }
+  input[type=text], input[type=search] {
     flex:1; padding:14px; border:1px solid #2cff6a; background:#0b0f0c; color:#d7ffd0;
     font-size:16px; min-height:48px; box-sizing:border-box;
   }
@@ -709,19 +1223,69 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     font-size:16px; min-height:48px; min-width:88px;
   }
   .okmsg { padding:0 12px 8px; color:#2cff6a; font-size:12px; min-height:16px; }
-  .shot { margin:12px; background:#000; border:1px solid #1a4; position:relative; }
+  .chatbox {
+    margin:10px 12px; padding:10px 12px; background:#0b0f0c; border:1px solid #1a4; border-radius:4px;
+  }
+  .chatbox h3 { margin:0 0 8px; font-size:12px; letter-spacing:1px; color:#2cff6a; }
+  .chatmsg {
+    background:#143; border:1px solid #1a4; border-radius:12px 12px 4px 12px;
+    padding:8px 12px; margin:6px 0; font-size:13px; line-height:1.4;
+  }
+  .chatmsg .who { font-size:10px; color:#7aaa7a; margin-bottom:2px; }
+  .chatmsg .deliv { font-size:10px; color:#2cff6a; margin-top:4px; }
+  .chatempty { font-size:12px; color:#7aaa7a; }
+  .hero {
+    margin:12px; background:#000; border:2px solid #2cff6a; position:relative; border-radius:2px;
+    overflow:hidden;
+  }
+  .hero.unread { box-shadow:0 0 0 2px rgba(44,255,106,0.35); }
+  .hero .badge {
+    position:absolute; top:10px; left:10px; background:#2cff6a; color:#041006;
+    font-size:11px; font-weight:bold; padding:5px 10px; letter-spacing:1px; z-index:1;
+  }
+  .hero a.imgwrap { display:block; }
+  .hero img { width:100%; display:block; max-height:52vh; object-fit:cover; cursor:zoom-in; }
+  .hero .meta, .shot .meta {
+    padding:10px 12px; font-size:12px; color:#7aaa7a; display:flex; flex-wrap:wrap; gap:8px; align-items:center;
+    background:#0b120e;
+  }
+  .meta .grow { flex:1; min-width:120px; }
+  .caprow { display:flex; gap:8px; padding:0 12px 10px; background:#0b120e; align-items:center; }
+  .caprow input {
+    flex:1; padding:10px; border:1px solid #1a4; background:#0b0f0c; color:#d7ffd0;
+    font-size:13px; min-height:40px; box-sizing:border-box;
+  }
+  .capbtn, .newsbtn, .sharebtn, .delbtn {
+    background:#143; color:#d7ffd0; border:1px solid #2cff6a; padding:10px 12px;
+    font-size:12px; font-weight:bold; min-height:40px; cursor:pointer; white-space:nowrap;
+  }
+  .newsbtn { background:#2a1a08; border-color:#c4a35a; color:#f5e6c8; }
+  .delbtn {
+    background:#3a1212; color:#ffb0b0; border:1px solid #a44;
+  }
+  .grid {
+    display:grid; grid-template-columns:1fr 1fr; gap:10px; padding:0 12px 12px;
+  }
+  @media (min-width:420px) {
+    .grid { grid-template-columns:1fr 1fr; }
+  }
+  .shot {
+    margin:0; background:#000; border:1px solid #1a4; position:relative; border-radius:2px; overflow:hidden;
+  }
   .shot.unread { border-color:#2cff6a; box-shadow:0 0 0 2px rgba(44,255,106,0.35); }
-  .badge {
-    position:absolute; top:8px; left:8px; background:#2cff6a; color:#041006;
-    font-size:10px; font-weight:bold; padding:4px 8px; letter-spacing:1px; z-index:1;
+  .shot .badge {
+    position:absolute; top:6px; left:6px; background:#2cff6a; color:#041006;
+    font-size:9px; font-weight:bold; padding:3px 6px; letter-spacing:1px; z-index:1;
   }
   .shot a.imgwrap { display:block; }
-  .shot img { width:100%; display:block; cursor:zoom-in; }
-  .meta { padding:8px 10px; font-size:11px; color:#7aaa7a; display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
-  .meta .grow { flex:1; min-width:120px; }
-  .delbtn {
-    background:#3a1212; color:#ffb0b0; border:1px solid #a44; padding:10px 12px;
-    font-size:12px; font-weight:bold; min-height:40px; cursor:pointer;
+  .shot img { width:100%; display:block; aspect-ratio:1; object-fit:cover; cursor:zoom-in; }
+  .shot .meta { padding:8px; font-size:10px; gap:6px; }
+  .shot .caprow { padding:0 8px 8px; flex-wrap:wrap; }
+  .shot .caprow input { min-height:36px; font-size:12px; }
+  .shot .btns { display:flex; flex-wrap:wrap; gap:6px; padding:0 8px 8px; background:#0b120e; }
+  .hero .btns { display:flex; flex-wrap:wrap; gap:8px; padding:0 12px 12px; background:#0b120e; }
+  .sectionlab {
+    margin:4px 12px 8px; font-size:11px; letter-spacing:2px; color:#2cff6a; font-weight:bold;
   }
   .empty { padding:20px 16px; color:#7aaa7a; line-height:1.55; }
   .empty h2 { margin:0 0 10px; color:#2cff6a; font-size:14px; letter-spacing:1px; }
@@ -780,95 +1344,111 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     background:none; border:0; color:#2cff6a; font-size:11px; font-weight:bold;
     cursor:pointer; padding:0; text-decoration:underline; min-height:28px;
   }
+  .newslink {
+    display:inline-block; margin-top:8px; padding:8px 12px; border:1px solid #c4a35a;
+    color:#f5e6c8; background:#2a1a08; text-decoration:none; font-size:12px; font-weight:bold;
+  }
 </style>
 </head>
 <body>
-<div class=\"shell\">
-  <div class=\"offline\" id=\"offline_banner\">Bridge offline — run START_GROVELINK</div>
+<div class="shell">
+  <div class="offline" id="offline_banner">Bridge offline — run START_GROVELINK</div>
   <header>
-    <h1>GROVELINK <span class=\"livebadge\" id=\"livebadge\">LIVE</span></h1>
-    <div class=\"sub\">Photos from GTA San Andreas on this PC → your real phone</div>
-    <div class=\"stats\">
-      <div class=\"stat\"><div class=\"k\">VERSION</div><div class=\"v\" id=\"ver\">__VERSION__</div></div>
-      <div class=\"stat\"><div class=\"k\">PHOTOS</div><div class=\"v\" id=\"count\">0</div></div>
+    <h1>GROVELINK <span class="livebadge" id="livebadge">LIVE</span></h1>
+    <div class="sub">Photos from GTA San Andreas on this PC → your real phone · text CJ · file Breaking News</div>
+    <div class="stats">
+      <div class="stat"><div class="k">VERSION</div><div class="v" id="ver">__VERSION__</div></div>
+      <div class="stat"><div class="k">PHOTOS</div><div class="v" id="count">0</div></div>
     </div>
-    <div class=\"urls\">
-      <div class=\"urlrow\">
-        <span><strong>Phone (LAN):</strong> <span id=\"lan_url\">__LAN_URL__</span></span>
-        <button type=\"button\" class=\"copybtn\" id=\"copy_lan\">Copy</button>
+    <div class="urls">
+      <div class="urlrow">
+        <span><strong>Phone (LAN):</strong> <span id="lan_url">__LAN_URL__</span></span>
+        <button type="button" class="copybtn" id="copy_lan">Copy</button>
       </div>
-      <div class=\"urlrow\">
-        <span><strong>This PC:</strong> <span id=\"local_url\">__LOCAL_URL__</span></span>
-        <button type=\"button\" class=\"copybtn\" id=\"copy_local\">Copy</button>
+      <div class="urlrow">
+        <span><strong>This PC:</strong> <span id="local_url">__LOCAL_URL__</span></span>
+        <button type="button" class="copybtn" id="copy_local">Copy</button>
       </div>
     </div>
-    <div class=\"actions\">
-      <a class=\"actionbtn\" id=\"dl_latest\" href=\"#\" target=\"_blank\" rel=\"noopener\" disabled style=\"opacity:0.4;pointer-events:none\">Download latest</a>
-      <a class=\"actionbtn\" id=\"export_zip\" href=\"#\" disabled style=\"opacity:0.4;pointer-events:none\">Export zip</a>
-      <button type=\"button\" class=\"actionbtn\" id=\"mark_read\">Mark all read</button>
-      <button type=\"button\" class=\"actionbtn\" id=\"clear_all\" disabled style=\"background:#3a1212;border-color:#a44;color:#ffb0b0\">Clear all phone copies</button>
+    <div class="actions">
+      <a class="actionbtn" id="dl_latest" href="#" target="_blank" rel="noopener" disabled style="opacity:0.4;pointer-events:none">Download latest</a>
+      <a class="actionbtn" id="export_zip" href="#" disabled style="opacity:0.4;pointer-events:none">Export zip</a>
+      <button type="button" class="actionbtn" id="share_page">Share page</button>
+      <button type="button" class="actionbtn" id="mark_read">Mark all read</button>
+      <button type="button" class="actionbtn" id="clear_all" disabled style="background:#3a1212;border-color:#a44;color:#ffb0b0">Clear all phone copies</button>
+      <a class="actionbtn" id="news_index" href="/news" style="border-color:#c4a35a;color:#f5e6c8;background:#2a1a08">Grove Street Herald</a>
     </div>
-    <div class=\"bigcopy\" id=\"big_copy\" title=\"Tap to copy IP:port\">
-      <div class=\"label\">TAP TO COPY — PHONE ADDRESS</div>
-      <div class=\"ipport\" id=\"ip_port\">__IP_PORT__</div>
-      <div class=\"hint\" id=\"big_copy_hint\">Copies host:port for your phone browser</div>
+    <div class="bigcopy" id="big_copy" title="Tap to copy IP:port">
+      <div class="label">TAP TO COPY — PHONE ADDRESS</div>
+      <div class="ipport" id="ip_port">__IP_PORT__</div>
+      <div class="hint" id="big_copy_hint">Copies host:port for your phone browser</div>
     </div>
-    <div class=\"smsnote\">No QR lib needed — open <code>http://</code> + the address above on your phone (same Wi-Fi). Or text yourself: <a id=\"sms_link\" href=\"#\">sms: note with URL</a>.</div>
-    <div class=\"tip\"><strong>Tip:</strong> On your phone, use the browser menu → <b>Add to Home Screen</b> for a one-tap GroveLink icon (no app install / no favicon needed). Theme color matches this green HUD.</div>
-    <div class=\"status\" id=\"skip_note\" style=\"display:none;margin-top:6px\">Hidden from phone: <span id=\"skip_count\">0</span> (deleted skip list — Gallery untouched)</div>
-    <div class=\"status\">
-      <span class=\"pulse live\" id=\"pulse\"></span>
-      Bridge: <span id=\"bridge_status\" class=\"ok\">online</span>
-      &nbsp;·&nbsp; Last poll: <span id=\"last_refresh\">—</span>
-      &nbsp;·&nbsp; <span id=\"refresh_hint\">auto every 2s</span>
-      &nbsp;·&nbsp; Unread: <span id=\"unread_count\">0</span>
-      <span id=\"last_error_hint\" class=\"bad\" style=\"display:none\"></span>
+    <div class="smsnote">Same Wi-Fi + bridge running → CJ gets your texts in-game (K → INBOX). No QR lib — open <code>http://</code> + address above. Or <a id="sms_link" href="#">sms: note with URL</a>.</div>
+    <div class="tip"><strong>Tip:</strong> Browser menu → <b>Add to Home Screen</b> for a one-tap icon (no favicon needed).</div>
+    <div class="status" id="skip_note" style="display:none;margin-top:6px">Hidden from phone: <span id="skip_count">0</span> (deleted skip list — Gallery untouched)</div>
+    <div class="status">
+      <span class="pulse live" id="pulse"></span>
+      Bridge: <span id="bridge_status" class="ok">online</span>
+      &nbsp;·&nbsp; Last poll: <span id="last_refresh">—</span>
+      &nbsp;·&nbsp; <span id="refresh_hint">auto every 2s</span>
+      &nbsp;·&nbsp; Unread: <span id="unread_count">0</span>
+      <span id="last_error_hint" class="bad" style="display:none"></span>
     </div>
   </header>
-  <form id=\"f\">
-    <input id=\"msg\" type=\"text\" maxlength=\"80\" placeholder=\"Message to CJ...\" required>
-    <button class=\"send\" type=\"submit\">SEND</button>
-  </form>
-  <div class=\"chips\">
-    <button type=\"button\" class=\"chip\" data-msg=\"Where you at?\">Where you at?</button>
-    <button type=\"button\" class=\"chip\" data-msg=\"Nice shot\">Nice shot</button>
-    <button type=\"button\" class=\"chip\" data-msg=\"Come to Grove\">Come to Grove</button>
+  <div class="chatbox" id="chatbox">
+    <h3>TEXTS TO CJ</h3>
+    <div id="chat_thread"><div class="chatempty">Send a message below — delivered texts show here.</div></div>
   </div>
-  <div class=\"okmsg\" id=\"ok\"></div>
-  <div class=\"searchrow\">
-    <input id=\"search\" type=\"search\" placeholder=\"Search filename...\" autocomplete=\"off\">
+  <div class="chips">
+    <button type="button" class="chip" data-msg="Where you at?">Where you at?</button>
+    <button type="button" class="chip" data-msg="Nice shot">Nice shot</button>
+    <button type="button" class="chip" data-msg="Come to Grove">Come to Grove</button>
   </div>
-  <div class=\"tabs\">
-    <button type=\"button\" class=\"tab on\" id=\"tab_all\" data-filter=\"all\">All</button>
-    <button type=\"button\" class=\"tab\" id=\"tab_today\" data-filter=\"today\">Today</button>
-    <button type=\"button\" class=\"tab\" id=\"tab_sort\" data-sort=\"newest\" title=\"Client-side only — server always sends newest first\">Newest</button>
+  <div class="okmsg" id="ok"></div>
+  <div class="searchrow">
+    <input id="search" type="search" placeholder="Search filename..." autocomplete="off">
   </div>
-  <div id=\"feed\"></div>
-  <div class=\"helpfoot\" id=\"help_foot\">
+  <div class="tabs">
+    <button type="button" class="tab on" id="tab_all" data-filter="all">All</button>
+    <button type="button" class="tab" id="tab_today" data-filter="today">Today</button>
+    <button type="button" class="tab" id="tab_sort" data-sort="newest" title="Client-side only — server always sends newest first">Newest</button>
+  </div>
+  <div id="feed"></div>
+  <div class="helpfoot" id="help_foot">
     <div><strong>Shortcuts</strong> —
       <kbd>?</kbd> help ·
       <kbd>Esc</kbd> close lightbox ·
       <kbd>/</kbd> search ·
-      <button type=\"button\" class=\"helptoggle\" id=\"help_toggle\">more</button>
+      <button type="button" class="helptoggle" id="help_toggle">more</button>
     </div>
-    <div class=\"help-detail\" id=\"help_detail\">
-      <div><strong>GTA:</strong> <kbd>K</kbd> phone · Up/Down menu · Enter/Space select · Backspace close · Camera snaps to this page</div>
-      <div><strong>This page:</strong> Copy LAN/PC URL · Export zip / Clear all (enabled when photos &gt; 0) · Newest/Oldest sort · All/Today tabs</div>
-      <div><strong>Tip:</strong> Keep START_GROVELINK open; phone + PC on same Wi-Fi. Press <kbd>?</kbd> anytime to show/hide this row.</div>
+    <div class="help-detail" id="help_detail">
+      <div><strong>GTA:</strong> <kbd>K</kbd> phone · Up/Down menu · Enter/Space select · Backspace close · Camera snaps here · SMS notifies even if phone closed</div>
+      <div><strong>This page:</strong> Hero + grid feed · Caption · Breaking News · Share · Export / Clear · Texts deliver to CJ via link.ini</div>
+      <div><strong>Tip:</strong> Keep START_GROVELINK open; phone + PC on same Wi-Fi. Press <kbd>?</kbd> anytime.</div>
     </div>
   </div>
+  <div class="composer" id="composer">
+    <div class="fromrow">
+      <label for="from_name">From:</label>
+      <input id="from_name" type="text" maxlength="40" value="REAL PHONE" placeholder="REAL PHONE">
+    </div>
+    <form id="f">
+      <input id="msg" type="text" maxlength="80" placeholder="Message to CJ..." required>
+      <button class="send" type="submit">SEND</button>
+    </form>
+  </div>
 </div>
-<div id=\"lightbox\" onclick=\"closeLb(event)\">
-  <button type=\"button\" class=\"close\" onclick=\"closeLb(event)\">&times;</button>
-  <img id=\"lbimg\" src=\"\" alt=\"full size\">
+<div id="lightbox" onclick="closeLb(event)">
+  <button type="button" class="close" onclick="closeLb(event)">&times;</button>
+  <img id="lbimg" src="" alt="full size">
 </div>
-<div id=\"confirm_dlg\" onclick=\"confirmCancel(event)\">
-  <div class=\"panel\" onclick=\"event.stopPropagation()\">
+<div id="confirm_dlg" onclick="confirmCancel(event)">
+  <div class="panel" onclick="event.stopPropagation()">
     <h2>Delete this shot?</h2>
-    <p id=\"confirm_detail\">Removes it from the phone page only.<br>GTA Gallery file stays on the PC.</p>
-    <div class=\"btns\">
-      <button type=\"button\" class=\"btn-no\" id=\"confirm_no\">Cancel</button>
-      <button type=\"button\" class=\"btn-yes\" id=\"confirm_yes\">Delete</button>
+    <p id="confirm_detail">Removes it from the phone page only.<br>GTA Gallery file stays on the PC.</p>
+    <div class="btns">
+      <button type="button" class="btn-no" id="confirm_no">Cancel</button>
+      <button type="button" class="btn-yes" id="confirm_yes">Delete</button>
     </div>
   </div>
 </div>
@@ -878,27 +1458,29 @@ var FILTER = 'all';
 var SEARCH_Q = '';
 var SORT_ORDER = 'newest'; // client-side only; server /api is always newest-first
 var LAST_PHOTOS = [];
+var LAST_CHAT = [];
 var PENDING_ACTION = ''; // 'delete:NAME' or 'clear'
 function emptyHtml() {
   var ipPort = '';
   try { ipPort = (document.getElementById('ip_port') || {}).textContent || ''; } catch (e) {}
-  return '<div class=\"empty\">' +
+  return '<div class="empty">' +
     '<h2>NO PHOTOS YET</h2>' +
-    '<div class=\"empty-lan\" id=\"empty_lan_copy\" title=\"Tap to copy\">' +
-    '<div class=\"label\">FIRST VISIT — OPEN ON YOUR PHONE</div>' +
-    '<div class=\"ipport\">' + escapeHtml(ipPort) + '</div>' +
-    '<div class=\"hint\">Tap to copy · same Wi-Fi as this PC · keep Copy above too</div>' +
+    '<div class="empty-lan" id="empty_lan_copy" title="Tap to copy">' +
+    '<div class="label">FIRST VISIT — OPEN ON YOUR PHONE</div>' +
+    '<div class="ipport">' + escapeHtml(ipPort) + '</div>' +
+    '<div class="hint">Tap to copy · same Wi-Fi as this PC · keep Copy above too</div>' +
     '</div>' +
     '<ol>' +
     '<li>Run <b>GroveLink Phone</b> / <b>START_GROVELINK</b> on the PC (keep the window open).</li>' +
     '<li>On your phone open <b>http://</b> + the address above (or use Copy).</li>' +
     '<li>In GTA press <b>K</b> → <b>Camera</b> → <b>Enter</b> or <b>Space</b>.</li>' +
     '<li>Phone and PC must be on the <b>same Wi-Fi</b>.</li>' +
+    '<li>Text CJ from the sticky composer — he gets it in-game (INBOX / on-screen notify).</li>' +
     '</ol>' +
     '</div>';
 }
 var EMPTY_TODAY =
-  '<div class=\"empty\">' +
+  '<div class="empty">' +
   '<h2>NO SHOTS TODAY</h2>' +
   '<p>Switch to <b>All</b>, or take a new photo in GTA (K → Camera → Enter).</p>' +
   '</div>';
@@ -918,7 +1500,7 @@ function bindEmptyLanCopy() {
 }
 
 function escapeHtml(s) {
-  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\"/g,'&quot;');
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
 function getLastVisit() {
@@ -957,6 +1539,26 @@ function copyText(text, btn) {
     try { document.execCommand('copy'); ok(); } catch (e) {}
     document.body.removeChild(ta);
   }
+}
+
+function shareUrl(url, title) {
+  url = url || (document.getElementById('lan_url').textContent || window.location.href);
+  title = title || 'GroveLink';
+  if (navigator.share) {
+    navigator.share({ title: title, url: url, text: title + ' — ' + url }).catch(function(){
+      copyText(url, null);
+      flashOk('Link copied');
+    });
+  } else {
+    copyText(url, null);
+    flashOk('Link copied');
+  }
+}
+function flashOk(msg) {
+  var okEl = document.getElementById('ok');
+  if (!okEl) return;
+  okEl.textContent = msg || '';
+  setTimeout(function(){ okEl.textContent = ''; }, 2800);
 }
 
 function openLb(src) {
@@ -1053,18 +1655,77 @@ function doDeletePhoto(name) {
 function sendMsg(msg) {
   msg = (msg || '').trim();
   if (!msg) return;
-  var body = 'msg=' + encodeURIComponent(msg);
+  var frm = (document.getElementById('from_name').value || 'REAL PHONE').trim() || 'REAL PHONE';
+  var body = 'msg=' + encodeURIComponent(msg) + '&from=' + encodeURIComponent(frm);
   var x = new XMLHttpRequest();
   x.open('POST', '/send', true);
   x.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
   x.onreadystatechange = function() {
     if (x.readyState === 4) {
-      document.getElementById('ok').textContent = 'Sent to CJ — open INBOX on the in-game phone.';
-      document.getElementById('msg').value = '';
-      setTimeout(function(){ document.getElementById('ok').textContent = ''; }, 3000);
+      var okEl = document.getElementById('ok');
+      if (x.status === 200) {
+        okEl.textContent = 'Delivered to CJ — open INBOX (or watch on-screen SMS notify).';
+        document.getElementById('msg').value = '';
+        poll();
+      } else {
+        okEl.textContent = 'Send failed.';
+      }
+      setTimeout(function(){ okEl.textContent = ''; }, 3500);
     }
   };
   x.send(body);
+}
+function saveCaption(name, val) {
+  var body = 'file=' + encodeURIComponent(name) + '&caption=' + encodeURIComponent(val || '');
+  var x = new XMLHttpRequest();
+  x.open('POST', '/caption', true);
+  x.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+  x.onreadystatechange = function() {
+    if (x.readyState === 4) {
+      if (x.status === 200) {
+        flashOk('Caption saved');
+        poll();
+      } else {
+        flashOk('Caption save failed');
+      }
+    }
+  };
+  x.send(body);
+}
+function breakingNews(name) {
+  if (!name) return;
+  var capEl = document.getElementById('cap_' + cssId(name));
+  var cap = capEl ? (capEl.value || '') : '';
+  var body = 'file=' + encodeURIComponent(name) + '&caption=' + encodeURIComponent(cap);
+  var x = new XMLHttpRequest();
+  x.open('POST', '/news', true);
+  x.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+  x.onreadystatechange = function() {
+    if (x.readyState === 4) {
+      if (x.status === 200) {
+        try {
+          var j = JSON.parse(x.responseText);
+          if (j.id) {
+            flashOk('News filed — opening Herald…');
+            setTimeout(function(){ window.location.href = '/news/' + j.id; }, 400);
+            return;
+          }
+        } catch (e) {}
+        flashOk('News filed');
+        poll();
+      } else {
+        flashOk('Breaking News failed');
+      }
+    }
+  };
+  x.send(body);
+}
+function cssId(name) {
+  return String(name).replace(/[^a-zA-Z0-9]/g, '_');
+}
+function sharePhoto(name) {
+  var url = window.location.origin + '/photo/' + name;
+  shareUrl(url, 'GroveLink shot');
 }
 
 function setFilter(f) {
@@ -1076,9 +1737,64 @@ function setFilter(f) {
   renderFeed(LAST_PHOTOS);
 }
 
+function photoCard(p, isHero) {
+  var name = p.file || p;
+  var when = p.when || '';
+  var mtime = parseInt(p.mtime || 0, 10) || 0;
+  var sizeH = p.size_h || '';
+  var cap = p.caption || '';
+  var lastVisit = getLastVisit();
+  var isNew = mtime > lastVisit;
+  var href = '/photo/' + name;
+  var safe = String(name).replace(/'/g, '');
+  var cid = cssId(name);
+  var cls = isHero ? 'hero' : 'shot';
+  if (isNew) cls += ' unread';
+  var html = '<div class="' + cls + '">';
+  if (isNew) html += '<div class="badge">NEW</div>';
+  html += '<a class="imgwrap" href="' + href + '" target="_blank" rel="noopener" onclick="openLb(\\'' + href + '\\'); return false;">';
+  html += '<img src="' + href + '" alt="shot">';
+  html += '</a>';
+  var metaBits = [];
+  if (when) metaBits.push(when);
+  if (sizeH) metaBits.push(sizeH);
+  metaBits.push(name);
+  html += '<div class="meta"><span class="grow">' + escapeHtml(metaBits.join(' · ')) +
+          ' · <a href="' + href + '" target="_blank" rel="noopener">full size</a></span></div>';
+  html += '<div class="caprow"><input id="cap_' + cid + '" type="text" maxlength="200" placeholder="Optional caption…" value="' + escapeHtml(cap) + '">';
+  html += '<button type="button" class="capbtn" onclick="saveCaption(\\'' + safe + '\\', document.getElementById(\\'' + 'cap_' + cid + '\\').value)">Save</button></div>';
+  html += '<div class="btns">';
+  html += '<button type="button" class="newsbtn" onclick="breakingNews(\\'' + safe + '\\')">Breaking News</button>';
+  html += '<button type="button" class="sharebtn" onclick="sharePhoto(\\'' + safe + '\\')">Share</button>';
+  html += '<button type="button" class="delbtn" onclick="deletePhoto(\\'' + safe + '\\')">Delete</button>';
+  html += '</div></div>';
+  return { html: html, isNew: isNew };
+}
+
+function renderChat(inbox) {
+  var box = document.getElementById('chat_thread');
+  if (!box) return;
+  var list = inbox || [];
+  LAST_CHAT = list;
+  if (!list.length) {
+    box.innerHTML = '<div class="chatempty">Send a message below — delivered texts show here.</div>';
+    return;
+  }
+  var html = '';
+  for (var i = 0; i < list.length && i < 8; i++) {
+    var m = list[i];
+    var text = typeof m === 'string' ? m : (m.msg || '');
+    var who = (typeof m === 'object' && m.from) ? m.from : 'REAL PHONE';
+    var when = (typeof m === 'object' && m.when) ? m.when : '';
+    html += '<div class="chatmsg"><div class="who">' + escapeHtml(who) + (when ? ' · ' + escapeHtml(when) : '') + '</div>';
+    html += escapeHtml(text);
+    html += '<div class="deliv">Delivered to CJ</div></div>';
+  }
+  box.innerHTML = html;
+}
+
 function renderFeed(photos) {
   var feed = document.getElementById('feed');
-  var lastVisit = getLastVisit();
   var unread = 0;
   var today0 = startOfTodaySec();
   var list = photos || [];
@@ -1095,7 +1811,8 @@ function renderFeed(photos) {
     var filtered2 = [];
     for (var k = 0; k < list.length; k++) {
       var nm = String(list[k].file || list[k] || '').toLowerCase();
-      if (nm.indexOf(q) >= 0) filtered2.push(list[k]);
+      var cp = String(list[k].caption || '').toLowerCase();
+      if (nm.indexOf(q) >= 0 || cp.indexOf(q) >= 0) filtered2.push(list[k]);
     }
     list = filtered2;
   }
@@ -1112,35 +1829,27 @@ function renderFeed(photos) {
   if (!list.length) {
     document.getElementById('unread_count').textContent = '0';
     if (SEARCH_Q) {
-      feed.innerHTML = '<div class=\"empty\"><h2>NO MATCHES</h2><p>No filenames match <b>' + escapeHtml(SEARCH_Q) + '</b>. Clear the search box.</p></div>';
+      feed.innerHTML = '<div class="empty"><h2>NO MATCHES</h2><p>No filenames match <b>' + escapeHtml(SEARCH_Q) + '</b>. Clear the search box.</p></div>';
     } else {
       feed.innerHTML = EMPTY_TODAY;
     }
     return;
   }
+  var lastVisit = getLastVisit();
+  for (var u = 0; u < list.length; u++) {
+    var mt2 = parseInt(list[u].mtime || 0, 10) || 0;
+    if (mt2 > lastVisit) unread++;
+  }
   var html = '';
-  for (var i = 0; i < list.length && i < 40; i++) {
-    var p = list[i];
-    var name = p.file || p;
-    var when = p.when || '';
-    var mtime = parseInt(p.mtime || 0, 10) || 0;
-    var sizeH = p.size_h || '';
-    var isNew = mtime > lastVisit;
-    if (isNew) unread++;
-    var href = '/photo/' + name;
-    html += '<div class=\"shot' + (isNew ? ' unread' : '') + '\">';
-    if (isNew) html += '<div class=\"badge\">NEW</div>';
-    html += '<a class=\"imgwrap\" href=\"' + href + '\" target=\"_blank\" rel=\"noopener\" onclick=\"openLb(\\'' + href + '\\'); return false;\">';
-    html += '<img src=\"' + href + '\" alt=\"shot\">';
-    html += '</a>';
-    var metaBits = [];
-    if (when) metaBits.push(when);
-    if (sizeH) metaBits.push(sizeH);
-    metaBits.push(name);
-    html += '<div class=\"meta\"><span class=\"grow\">' + escapeHtml(metaBits.join(' · ')) +
-            ' · <a href=\"' + href + '\" target=\"_blank\" rel=\"noopener\">full size</a></span>';
-    html += '<button type=\"button\" class=\"delbtn\" onclick=\"deletePhoto(\\'' + String(name).replace(/'/g, '') + '\\')\">Delete</button>';
-    html += '</div></div>';
+  var hero = list[0];
+  var card0 = photoCard(hero, true);
+  html += '<div class="sectionlab">LATEST</div>' + card0.html;
+  if (list.length > 1) {
+    html += '<div class="sectionlab">FEED</div><div class="grid">';
+    for (var i = 1; i < list.length && i < 40; i++) {
+      html += photoCard(list[i], false).html;
+    }
+    html += '</div>';
   }
   document.getElementById('unread_count').textContent = String(unread);
   feed.innerHTML = html;
@@ -1152,7 +1861,6 @@ function paint(data) {
   LAST_PHOTOS = photos;
   var nCount = (typeof data.count === 'number') ? data.count : photos.length;
   count.textContent = nCount;
-  // Disable Clear all / Export / Download latest when no photos (UX)
   setCountActions(nCount, data.latest || (photos[0] && (photos[0].file || photos[0])) || '');
   var lr = data.last_refresh_human || data.last_refresh || '—';
   document.getElementById('last_refresh').textContent = lr;
@@ -1214,7 +1922,7 @@ function paint(data) {
       sms.href = 'sms:?&body=' + encodeURIComponent(note);
     }
   }
-
+  renderChat(data.inbox || []);
   renderFeed(photos);
 }
 function setCountActions(n, latest) {
@@ -1311,6 +2019,9 @@ document.getElementById('big_copy').onclick = function() {
   hint.textContent = 'Copied! Open http://' + t + ' on your phone';
   setTimeout(function(){ hint.textContent = old; }, 2000);
 };
+document.getElementById('share_page').onclick = function() {
+  shareUrl(document.getElementById('lan_url').textContent, 'GroveLink');
+};
 document.getElementById('tab_all').onclick = function() { setFilter('all'); };
 document.getElementById('tab_today').onclick = function() { setFilter('today'); };
 (function() {
@@ -1320,7 +2031,6 @@ document.getElementById('tab_today').onclick = function() { setFilter('today'); 
     SORT_ORDER = (SORT_ORDER === 'newest') ? 'oldest' : 'newest';
     btn.setAttribute('data-sort', SORT_ORDER);
     btn.textContent = (SORT_ORDER === 'newest') ? 'Newest' : 'Oldest';
-    // Do not steal All/Today 'on' state — sort is a separate toggle
     btn.className = 'tab';
     renderFeed(LAST_PHOTOS);
   };
@@ -1353,9 +2063,7 @@ document.getElementById('clear_all').onclick = function() {
 document.getElementById('mark_read').onclick = function() {
   setLastVisit(Math.floor(Date.now()/1000));
   poll();
-  var okEl = document.getElementById('ok');
-  okEl.textContent = 'Marked all as read.';
-  setTimeout(function(){ okEl.textContent = ''; }, 2000);
+  flashOk('Marked all as read.');
 };
 document.getElementById('f').onsubmit = function(ev) {
   ev.preventDefault();
@@ -1385,7 +2093,6 @@ document.addEventListener('keydown', function(ev) {
   var typing = (tag === 'INPUT' || tag === 'TEXTAREA');
   var key = ev.key || '';
   var code = ev.keyCode || ev.which || 0;
-  // Esc closes lightbox / confirm
   if (code === 27 || key === 'Escape') {
     var lb = document.getElementById('lightbox');
     if (lb && lb.className === 'show') { closeLb(ev); return; }
@@ -1393,13 +2100,11 @@ document.addEventListener('keydown', function(ev) {
     if (dlg && dlg.className === 'show') { confirmCancel(ev); return; }
   }
   if (typing) return;
-  // ? toggles help footer detail
   if (key === '?' || (ev.shiftKey && code === 191)) {
     toggleHelpDetail();
     if (ev.preventDefault) ev.preventDefault();
     return;
   }
-  // / focuses search
   if (key === '/' || code === 191) {
     var s = document.getElementById('search');
     if (s) { s.focus(); if (ev.preventDefault) ev.preventDefault(); }
@@ -1413,6 +2118,7 @@ schedulePoll();
 </script>
 </body>
 </html>
+
 """
 
 
@@ -1478,14 +2184,25 @@ def api_payload():
     ip = STATE.get("ip", "127.0.0.1")
     port = STATE.get("port", 8088)
     photos = STATE.get("photos", [])
+    try:
+        photos = attach_captions_to_photos(photos)
+    except Exception:
+        pass
     latest = ""
     if photos:
         latest = photos[0].get("file") or ""
+    inbox = STATE.get("inbox", [])
+    try:
+        chat = load_chat_log()
+        if chat:
+            inbox = chat
+    except Exception:
+        pass
     return {
         "ok": True,
         "bridge_ok": bool(STATE.get("bridge_ok", True)),
         "photos": photos,
-        "inbox": STATE.get("inbox", []),
+        "inbox": inbox,
         "photo_count": len(photos),
         "count": len(photos),
         "latest": latest,
@@ -1500,6 +2217,8 @@ def api_payload():
         "version": STATE.get("version", "unknown") or "unknown",
         "last_error": STATE.get("last_error", "") or "",
         "skipped_deleted": len(DELETED),
+        "news_auto": bool(STATE.get("news_auto")),
+        "news_count": len(list_news_articles(5)),
     }
 
 
@@ -1771,6 +2490,21 @@ class Handler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(data)
             return
+        if path == "/news" or path == "/news/":
+            self._html(render_news_index())
+            return
+        if path.startswith("/news/"):
+            art_id = unquote(path[len("/news/"):]).strip("/")
+            art_id = os.path.basename(art_id)
+            page = render_news_article_page(art_id)
+            if not page:
+                self.send_error(404)
+                return
+            self._html(page)
+            return
+        if path == "/api/chat":
+            self._json({"ok": True, "inbox": load_chat_log()})
+            return
         self.send_error(404)
 
     def do_POST(self):
@@ -1827,38 +2561,108 @@ class Handler(BaseHTTPRequestHandler):
             self._json({"ok": ok, "detail": detail, "file": os.path.basename(name or "")}, code=code)
             return
 
+        if path == "/caption":
+            name = ""
+            caption = ""
+            if text_body.lstrip().startswith("{"):
+                try:
+                    obj = json.loads(text_body)
+                    name = obj.get("file") or obj.get("name") or ""
+                    caption = obj.get("caption") or ""
+                except Exception:
+                    name = ""
+            else:
+                fields = parse_qs(text_body)
+                if "file" in fields and fields["file"]:
+                    name = fields["file"][0]
+                if "caption" in fields and fields["caption"]:
+                    caption = fields["caption"][0]
+            ok, detail = set_caption(name, caption)
+            # Refresh captions on STATE photos
+            try:
+                STATE["photos"] = attach_captions_to_photos(STATE.get("photos", []))
+            except Exception:
+                pass
+            code = 200 if ok else 400
+            self._json({"ok": ok, "file": _safe_basename(name), "caption": detail}, code=code)
+            return
+
+        if path == "/news":
+            name = ""
+            caption = ""
+            if text_body.lstrip().startswith("{"):
+                try:
+                    obj = json.loads(text_body)
+                    name = obj.get("file") or obj.get("photo") or ""
+                    caption = obj.get("caption") or ""
+                except Exception:
+                    name = ""
+            else:
+                fields = parse_qs(text_body)
+                if "file" in fields and fields["file"]:
+                    name = fields["file"][0]
+                elif "photo" in fields and fields["photo"]:
+                    name = fields["photo"][0]
+                if "caption" in fields and fields["caption"]:
+                    caption = fields["caption"][0]
+            link = getattr(self.server, "link_ini", None) or STATE.get("link_ini") or ""
+            ok, article, detail = create_news_from_photo(
+                name, caption=caption, auto=False, link_ini=link
+            )
+            if not ok or not article:
+                self._json({"ok": False, "detail": detail or "failed"}, code=400)
+                return
+            self._json({
+                "ok": True,
+                "id": article.get("id"),
+                "headline": article.get("headline"),
+                "url": "/news/%s" % article.get("id"),
+            })
+            return
+
         if path != "/send":
             self.send_error(404)
             return
         msg = ""
+        frm = "REAL PHONE"
         if text_body.lstrip().startswith("{"):
             try:
-                msg = json.loads(text_body).get("msg") or ""
+                obj = json.loads(text_body)
+                msg = obj.get("msg") or ""
+                frm = obj.get("from") or frm
             except Exception:
                 msg = ""
         else:
             fields = parse_qs(text_body)
             if "msg" in fields and fields["msg"]:
                 msg = fields["msg"][0]
+            if "from" in fields and fields["from"]:
+                frm = fields["from"][0]
         msg = (msg or "").strip().replace("\r", " ").replace("\n", " ")[:80]
+        frm = (frm or "REAL PHONE").strip().replace("\r", " ").replace("\n", " ")[:40] or "REAL PHONE"
         if msg:
-            STATE["inbox"].insert(0, msg)
-            STATE["inbox"] = STATE["inbox"][:30]
+            entry = append_chat_delivered(frm, msg)
             STATE["sent"] = STATE.get("sent", 0) + 1
             write_ini_kv(self.server.link_ini, "INBOX", {
                 "new": "1",
-                "from": "REAL PHONE",
+                "from": frm.replace("=", "-"),
                 "msg": msg.replace("=", "-"),
             })
-            print("SMS -> GTA:", msg)
-        self._json({"ok": True})
+            print("SMS -> GTA:", frm, msg)
+            self._json({"ok": True, "delivered": True, "from": frm, "msg": msg, "entry": entry})
+            return
+        self._json({"ok": True, "delivered": False})
 
 
 
-def shutter_burst(cfg, gta_dir, seconds=3.0, interval=0.25):
+def shutter_burst(cfg, gta_dir, seconds=3.0, interval=0.25, link_ini=None):
     """After PHOTO.take flips, poll/copy aggressively for a few seconds."""
     deadline = time.time() + seconds
     STATE["shutter_burst_until"] = deadline
+    before = set()
+    for p in STATE.get("photos") or []:
+        if isinstance(p, dict) and p.get("file"):
+            before.add(p["file"])
     while time.time() < deadline:
         try:
             ensure_gallery_dirs(cfg, gta_dir)
@@ -1869,6 +2673,22 @@ def shutter_burst(cfg, gta_dir, seconds=3.0, interval=0.25):
             print("burst error:", exc)
         time.sleep(interval)
     STATE["shutter_burst_until"] = 0
+    # Optional auto Breaking News draft for newly arrived bridge photos
+    if STATE.get("news_auto"):
+        after = []
+        for p in STATE.get("photos") or []:
+            if isinstance(p, dict) and p.get("file") and p["file"] not in before:
+                after.append(p["file"])
+        ini = link_ini or STATE.get("link_ini") or ""
+        for name in after[:3]:
+            try:
+                ok, art, _detail = create_news_from_photo(
+                    name, caption=get_caption(name), auto=True, link_ini=ini
+                )
+                if ok and art:
+                    print("Auto news filed:", art.get("id"), art.get("headline", "")[:60])
+            except Exception as exc:
+                print("auto news error:", exc)
 
 
 def watcher(cfg, gta_dir, ini):
@@ -1894,7 +2714,7 @@ def watcher(cfg, gta_dir, ini):
             if take == "1":
                 write_ini_kv(ini, "PHOTO", {"take": "0"})
                 print("Shutter — fast poll for new Gallery files...")
-                shutter_burst(cfg, gta_dir, seconds=3.5, interval=0.25)
+                shutter_burst(cfg, gta_dir, seconds=3.5, interval=0.25, link_ini=ini)
                 print("Shutter done. Phone page has", len(STATE["photos"]), "shots")
                 # Race fix: another snap may have set take=1 during burst — loop now
                 if read_ini_key(ini, "PHOTO", "take", "0") == "1":
@@ -1938,6 +2758,12 @@ def main():
     STATE["phone_page_logged"] = False
     STATE["version"] = read_pack_version()
     STATE["last_error"] = ""
+    STATE["news_auto"] = cfg_flag(cfg, "news", "auto", False)
+    STATE["link_ini"] = ini
+    try:
+        STATE["inbox"] = load_chat_log()
+    except Exception:
+        STATE["inbox"] = []
 
     print("================================================")
     print("  GROVELINK PHONE BRIDGE")
@@ -1965,6 +2791,9 @@ def main():
     print("  Phone page poll_ms             :", poll_ms)
     print("  Export zip:")
     print("      http://127.0.0.1:%s/export.zip" % port)
+    print("  Grove Street Herald (fake news):")
+    print("      http://127.0.0.1:%s/news" % port)
+    print("  news.auto (auto-draft on shutter):", 1 if STATE.get("news_auto") else 0)
     print("")
     print("  Keep this window open while you play.")
     print("================================================")

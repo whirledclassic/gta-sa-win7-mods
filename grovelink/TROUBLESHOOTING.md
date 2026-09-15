@@ -7,7 +7,7 @@ Double-click **`VERIFY_GROVELINK.bat`** (Desktop after INSTALL, or repo root). I
 - `gta_sa.exe`, `CLEO.asi`, `GroveLinkPhone.cs`, `link.ini`
 - Python, `config.ini`, bridge script
 - `GroveLinkPhone.txt` in the repo + writable `bridge/photos`
-- Firewall note + URLs to try (`http://127.0.0.1:8088`, `/health`, `/qr`, `/export.zip`, phone LAN URL)
+- Firewall note + URLs to try (`http://127.0.0.1:8088`, `/health`, `/qr`, `/export.zip`, `/news`, phone LAN URL)
 
 Fix anything marked MISSING, then run VERIFY again.
 
@@ -159,3 +159,25 @@ Bridge is **stdlib only** (no pip packages).
 2. Bridge sets `STATUS.bridge=1` on start (and `0` on clean stop).  
 3. In GTA: **K** → **STATUS** → should read **BRIDGE LIVE  N shots**.  
 4. On the phone page: red banner clears automatically once `/api` responds again.
+
+## Texting CJ from the phone page
+
+1. Keep **START_GROVELINK** / GroveLink Phone running on the PC.
+2. Phone + PC on the **same Wi-Fi**; open the printed LAN URL.
+3. Type a message (optional **From:** name) → **SEND**.
+4. Bridge writes `CLEO\GroveLink\link.ini` **[INBOX]** `new=1`, `from=`, `msg=`.
+5. In GTA: even if the phone is closed you should see **SMS FROM REAL PHONE** once; open **K** → **INBOX** to read the text.
+6. The web page chat thread shows **Delivered to CJ** for recent sends.
+
+If CJ never sees it: VERIFY `link.ini` path, confirm bridge `STATUS.bridge=1`, and that INSTALL put `link.ini` under the same GTA folder the game uses.
+
+## Breaking News / Grove Street Herald
+
+1. On the phone page, open a shot → optional caption → **Breaking News**.
+2. Browser opens `/news/<id>` (Grove Street Herald styling). Index: `/news`.
+3. Articles are JSON under `grovelink/bridge/news/` (stdlib only; no cloud AI).
+4. Optional auto-draft: set `[news] auto=1` in `bridge/config.ini`, restart bridge; after a Camera snap the bridge may file a story and CLEO can flash **NEWS FILED**.
+
+## Captions missing after update
+
+Captions live in `bridge/photos_captions.json` and optional `bridge/photos/<file>.txt`. Clearing phone copies does not wipe the JSON index entries for deleted names (harmless). Re-save a caption from the page if needed.

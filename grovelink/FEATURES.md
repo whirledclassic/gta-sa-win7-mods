@@ -1,6 +1,6 @@
 # GroveLink — current features
 
-Pack version: see root **`VERSION`** (`1.7.1`). Crash-safer CLEO (no `hold_cellphone`, no custom GXT `033E`). Bridge is **stdlib-only** (Win7 Python 2.7 / 3.4–3.8).
+Pack version: see root **`VERSION`** (`1.8.0`). Crash-safer CLEO (no `hold_cellphone`, no custom GXT `033E`). Bridge is **stdlib-only** (Win7 Python 2.7 / 3.4–3.8).
 
 ## Install / update / verify / test
 
@@ -11,7 +11,7 @@ Pack version: see root **`VERSION`** (`1.7.1`). Crash-safer CLEO (no `hold_cellp
 | **One-click update** | Desktop / repo `UPDATE_GROVELINK.bat` — GitHub zip (no Git), overlays files, re-runs INSTALL |
 | **Health check** | Desktop / repo `VERIFY_GROVELINK.bat` — OK/MISSING for game, CLEO, `.cs`, `link.ini`, Python, config, photos dir, **VERSION** (prints pack version), URLs |
 | **Human changelog** | Root `CHANGELOG.md` — pack 1.0→current highlights |
-| **Smoke test** | `tests/smoke_bridge.py` (Linux/Win7, stdlib) or `grovelink/bridge/TEST_BRIDGE.bat` — asserts `/health`, `/api`, `/export.zip`, `/clear` confirm, HTML sort, CLEO static |
+| **Smoke test** | `tests/smoke_bridge.py` (Linux/Win7, stdlib) or `grovelink/bridge/TEST_BRIDGE.bat` — asserts `/health`, `/api`, `/news`, `/send`, `/export.zip`, HTML gallery, CLEO static |
 | **Desktop starters** | **GroveLink Phone**, `START_GROVELINK`, `VERIFY_GROVELINK`, `UPDATE_GROVELINK`, `GroveLink_README.txt`, `GroveLink_PHONE_URL.txt`, `GroveLink_REPO.txt` (not INSTALL itself) |
 | **START bat** | Prints pack **VERSION** (CR-stripped); if Python missing, clear Win7 3.8.10 instructions + opens python.org download page |
 | **Port in use** | Bridge prints plain English **port N busy** if TCP bind fails (close other GroveLink / free the port) |
@@ -22,6 +22,8 @@ Pack version: see root **`VERSION`** (`1.7.1`). Crash-safer CLEO (no `hold_cellp
 |------|----------|
 | **CAMERA** | Snap (Enter/Space); shutter sound; `PHOTO.take` + count; **PHOTO TAKEN #N** |
 | **INBOX** | Shows SMS when `new=1`; otherwise **NO NEW TEXTS**; sound when new |
+| **Closed-phone SMS** | If `INBOX.new=1`, once: **SMS FROM REAL PHONE** (0ACD + sound) so you open **K** |
+| **NEWS toast** | If `NEWS.new=1` (auto Breaking News): **NEWS FILED** once, then clears flag |
 | **CONTACTS** | Cycles Sweet / Smoke / Ryder / Cesar / **Catalina** flavor lines (static text; advances each select) |
 | **STATUS** | **LIVE N  PHONE PAGE ON PC** / **NO BRIDGE** + shot count from `link.ini` |
 | **HELP** | K / Camera tips, START GROVELINK on PC, **UPDATE_GROVELINK** if outdated |
@@ -57,7 +59,7 @@ Pack version: see root **`VERSION`** (`1.7.1`). Crash-safer CLEO (no `hold_cellp
 | **last_error** | `/api` + `/health` include `last_error` when Gallery / bridge photos are unreadable (empty string when OK) |
 | **Shutter burst** | After `PHOTO.take=1`, aggressive Gallery poll for a few seconds |
 | **Gallery watch** | Re-detects Gallery dirs every second |
-| **Endpoints** | `/`, `/api`, `/health`, `/send`, `/delete`, `/clear`, `/photo/…`, `/qr`, `/export.zip` |
+| **Endpoints** | `/`, `/api`, `/api/chat`, `/health`, `/send`, `/caption`, `/news`, `/news/<id>`, `/delete`, `/clear`, `/photo/…`, `/qr`, `/export.zip` |
 
 ## Config (`grovelink/bridge/config.ini`)
 
@@ -68,6 +70,9 @@ port = 8088
 open_browser = 1
 max_photos = 40
 poll_ms = 2000
+
+[news]
+auto = 0
 ```
 
 Paths: `gta_dir`, `gallery_dir`, `gallery_dir_alt` (INSTALL overwrites these).
