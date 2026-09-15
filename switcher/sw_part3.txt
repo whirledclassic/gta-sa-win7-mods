@@ -1,0 +1,71 @@
+:SAY_WHO
+00D6: if
+0039:   22@ == 270
+004D: jf @NM_SM
+0ACD: show_text_highpriority "YOU ARE SWEET  -  CJ RIDES WITH YOU" time 2400
+0051: return
+:NM_SM
+00D6: if
+0039:   22@ == 269
+004D: jf @NM_RY
+0ACD: show_text_highpriority "YOU ARE SMOKE  -  CJ RIDES WITH YOU" time 2400
+0051: return
+:NM_RY
+00D6: if
+0039:   22@ == 271
+004D: jf @NM_CE
+0ACD: show_text_highpriority "YOU ARE RYDER  -  CJ RIDES WITH YOU" time 2400
+0051: return
+:NM_CE
+00D6: if
+0039:   22@ == 292
+004D: jf @NM_OG
+0ACD: show_text_highpriority "YOU ARE CESAR  -  CJ RIDES WITH YOU" time 2400
+0051: return
+:NM_OG
+00D6: if
+0039:   22@ == 293
+004D: jf @NM_KE
+0ACD: show_text_highpriority "YOU ARE OG LOC  -  CJ IS WITH YOU" time 2400
+0051: return
+:NM_KE
+00D6: if
+0039:   22@ == 80
+004D: jf @NM_TR
+0ACD: show_text_highpriority "YOU ARE KENDL  -  CJ IS WITH YOU" time 2400
+0051: return
+:NM_TR
+00D6: if
+0039:   22@ == 300
+004D: jf @NM_CAT
+0ACD: show_text_highpriority "YOU ARE THE TRUTH  -  CJ IS WITH YOU" time 2400
+0051: return
+:NM_CAT
+00D6: if
+0039:   22@ == 298
+004D: jf @NM_WU
+0ACD: show_text_highpriority "YOU ARE CATALINA  -  CJ IS WITH YOU" time 2400
+0051: return
+:NM_WU
+00D6: if
+0039:   22@ == 294
+004D: jf @NM_FAM
+0ACD: show_text_highpriority "YOU ARE WOOZIE  -  CJ IS WITH YOU" time 2400
+0051: return
+:NM_FAM
+00D6: if or
+0039:   22@ == 105
+0039:   22@ == 106
+0039:   22@ == 107
+004D: jf @NM_JZ
+0ACD: show_text_highpriority "YOU ARE A GROVE HOMIE  -  CJ IS WITH YOU" time 2400
+0051: return
+:NM_JZ
+00D6: if
+0039:   22@ == 296
+004D: jf @NM_GEN
+0ACD: show_text_highpriority "YOU ARE JIZZY  -  CJ IS WITH YOU" time 2400
+0051: return
+:NM_GEN
+0ACD: show_text_highpriority "YOU SWITCHED  -  CJ KEEPS UP" time 2400
+0051: return

@@ -1,4 +1,7 @@
-If MissionSwitcher.txt is under 2KB, it is broken.
-Restore v7:
+BROKEN if this file is under 2KB.
+Restore the last complete switcher:
+
   git checkout ce080795 -- switcher/MissionSwitcher.txt
-Then apply switcher/UPGRADE_V82.txt and F7.
+
+Optional: apply UPGRADE_V82.txt then F7.
+Toast must say SWITCHER V7 or SWITCHER V8.2
