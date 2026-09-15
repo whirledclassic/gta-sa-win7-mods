@@ -1,5 +1,8 @@
-# Mission Companion Switcher v8.1
+# Mission Companion Switcher v8.2
 
-QoL: CJ only fights when you press Y (no more aiming = murder). Heals if low. Tighter bike/foot follow. Faster bike speed for the first-mission pack. Less radar spam.
+Compile `MissionSwitcher.txt` in Sanny (GTA San Andreas, F7).
+Copy `MissionSwitcher.cs` into `[GTA]\\CLEO\\`.
 
-Compile `MissionSwitcher.txt` (includes `sw_v8a.txt` + `sw_v8b.txt`).
+H become · G next · J you are CJ · U reset · N bot · B hold · T Sweet · I bike · **P pull CJ to you** · L status
+
+Toast at load: SWITCHER V8.2

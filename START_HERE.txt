@@ -1,36 +1,22 @@
-GROVELINK + COMPANION SWITCHER v8
+GROVELINK + COMPANION SWITCHER v8.2
 ================================
 Windows 7 / GTA SA PC 1.0 / CLEO 4.3 or 4.4
 
-FIRST TIME
-1. Install CLEO so CLEO.asi sits next to gta_sa.exe
-   https://cleo.li
-2. Install Sanny Builder 3 or 4
-   https://sannybuilder.com
-3. Right-click INSTALL.bat  ->  Run as administrator
+Compile switcher\\MissionSwitcher.txt in Sanny (F7).
+Copy MissionSwitcher.cs into [GTA]\\CLEO\\
 
 IN GAME
   K     GroveLink phone
-  H     become the companion next to you (works on bikes). CJ stays.
+  H     become nearest homie (works on bikes)
   F6    same as H
-  T     call Sweet in (he gets a BMX if you are riding)
+  T     call Sweet
   G     next companion
-  J     you are CJ again (takes CJ's bike if he was riding)
-  U     hard reset  (NOT R — R is reload)
-  N     send CJ away / call him back
+  J     you are CJ again
+  U     hard reset
+  N     send CJ away / call back
   B     CJ hold / follow
-  I     give CJ a bike that matches yours
-  Y     CJ fight with you / stand down
-  M     send CJ to your map waypoint
-  L     switcher status
+  I     give CJ a BMX
+  P     pull CJ onto you (if he lags)
+  L     status
 
-Look for SWITCHER V8 at load. Green blip = CJ bot.
-
-PHONE CHAT
-  Desktop START_GROVELINK.bat
-  open the URL it prints  http://LAN-IP:8088
-
-LATER
-  Desktop CHECK_GROVELINK.bat
-  Desktop PATCH_GROVELINK.bat
-  UPDATE.bat
+Look for SWITCHER V8.2 at load.
