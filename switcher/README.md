@@ -1,9 +1,5 @@
-# Mission Companion Switcher v8.0
+# Mission Companion Switcher v8.1
 
-Play as them. CJ stays: foot, shotgun, matched bike, combat, waypoint.
+QoL: CJ only fights when you press Y (no more aiming = murder). Heals if low. Tighter bike/foot follow. Faster bike speed for the first-mission pack. Less radar spam.
 
-H become · G next · J you are CJ · U reset · N send CJ · B hold · T Sweet · I bike · **Y fight** · **M marker** · L status
-
-Compile `MissionSwitcher.txt` (Sanny, GTA San Andreas, F7). Copy `MissionSwitcher.cs` into `[GTA]\\CLEO\\`.
-
-See [docs/SWITCHER.md](../docs/SWITCHER.md).
+Compile `MissionSwitcher.txt` (includes `sw_v8a.txt` + `sw_v8b.txt`).
