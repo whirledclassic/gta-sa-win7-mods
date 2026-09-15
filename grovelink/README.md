@@ -28,9 +28,9 @@ Until PR #1 merges, `update.ini` defaults to branch `fix/grovelink-camera-snapsh
 - **Enter** or **Space** — select / snap (Camera), read INBOX, cycle contacts, show status, show HELP
 - **Backspace** — close
 - **CAMERA** — snap; shutter sound (`018C`); shows **PHOTO TAKEN #N** (count from `link.ini`)
-- **INBOX** — shows last SMS from the real-phone page (`INBOX.msg`); clears `INBOX.new`; plays a short sound (`018C`) when `new=1`
+- **INBOX** — when `new=1` shows SMS + sound; otherwise **NO NEW TEXTS**
 - **CONTACTS** — flavor only: cycles Sweet / Smoke / Ryder / Cesar lines via `0ACD` (static text, no ped models)
-- **STATUS** — **BRIDGE LIVE** / **NO BRIDGE** + shot count from `link.ini` when readable
+- **STATUS** — **LIVE N  PHONE PAGE ON PC** / **NO BRIDGE** + shot count from `link.ini` when readable
 - **HELP** — K / Camera tips, **OPEN START GROVELINK ON PC**, and **Outdated? UPDATE_GROVELINK**
 - **CLOSE** — put the phone away
 - If the bridge is not running (`STATUS.bridge=0`), opening the phone reminds you once: **START GROVELINK BRIDGE**
@@ -44,7 +44,10 @@ Until PR #1 merges, `update.ini` defaults to branch `fix/grovelink-camera-snapsh
 - **All / Today** album tabs (pure JS filter by photo `mtime`)
 - Quick-reply chips: **Where you at?**, **Nice shot**, **Come to Grove** → fill + `POST /send`
 - Meta line shows timestamp, **file size**, and filename
-- **Delete** on each shot removes it from **bridge/photos only** — it does **not** delete the file in the GTA Gallery
+- **Delete** on each shot → pinch-friendly **Delete this shot?** confirm; removes **bridge/photos only** (not GTA Gallery)
+- **Clear all phone copies** → confirm then `POST /clear` (bridge cache only)
+- **Search** box filters shots by filename
+- Empty first visit shows **large LAN IP:port** (tap to copy) above the checklist
 - `server.max_photos` (default **40**) — bridge prunes oldest files under `bridge/photos` only
 - Unread badge: shots newer than your last visit (`localStorage` timestamp) get a **NEW** highlight
 - Meta `theme-color` + short **Add to Home Screen** tip for phones
@@ -54,8 +57,9 @@ Until PR #1 merges, `update.ini` defaults to branch `fix/grovelink-camera-snapsh
 - Auto-refresh interval from `server.poll_ms` (default **2000** ms), exposed in `/api` as `poll_ms`
 - SMS box still posts to `/send` → `link.ini` INBOX for the in-game phone
 - First load of `/` logs **Phone page opened** in the bridge window
-- **`GET /api`** → JSON with `photos` (incl. `size` / `size_h`), `latest`, `count` / `photo_count`, `bridge_ok`, URLs, `max_photos`, `poll_ms`, `version`, refresh time
-- **`GET /health`** → JSON `{ok, bridge_ok, photo_count, count, latest, galleries, ip, port, gta_dir, version, poll_ms, max_photos}`
+- **`GET /api`** → JSON with `photos`, `latest`, `count`, `bridge_ok`, `poll_ms`, `version`, **`last_error`**, URLs, refresh time
+- **`GET /health`** → same core fields + `galleries`, `gta_dir`, **`last_error`**
+- **`POST /clear`** (or `GET /clear?confirm=1`) → wipe all `bridge/photos` copies
 - **`GET /export.zip`** → zip of current `bridge/photos` (stdlib `zipfile`; Gallery untouched)
 - **`POST /delete`** (or careful `GET /delete?file=…`) → remove from bridge cache only
 - On start: writes `bridge/OPEN_ON_PHONE.txt`, sets `STATUS.bridge=1`, optional browser open (`server.open_browser=1` default)
@@ -79,6 +83,13 @@ Until PR #1 merges, `update.ini` defaults to branch `fix/grovelink-camera-snapsh
 ## Feature checklist
 
 See [FEATURES.md](FEATURES.md) for the full install / camera / inbox / phone-page list.
+
+## Smoke test (PC or Linux)
+
+```
+python tests/smoke_bridge.py
+```
+Or double-click `grovelink/bridge/TEST_BRIDGE.bat` on Windows. Asserts `/health`, `/api`, `/export.zip`, `/clear`, HTML, CLEO static.
 
 ## Troubleshooting
 

@@ -101,6 +101,7 @@ STATE = {
     "poll_ms": 2000,
     "phone_page_logged": False,
     "version": "unknown",
+    "last_error": "",
 }
 
 
@@ -302,12 +303,14 @@ def stamp_now():
 def list_images(folders):
     out = []
     seen = set()
+    gallery_err = ""
     for folder in folders:
         if not folder or not os.path.isdir(folder):
             continue
         try:
             names = os.listdir(folder)
-        except Exception:
+        except Exception as exc:
+            gallery_err = "gallery unreadable: %s (%s)" % (folder, exc)
             continue
         for name in names:
             low = name.lower()
@@ -331,6 +334,13 @@ def list_images(folders):
                 continue
             out.append((mtime, full, name))
     out.sort(key=lambda x: x[0], reverse=True)
+    # Surface gallery read failures to /api as last_error (cleared when OK)
+    if gallery_err:
+        STATE["last_error"] = gallery_err
+    elif folders:
+        prev = STATE.get("last_error") or ""
+        if prev.startswith("gallery unreadable"):
+            STATE["last_error"] = ""
     return out
 
 
@@ -418,7 +428,12 @@ def copy_latest(folders):
         seen.add(name)
     # Also list bridge photos not from gallery copy (manual drops) up to max
     try:
-        for name in os.listdir(WEB_PHOTOS):
+        bridge_names = os.listdir(WEB_PHOTOS)
+    except Exception as exc:
+        STATE["last_error"] = "bridge photos unreadable: %s" % exc
+        bridge_names = []
+    try:
+        for name in bridge_names:
             if name in seen or name in DELETED:
                 continue
             low = name.lower()
@@ -632,6 +647,11 @@ HTML_TEMPLATE = """<!DOCTYPE html>
   .bigcopy .hint { font-size:11px; color:#7aaa7a; }
   .smsnote { margin-top:8px; font-size:11px; color:#7aaa7a; line-height:1.45; }
   .smsnote a { color:#2cff6a; }
+  .searchrow { display:flex; gap:8px; padding:8px 12px 0; align-items:center; }
+  .searchrow input {
+    flex:1; padding:12px; border:1px solid #2cff6a; background:#0b0f0c; color:#d7ffd0;
+    font-size:15px; min-height:44px; box-sizing:border-box;
+  }
   .tabs { display:flex; gap:0; margin:8px 12px 0; border:1px solid #1a4; }
   .tab {
     flex:1; background:#0b0f0c; color:#7aaa7a; border:0; border-right:1px solid #1a4;
@@ -717,6 +737,34 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     position:absolute; top:10px; right:14px; color:#2cff6a; font-size:28px;
     background:none; border:0; cursor:pointer; min-width:44px; min-height:44px;
   }
+  .empty-lan {
+    margin:14px 0 18px; padding:18px 14px; background:#0b1a0e; border:2px solid #2cff6a;
+    border-radius:4px; text-align:center; cursor:pointer; user-select:all;
+  }
+  .empty-lan .label { font-size:11px; color:#7aaa7a; letter-spacing:1px; }
+  .empty-lan .ipport {
+    font-size:26px; font-weight:bold; color:#2cff6a; margin:10px 0 6px;
+    word-break:break-all; letter-spacing:1px; line-height:1.2;
+  }
+  .empty-lan .hint { font-size:12px; color:#7aaa7a; }
+  #confirm_dlg {
+    display:none; position:fixed; inset:0; background:rgba(0,0,0,0.82);
+    z-index:100; align-items:center; justify-content:center; padding:16px;
+  }
+  #confirm_dlg.show { display:flex; }
+  #confirm_dlg .panel {
+    width:100%; max-width:360px; background:#10180f; border:2px solid #2cff6a;
+    padding:22px 18px; text-align:center; box-sizing:border-box;
+  }
+  #confirm_dlg h2 { margin:0 0 8px; color:#2cff6a; font-size:18px; letter-spacing:1px; }
+  #confirm_dlg p { margin:0 0 18px; color:#7aaa7a; font-size:13px; line-height:1.45; }
+  #confirm_dlg .btns { display:flex; gap:12px; }
+  #confirm_dlg .btns button {
+    flex:1; min-height:56px; font-size:17px; font-weight:bold; border:0; cursor:pointer;
+    padding:14px 12px; -webkit-tap-highlight-color:transparent;
+  }
+  #confirm_dlg .btn-yes { background:#3a1212; color:#ffb0b0; border:2px solid #a44 !important; }
+  #confirm_dlg .btn-no { background:#2cff6a; color:#041006; }
 </style>
 </head>
 <body>
@@ -743,6 +791,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       <a class=\"actionbtn\" id=\"dl_latest\" href=\"#\" target=\"_blank\" rel=\"noopener\">Download latest</a>
       <a class=\"actionbtn\" id=\"export_zip\" href=\"/export.zip\">Export zip</a>
       <button type=\"button\" class=\"actionbtn\" id=\"mark_read\">Mark all read</button>
+      <button type=\"button\" class=\"actionbtn\" id=\"clear_all\" style=\"background:#3a1212;border-color:#a44;color:#ffb0b0\">Clear all phone copies</button>
     </div>
     <div class=\"bigcopy\" id=\"big_copy\" title=\"Tap to copy IP:port\">
       <div class=\"label\">TAP TO COPY — PHONE ADDRESS</div>
@@ -757,6 +806,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       &nbsp;·&nbsp; Last poll: <span id=\"last_refresh\">—</span>
       &nbsp;·&nbsp; <span id=\"refresh_hint\">auto every 2s</span>
       &nbsp;·&nbsp; Unread: <span id=\"unread_count\">0</span>
+      <span id=\"last_error_hint\" class=\"bad\" style=\"display:none\"></span>
     </div>
   </header>
   <form id=\"f\">
@@ -769,6 +819,9 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     <button type=\"button\" class=\"chip\" data-msg=\"Come to Grove\">Come to Grove</button>
   </div>
   <div class=\"okmsg\" id=\"ok\"></div>
+  <div class=\"searchrow\">
+    <input id=\"search\" type=\"search\" placeholder=\"Search filename...\" autocomplete=\"off\">
+  </div>
   <div class=\"tabs\">
     <button type=\"button\" class=\"tab on\" id=\"tab_all\" data-filter=\"all\">All</button>
     <button type=\"button\" class=\"tab\" id=\"tab_today\" data-filter=\"today\">Today</button>
@@ -779,25 +832,59 @@ HTML_TEMPLATE = """<!DOCTYPE html>
   <button type=\"button\" class=\"close\" onclick=\"closeLb(event)\">&times;</button>
   <img id=\"lbimg\" src=\"\" alt=\"full size\">
 </div>
+<div id=\"confirm_dlg\" onclick=\"confirmCancel(event)\">
+  <div class=\"panel\" onclick=\"event.stopPropagation()\">
+    <h2>Delete this shot?</h2>
+    <p id=\"confirm_detail\">Removes it from the phone page only.<br>GTA Gallery file stays on the PC.</p>
+    <div class=\"btns\">
+      <button type=\"button\" class=\"btn-no\" id=\"confirm_no\">Cancel</button>
+      <button type=\"button\" class=\"btn-yes\" id=\"confirm_yes\">Delete</button>
+    </div>
+  </div>
+</div>
 <script>
 var LS_KEY = 'grovelink_last_visit';
 var FILTER = 'all';
+var SEARCH_Q = '';
 var LAST_PHOTOS = [];
-var EMPTY_HTML =
-  '<div class=\"empty\">' +
-  '<h2>NO PHOTOS YET</h2>' +
-  '<ol>' +
-  '<li>Run <b>GroveLink Phone</b> / <b>START_GROVELINK</b> on the PC (keep the window open).</li>' +
-  '<li>In GTA press <b>K</b> to open the phone.</li>' +
-  '<li>Select <b>Camera</b>, then <b>Enter</b> or <b>Space</b>.</li>' +
-  '<li>Phone and PC must be on the <b>same Wi-Fi</b>.</li>' +
-  '</ol>' +
-  '</div>';
+var PENDING_ACTION = ''; // 'delete:NAME' or 'clear'
+function emptyHtml() {
+  var ipPort = '';
+  try { ipPort = (document.getElementById('ip_port') || {}).textContent || ''; } catch (e) {}
+  return '<div class=\"empty\">' +
+    '<h2>NO PHOTOS YET</h2>' +
+    '<div class=\"empty-lan\" id=\"empty_lan_copy\" title=\"Tap to copy\">' +
+    '<div class=\"label\">FIRST VISIT — OPEN ON YOUR PHONE</div>' +
+    '<div class=\"ipport\">' + escapeHtml(ipPort) + '</div>' +
+    '<div class=\"hint\">Tap to copy · same Wi-Fi as this PC · keep Copy above too</div>' +
+    '</div>' +
+    '<ol>' +
+    '<li>Run <b>GroveLink Phone</b> / <b>START_GROVELINK</b> on the PC (keep the window open).</li>' +
+    '<li>On your phone open <b>http://</b> + the address above (or use Copy).</li>' +
+    '<li>In GTA press <b>K</b> → <b>Camera</b> → <b>Enter</b> or <b>Space</b>.</li>' +
+    '<li>Phone and PC must be on the <b>same Wi-Fi</b>.</li>' +
+    '</ol>' +
+    '</div>';
+}
 var EMPTY_TODAY =
   '<div class=\"empty\">' +
   '<h2>NO SHOTS TODAY</h2>' +
   '<p>Switch to <b>All</b>, or take a new photo in GTA (K → Camera → Enter).</p>' +
   '</div>';
+function bindEmptyLanCopy() {
+  var el = document.getElementById('empty_lan_copy');
+  if (!el) return;
+  el.onclick = function() {
+    var t = document.getElementById('ip_port').textContent;
+    copyText(t, null);
+    var hint = el.querySelector('.hint');
+    if (hint) {
+      var old = hint.textContent;
+      hint.textContent = 'Copied! Open http://' + t + ' on your phone';
+      setTimeout(function(){ hint.textContent = old; }, 2000);
+    }
+  };
+}
 
 function escapeHtml(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\"/g,'&quot;');
@@ -853,9 +940,67 @@ function closeLb(ev) {
   document.getElementById('lbimg').src = '';
 }
 
+var PENDING_DELETE = '';
+function confirmCancel(ev) {
+  if (ev) ev.stopPropagation();
+  PENDING_DELETE = '';
+  PENDING_ACTION = '';
+  var dlg = document.getElementById('confirm_dlg');
+  if (dlg) dlg.className = '';
+}
+function setConfirmCopy(title, detail, yesLabel) {
+  var h = document.querySelector('#confirm_dlg h2');
+  var p = document.getElementById('confirm_detail');
+  var y = document.getElementById('confirm_yes');
+  if (h) h.textContent = title || 'Delete this shot?';
+  if (p) p.innerHTML = detail || 'Removes it from the phone page only.<br>GTA Gallery file stays on the PC.';
+  if (y) y.textContent = yesLabel || 'Delete';
+}
+function confirmYes() {
+  var action = PENDING_ACTION;
+  var name = PENDING_DELETE;
+  confirmCancel();
+  if (action === 'clear') { doClearAll(); return; }
+  if (!name) return;
+  doDeletePhoto(name);
+}
 function deletePhoto(name) {
   if (!name) return;
-  if (!confirm('Remove this shot from the phone page?\\n(Does NOT delete the file in GTA Gallery.)')) return;
+  PENDING_ACTION = 'delete';
+  PENDING_DELETE = name;
+  setConfirmCopy('Delete this shot?', 'Removes it from the phone page only.<br>GTA Gallery file stays on the PC.', 'Delete');
+  var dlg = document.getElementById('confirm_dlg');
+  if (dlg) dlg.className = 'show';
+}
+function clearAllPhotos() {
+  PENDING_ACTION = 'clear';
+  PENDING_DELETE = '';
+  setConfirmCopy('Clear all phone copies?', 'Deletes every shot under bridge/photos only.<br>GTA Gallery on the PC is NOT touched.', 'Clear all');
+  var dlg = document.getElementById('confirm_dlg');
+  if (dlg) dlg.className = 'show';
+}
+function doClearAll() {
+  var x = new XMLHttpRequest();
+  x.open('POST', '/clear', true);
+  x.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+  x.onreadystatechange = function() {
+    if (x.readyState === 4) {
+      var okEl = document.getElementById('ok');
+      if (x.status === 200) {
+        try {
+          var j = JSON.parse(x.responseText);
+          okEl.textContent = 'Cleared ' + (j.cleared || 0) + ' phone copies (Gallery untouched).';
+        } catch (e) { okEl.textContent = 'Cleared phone copies.'; }
+        poll();
+      } else {
+        okEl.textContent = 'Clear failed.';
+      }
+      setTimeout(function(){ okEl.textContent = ''; }, 3000);
+    }
+  };
+  x.send('confirm=1');
+}
+function doDeletePhoto(name) {
   var body = 'file=' + encodeURIComponent(name);
   var x = new XMLHttpRequest();
   x.open('POST', '/delete', true);
@@ -874,7 +1019,6 @@ function deletePhoto(name) {
   };
   x.send(body);
 }
-
 function sendMsg(msg) {
   msg = (msg || '').trim();
   if (!msg) return;
@@ -915,14 +1059,28 @@ function renderFeed(photos) {
     }
     list = filtered;
   }
+  if (SEARCH_Q) {
+    var q = SEARCH_Q.toLowerCase();
+    var filtered2 = [];
+    for (var k = 0; k < list.length; k++) {
+      var nm = String(list[k].file || list[k] || '').toLowerCase();
+      if (nm.indexOf(q) >= 0) filtered2.push(list[k]);
+    }
+    list = filtered2;
+  }
   if (!photos || !photos.length) {
     document.getElementById('unread_count').textContent = '0';
-    feed.innerHTML = EMPTY_HTML;
+    feed.innerHTML = emptyHtml();
+    bindEmptyLanCopy();
     return;
   }
   if (!list.length) {
     document.getElementById('unread_count').textContent = '0';
-    feed.innerHTML = EMPTY_TODAY;
+    if (SEARCH_Q) {
+      feed.innerHTML = '<div class=\"empty\"><h2>NO MATCHES</h2><p>No filenames match <b>' + escapeHtml(SEARCH_Q) + '</b>. Clear the search box.</p></div>';
+    } else {
+      feed.innerHTML = EMPTY_TODAY;
+    }
     return;
   }
   var html = '';
@@ -984,6 +1142,16 @@ function paint(data) {
   }
   if (typeof data.poll_ms === 'number' && data.poll_ms >= 500) {
     POLL_MS = data.poll_ms;
+  }
+  var errHint = document.getElementById('last_error_hint');
+  if (errHint) {
+    if (data.last_error) {
+      errHint.textContent = ' · err: ' + data.last_error;
+      errHint.style.display = '';
+    } else {
+      errHint.textContent = '';
+      errHint.style.display = 'none';
+    }
   }
   if (data.lan_url) document.getElementById('lan_url').textContent = data.lan_url;
   if (data.local_url) document.getElementById('local_url').textContent = data.local_url;
@@ -1070,6 +1238,17 @@ document.getElementById('big_copy').onclick = function() {
 document.getElementById('tab_all').onclick = function() { setFilter('all'); };
 document.getElementById('tab_today').onclick = function() { setFilter('today'); };
 (function() {
+  var s = document.getElementById('search');
+  if (!s) return;
+  var t = null;
+  s.oninput = function() {
+    SEARCH_Q = (s.value || '').trim();
+    if (t) clearTimeout(t);
+    t = setTimeout(function(){ renderFeed(LAST_PHOTOS); }, 120);
+  };
+})();
+document.getElementById('clear_all').onclick = function() { clearAllPhotos(); };
+(function() {
   var chips = document.querySelectorAll('.chip');
   for (var i = 0; i < chips.length; i++) {
     chips[i].onclick = function() {
@@ -1093,7 +1272,10 @@ document.getElementById('f').onsubmit = function(ev) {
 if (!getLastVisit()) {
   try { /* leave 0 so existing shots show NEW on first open */ } catch (e) {}
 }
-document.getElementById('feed').innerHTML = EMPTY_HTML;
+document.getElementById('confirm_yes').onclick = function(ev){ if(ev)ev.stopPropagation(); confirmYes(); };
+document.getElementById('confirm_no').onclick = function(ev){ if(ev)ev.stopPropagation(); confirmCancel(ev); };
+document.getElementById('feed').innerHTML = emptyHtml();
+bindEmptyLanCopy();
 poll();
 schedulePoll();
 </script>
@@ -1184,6 +1366,7 @@ def api_payload():
         "max_photos": int(STATE.get("max_photos") or 40),
         "poll_ms": int(STATE.get("poll_ms") or 2000),
         "version": STATE.get("version", "unknown") or "unknown",
+        "last_error": STATE.get("last_error", "") or "",
     }
 
 
@@ -1205,6 +1388,7 @@ def health_payload():
         "version": STATE.get("version", "unknown") or "unknown",
         "poll_ms": int(STATE.get("poll_ms") or 2000),
         "max_photos": int(STATE.get("max_photos") or 40),
+        "last_error": STATE.get("last_error", "") or "",
     }
 
 
@@ -1238,6 +1422,45 @@ def delete_bridge_photo(name):
     STATE["photos"] = [p for p in STATE.get("photos", []) if p.get("file") != name]
     stamp_now()
     return True, "deleted"
+
+
+def clear_all_bridge_photos():
+    """Delete every image under bridge/photos only (never GTA Gallery)."""
+    removed = 0
+    errors = 0
+    if not os.path.isdir(WEB_PHOTOS):
+        STATE["photos"] = []
+        stamp_now()
+        return True, 0
+    try:
+        names = os.listdir(WEB_PHOTOS)
+    except Exception as exc:
+        STATE["last_error"] = "bridge photos unreadable: %s" % exc
+        return False, 0
+    for name in names:
+        low = name.lower()
+        if not (
+            low.endswith(".jpg")
+            or low.endswith(".jpeg")
+            or low.endswith(".png")
+            or low.endswith(".bmp")
+        ):
+            continue
+        full = os.path.join(WEB_PHOTOS, name)
+        if not os.path.isfile(full):
+            continue
+        try:
+            os.remove(full)
+            DELETED.add(name)
+            removed += 1
+        except Exception:
+            errors += 1
+    save_deleted()
+    STATE["photos"] = []
+    stamp_now()
+    if errors and not removed:
+        return False, 0
+    return True, removed
 
 
 def build_export_zip():
@@ -1342,6 +1565,18 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/health":
             self._json(health_payload())
             return
+        if path == "/clear":
+            # Careful GET clear?confirm=1  (also POST /clear)
+            fields = parse_qs(qs)
+            conf = ""
+            if "confirm" in fields and fields["confirm"]:
+                conf = fields["confirm"][0]
+            if conf not in ("1", "yes", "true"):
+                self._json({"ok": False, "detail": "confirm=1 required"}, code=400)
+                return
+            ok, n = clear_all_bridge_photos()
+            self._json({"ok": ok, "cleared": n, "detail": "cleared %d" % n})
+            return
         if path == "/export.zip":
             try:
                 data = build_export_zip()
@@ -1400,6 +1635,12 @@ class Handler(BaseHTTPRequestHandler):
             text_body = raw.decode("utf-8")
         except Exception:
             text_body = raw.decode("latin-1")
+
+        if path == "/clear":
+            ok, n = clear_all_bridge_photos()
+            code = 200 if ok else 500
+            self._json({"ok": ok, "cleared": n, "detail": "cleared %d" % n}, code=code)
+            return
 
         if path == "/delete":
             name = ""
@@ -1491,7 +1732,11 @@ def watcher(cfg, gta_dir, ini):
                 print("Shutter — fast poll for new Gallery files...")
                 shutter_burst(cfg, gta_dir, seconds=3.5, interval=0.25)
                 print("Shutter done. Phone page has", len(STATE["photos"]), "shots")
+                # Race fix: another snap may have set take=1 during burst — loop now
+                if read_ini_key(ini, "PHOTO", "take", "0") == "1":
+                    continue
         except Exception as exc:
+            STATE["last_error"] = "watch error: %s" % exc
             print("watch error:", exc)
         # Idle poll: 1s normally; stay responsive
         time.sleep(1.0)
@@ -1528,6 +1773,7 @@ def main():
     STATE["bridge_ok"] = True
     STATE["phone_page_logged"] = False
     STATE["version"] = read_pack_version()
+    STATE["last_error"] = ""
 
     print("================================================")
     print("  GROVELINK PHONE BRIDGE")

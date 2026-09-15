@@ -5,7 +5,7 @@
 // K toggle | UP/DOWN wrap | ENTER or SPACE select | BACKSPACE close
 // Menu: CAMERA / INBOX / CONTACTS / STATUS / HELP / CLOSE — labels via 0ACD only.
 // INBOX plays 018C when new=1. CONTACTS cycles static flavor lines (no models).
-// STATUS shows BRIDGE LIVE / NO BRIDGE + shot count from link.ini.
+// STATUS LIVE includes PHONE PAGE ON PC; INBOX shows NO NEW TEXTS when empty.
 // HELP mentions UPDATE_GROVELINK for outdated installs.
 0000: NOP
 03A4: name_thread 'GROVELNK'
@@ -182,22 +182,24 @@
 00D6: if
 0039:   22@ == 1
 004D: jf @SEL_CONTACTS
-// INBOX: read msg from link.ini; clear new flag if set; sound when new
+// INBOX: only show text when new=1; otherwise say NO NEW TEXTS clearly
 00D6: if
 0AAB:   file_exists "cleo\GroveLink\link.ini"
 004D: jf @INBOX_EMPTY
 0AF0: 24@ = read_int_from_ini_file "cleo\GroveLink\link.ini" section "INBOX" key "new"
-0AF4: 0@s = read_string_from_ini_file "cleo\GroveLink\link.ini" section "INBOX" key "msg"
 00D6: if
 0039:   24@ == 1
-004D: jf @INBOX_SHOW
+004D: jf @INBOX_NONE
 018C: play_sound 1052 at 0.0 0.0 0.0
 0AF1: write_int 0 to_ini_file "cleo\GroveLink\link.ini" section "INBOX" key "new"
-:INBOX_SHOW
+0AF4: 0@s = read_string_from_ini_file "cleo\GroveLink\link.ini" section "INBOX" key "msg"
 0ACD: show_text_highpriority 0@s time 3500
 0002: jump @KEY_BACK
+:INBOX_NONE
+0ACD: show_text_highpriority "NO NEW TEXTS" time 2000
+0002: jump @KEY_BACK
 :INBOX_EMPTY
-0ACD: show_text_highpriority "INBOX EMPTY  start bridge" time 2000
+0ACD: show_text_highpriority "NO NEW TEXTS" time 2000
 0002: jump @KEY_BACK
 
 :SEL_CONTACTS
@@ -242,7 +244,7 @@
 00D6: if
 0039:   24@ == 1
 004D: jf @STATUS_DOWN
-0ACE: show_formatted_text_highpriority "BRIDGE LIVE  %d shots" time 2800 25@
+0ACE: show_formatted_text_highpriority "LIVE %d  PHONE PAGE ON PC" time 3000 25@
 0002: jump @KEY_BACK
 :STATUS_DOWN
 0ACE: show_formatted_text_highpriority "NO BRIDGE  %d shots" time 2800 25@

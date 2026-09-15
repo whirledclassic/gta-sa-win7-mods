@@ -80,6 +80,7 @@ set "PROJ=gta-sa-win7-mods"
 set "TMPROOT=%TEMP%\GroveLinkUpdate"
 set "ZIPFILE=%TMPROOT%\pack.zip"
 set "EXTRACT=%TMPROOT%\extract"
+REM Exact browser URL for manual download (rebuilt after BRANCH is final)
 set "MANUAL_URL=https://github.com/!OWNER!/!PROJ!/archive/refs/heads/!BRANCH!.zip"
 
 if exist "%TMPROOT%" rd /s /q "%TMPROOT%" >nul 2>&1
@@ -225,9 +226,11 @@ echo.
 echo Fix: run INSTALL.bat once from the zip, OR open the zip folder
 echo and double-click UPDATE_GROVELINK.bat there.
 echo.
-echo Manual zip (no updater):
+echo EXACT browser URL (manual zip):
 echo   https://github.com/whirledclassic/gta-sa-win7-mods/archive/refs/heads/fix/grovelink-camera-snapshots.zip
-echo Then extract and run INSTALL.bat.
+echo.
+echo After download: Extract All - open folder with INSTALL.bat -
+echo Right-click INSTALL.bat - Run as administrator.
 echo See: grovelink\TROUBLESHOOTING.md
 echo.
 pause
@@ -254,12 +257,23 @@ echo DOWNLOAD FAILED -- no network, or GitHub blocked the download.
 echo.
 echo Plain English: this PC could not download the update zip.
 echo.
-echo What to try:
-echo   1. Check Wi-Fi / internet, then run this updater again.
-echo   2. Or download the zip yourself in a browser:
-echo        !MANUAL_URL!
-echo      Extract it, then run INSTALL.bat inside the new folder.
-echo   3. Read: grovelink\TROUBLESHOOTING.md  (section: Updating)
+echo ================================================================
+echo  EXACT browser URL (copy/paste into Chrome/IE/Firefox):
+echo.
+echo    !MANUAL_URL!
+echo.
+echo  After the zip downloads:
+echo    1. Right-click the zip - Extract All...
+echo    2. Open the folder that contains INSTALL.bat
+echo       (name looks like gta-sa-win7-mods-fix-grovelink-...)
+echo    3. Right-click INSTALL.bat - Run as administrator
+echo.
+echo  Your current install folder (keep/overwrite this):
+echo    !REPO!
+echo ================================================================
+echo.
+echo Also: check Wi-Fi, then re-run UPDATE_GROVELINK.bat
+echo Read: grovelink\TROUBLESHOOTING.md  (section: Updating)
 echo.
 pause
 exit /b 1
@@ -271,12 +285,17 @@ echo UNZIP FAILED -- the downloaded file could not be extracted.
 echo.
 echo Plain English: Windows could not open the update zip.
 echo.
-echo What to try:
-echo   1. Delete %%TEMP%%\GroveLinkUpdate and run this again.
-echo   2. Or manual zip download:
-echo        !MANUAL_URL!
-echo      Extract with Windows Explorer, then run INSTALL.bat.
-echo   3. Read: grovelink\TROUBLESHOOTING.md
+echo ================================================================
+echo  EXACT browser URL (manual download):
+echo    !MANUAL_URL!
+echo.
+echo  Then: Extract All - open folder with INSTALL.bat -
+echo  Right-click INSTALL.bat - Run as administrator
+echo  Install folder: !REPO!
+echo ================================================================
+echo.
+echo Or delete %%TEMP%%\GroveLinkUpdate and run UPDATE again.
+echo Read: grovelink\TROUBLESHOOTING.md
 echo.
 pause
 exit /b 1

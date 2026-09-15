@@ -20,18 +20,28 @@ set "REPO=%~dp0"
 if "%REPO:~-1%"=="\" set "REPO=%REPO:~0,-1%"
 
 REM If this bat was copied to Desktop, INSTALL wrote GroveLink_REPO.txt with the zip/repo path
+REM Strip trailing CR from set /p (Win7 quirk) so paths resolve.
 if exist "%USERPROFILE%\Desktop\GroveLink_REPO.txt" (
   set /p REPO_FROM_FILE=<"%USERPROFILE%\Desktop\GroveLink_REPO.txt"
-  if defined REPO_FROM_FILE if exist "!REPO_FROM_FILE!\grovelink\bridge\grovelink_server.py" set "REPO=!REPO_FROM_FILE!"
+  if defined REPO_FROM_FILE (
+    for /f "delims=" %%A in ("!REPO_FROM_FILE!") do set "REPO_FROM_FILE=%%A"
+    if exist "!REPO_FROM_FILE!\grovelink\bridge\grovelink_server.py" set "REPO=!REPO_FROM_FILE!"
+  )
 )
 if exist "%PUBLIC%\Desktop\GroveLink_REPO.txt" (
   set /p REPO_FROM_FILE2=<"%PUBLIC%\Desktop\GroveLink_REPO.txt"
-  if defined REPO_FROM_FILE2 if exist "!REPO_FROM_FILE2!\grovelink\bridge\grovelink_server.py" set "REPO=!REPO_FROM_FILE2!"
+  if defined REPO_FROM_FILE2 (
+    for /f "delims=" %%A in ("!REPO_FROM_FILE2!") do set "REPO_FROM_FILE2=%%A"
+    if exist "!REPO_FROM_FILE2!\grovelink\bridge\grovelink_server.py" set "REPO=!REPO_FROM_FILE2!"
+  )
 )
 REM Also accept running from Desktop next to a REPO pointer in same folder
 if exist "%~dp0GroveLink_REPO.txt" (
   set /p REPO_FROM_FILE3=<"%~dp0GroveLink_REPO.txt"
-  if defined REPO_FROM_FILE3 if exist "!REPO_FROM_FILE3!\grovelink\bridge\grovelink_server.py" set "REPO=!REPO_FROM_FILE3!"
+  if defined REPO_FROM_FILE3 (
+    for /f "delims=" %%A in ("!REPO_FROM_FILE3!") do set "REPO_FROM_FILE3=%%A"
+    if exist "!REPO_FROM_FILE3!\grovelink\bridge\grovelink_server.py" set "REPO=!REPO_FROM_FILE3!"
+  )
 )
 
 REM --- Find GTA (same idea as INSTALL) ---
@@ -74,7 +84,8 @@ if exist "%CFG%" (
     set "V=%%B"
     set "K=!K: =!"
     if /I "!K!"=="gta_dir" (
-      set "V=!V: =!"
+      REM Trim leading/trailing spaces only — do NOT strip spaces inside path
+      for /f "tokens=* delims= " %%T in ("!V!") do set "V=%%T"
       if exist "!V!\gta_sa.exe" set "GTA=!V!"
     )
   )
@@ -241,6 +252,7 @@ echo   On this PC:     http://127.0.0.1:8088
 echo   Health JSON:    http://127.0.0.1:8088/health
 echo   Export zip:     http://127.0.0.1:8088/export.zip
 echo   Share page:     http://127.0.0.1:8088/qr
+echo   Smoke test:     grovelink\bridge\TEST_BRIDGE.bat  ^(or tests\smoke_bridge.py^)
 echo   On your phone:  http://YOUR-PC-LAN-IP:8088
 echo                   ^(LAN IP is printed when you start the bridge^)
 echo.

@@ -34,6 +34,8 @@ Pack version: root **`VERSION`** file; also on the phone page header and **`/hea
 
 ### Offline / download failed — manual zip
 
+If **UPDATE_GROVELINK.bat** fails, it prints an **EXACT browser URL** (copy/paste) plus: Extract All → open folder with `INSTALL.bat` → Run as administrator. Your current install path is also printed.
+
 1. On any PC with internet, download:
    - Current PR branch: https://github.com/whirledclassic/gta-sa-win7-mods/archive/refs/heads/fix/grovelink-camera-snapshots.zip  
    - After merge: https://github.com/whirledclassic/gta-sa-win7-mods/archive/refs/heads/main.zip

@@ -11,6 +11,19 @@ Not affiliated with Rockstar Games. Single-player only.
 
 Pack version is in the root **`VERSION`** file (also shown on the phone page header and `/health`).
 
+
+## Changelog — 1.5.0 (Round 5)
+
+- **Phone page:** large LAN IP on empty first visit; pinch-friendly **Delete this shot?** confirm; filename **search**; **Clear all phone copies** (`/clear`); `/api` `last_error` when Gallery unreadable
+- **START_GROVELINK.bat:** prints pack VERSION; clearer Python-missing help + opens python.org 3.8.10
+- **CLEO:** INBOX shows **NO NEW TEXTS**; STATUS LIVE includes **PHONE PAGE ON PC**
+- **UPDATE:** on download/unzip fail, prints **exact browser zip URL** + extract → INSTALL steps
+- **Bugfixes:** VERIFY no longer strips spaces inside `gta_dir`; Desktop `GroveLink_REPO.txt` CR strip; INSTALL writes REPO with `echo(`; shutter `take=1` drained if another snap arrives mid-burst
+- **Tests:** `tests/smoke_bridge.py` + `grovelink/bridge/TEST_BRIDGE.bat`
+
+Feature list: [grovelink/FEATURES.md](grovelink/FEATURES.md).
+
+
 ## One-click install (beginners start here)
 
 1. Extract the zip to Desktop or Downloads.
@@ -62,7 +75,7 @@ Offline / no network? See [grovelink/TROUBLESHOOTING.md](grovelink/TROUBLESHOOTI
 4. Health check: **http://127.0.0.1:8088/health** (includes pack `version`) or Desktop **VERIFY_GROVELINK.bat**.
 5. In GTA: **K** → Camera → **Enter** or **Space** — shot appears within a couple of seconds. Menu includes **HELP** (START GROVELINK + UPDATE_GROVELINK tips). **STATUS** shows **BRIDGE LIVE** / **NO BRIDGE** + shot count.
 
-Phone page extras: **LIVE** pulse + reconnect banner, prominent **version / photo count**, **Export zip** (`/export.zip`), **All / Today** tabs, quick-reply chips, file size, tap-to-copy **IP:port** + `/qr`, Delete (bridge cache only), `server.max_photos` (default **40**), `server.poll_ms` (default **2000**).
+Phone page extras: **LIVE** pulse + reconnect banner, prominent **version / photo count**, **Export zip**, filename **search**, **Clear all phone copies**, empty-state **large LAN IP**, pinch-friendly delete confirm, **All / Today** tabs, quick replies, `/api` `last_error`, `server.poll_ms` (default **2000**). Double-test: `tests/smoke_bridge.py` or `grovelink/bridge/TEST_BRIDGE.bat`.
 
 Feature list: [grovelink/FEATURES.md](grovelink/FEATURES.md). Stuck? See [grovelink/TROUBLESHOOTING.md](grovelink/TROUBLESHOOTING.md).
 
