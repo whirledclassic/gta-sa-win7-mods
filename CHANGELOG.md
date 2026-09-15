@@ -1,6 +1,14 @@
 # GroveLink changelog
 
-Human-readable highlights from pack **1.0 → 2.4.0**. Full detail also lives in root `README.md` round notes and [grovelink/FEATURES.md](grovelink/FEATURES.md).
+Human-readable highlights from pack **1.0 → 2.5.0**. Full detail also lives in root `README.md` round notes and [grovelink/FEATURES.md](grovelink/FEATURES.md).
+
+## 2.5.0 — In-game contacts, calls, friend texts
+
+- **Scrollable CONTACTS:** Up/Down through Sweet / Smoke / Ryder / Cesar / Catalina / OG Loc (`0ACD` labels only).
+- **Call friends:** Call → ring (`018C`) → Connected → 1–2 scripted lines → hang up. **Dialogue-only — no ped/taxi spawn** (won't fight other CLEO packs).
+- **Text friends:** canned outbound lines; per-contact **auto-reply** table; stored in `link.ini` `[MSG]` + `MSG_*`; CLEO shows reply on-screen.
+- **Web:** phone page **CJ's texts** panel from `/api` `cj_texts` (bridge reads ini). Viewer↔CJ web chat from 2.4 unchanged.
+- Crash-safer CLEO (no `hold_cellphone`, no `033E`); Camera gallery-only; NEWS separate; Win7 stdlib. Docs + smoke. VERSION **2.5.0**.
 
 ## 2.4.0 — Host/viewer interactive watch party
 

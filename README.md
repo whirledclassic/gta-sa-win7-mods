@@ -155,6 +155,10 @@ If the bridge says **port 8088 busy**, close the other GroveLink window (or free
 Feature list: [grovelink/FEATURES.md](grovelink/FEATURES.md). Stuck? See [grovelink/TROUBLESHOOTING.md](grovelink/TROUBLESHOOTING.md).
 
 
+## Hosting for viewers (2.4.0+)
+
+**2.5.0 in-game:** CONTACTS → Call (dialogue only, no spawn) or Text friends (auto-reply). Web shows **CJ's texts**.
+
 ## Hosting for viewers (2.4.0)
 
 You (the **host**) run GTA + the GroveLink bridge on your PC. Friends (**viewers**) open the phone page on the same Wi-Fi (or via port forward) and interact with the game — they do **not** need GTA installed.

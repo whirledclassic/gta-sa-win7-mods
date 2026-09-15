@@ -517,6 +517,75 @@ def process_poll_section(ini):
     return ok
 
 
+
+FRIEND_CONTACTS = (
+    ("Sweet", "MSG_SWEET"),
+    ("Smoke", "MSG_SMOKE"),
+    ("Ryder", "MSG_RYDER"),
+    ("Cesar", "MSG_CESAR"),
+    ("Catalina", "MSG_CATALINA"),
+    ("OG Loc", "MSG_OGLOC"),
+)
+
+
+def process_friend_msg_flag(ini):
+    """When CLEO sets MSG.new=1, mirror out/in into MSG_<CONTACT> and clear flag."""
+    if not ini or not os.path.isfile(ini):
+        return False
+    if read_ini_key(ini, "MSG", "new", "0") != "1":
+        return False
+    contact = (read_ini_key(ini, "MSG", "contact", "") or "").strip()
+    out = (read_ini_key(ini, "MSG", "out", "") or "").strip()[:80]
+    inn = (read_ini_key(ini, "MSG", "in", "") or "").strip()[:80]
+    write_ini_kv(ini, "MSG", {
+        "new": "0",
+        "last_out": out.replace("=", "-"),
+        "last_in": inn.replace("=", "-"),
+    })
+    sec = None
+    clow = contact.lower().replace(" ", "")
+    for name, section in FRIEND_CONTACTS:
+        if name.lower().replace(" ", "") == clow or name.lower() == contact.lower():
+            sec = section
+            break
+    if not sec and clow:
+        sec = "MSG_" + "".join(ch for ch in contact.upper() if ch.isalnum())[:12]
+    if sec:
+        write_ini_kv(ini, sec, {
+            "out": out.replace("=", "-"),
+            "in": inn.replace("=", "-"),
+            "contact": contact.replace("=", "-")[:40],
+        })
+    print("Friend text:", contact, "→", (inn or "")[:40])
+    return True
+
+
+def load_cj_friend_texts(ini=None):
+    """In-game friend threads from link.ini MSG_* for web 'CJ texts' panel."""
+    ini = ini or STATE.get("link_ini") or ""
+    threads = []
+    if not ini or not os.path.isfile(ini):
+        return threads
+    for name, section in FRIEND_CONTACTS:
+        out = read_ini_key(ini, section, "out", "") or ""
+        inn = read_ini_key(ini, section, "in", "") or ""
+        if not out and not inn:
+            continue
+        threads.append({
+            "contact": name,
+            "out": out[:80],
+            "in": inn[:80],
+        })
+    # Also expose latest MSG snapshot
+    last = {
+        "contact": read_ini_key(ini, "MSG", "contact", "") or "",
+        "out": read_ini_key(ini, "MSG", "last_out", "") or read_ini_key(ini, "MSG", "out", "") or "",
+        "in": read_ini_key(ini, "MSG", "last_in", "") or read_ini_key(ini, "MSG", "in", "") or "",
+    }
+    return {"threads": threads, "last": last}
+
+
+
 def process_outbox_broadcast(ini):
     """OUTBOX with to=ALL → broadcast without duplicating normal CJ reply path.
     Called from process_outbox_flag when to=ALL."""
@@ -2837,6 +2906,16 @@ HTML_TEMPLATE = """<!DOCTYPE html>
   .reqlist .donebtn { padding:4px 8px; font-size:11px; }
   .empty-host { color:#6a9a6a; font-size:12px; font-style:italic; }
 
+  .cjtexts { margin:8px 0 12px; padding:10px 12px; background:#0d1f0d; border:1px solid #1a4a1a; border-radius:12px; }
+  .cjtexts h4 { margin:0 0 8px; font-size:13px; color:#7CFF7C; }
+  .cjtexts .emptyv { color:#6a9a6a; font-size:12px; font-style:italic; }
+  .cjtexts .thread { margin:0 0 8px; padding:8px; background:#102810; border-radius:8px; border:1px solid #1e4a1e; font-size:12px; }
+  .cjtexts .who { color:#c4a35a; font-weight:700; margin-bottom:4px; }
+  .cjtexts .line { margin:2px 0; }
+  .cjtexts .out { color:#9fdf9f; }
+  .cjtexts .in { color:#c8f0c8; }
+
+
   .quickbar .qa-watch {
     flex:0 0 auto; min-width:90px; border-color:#4af; color:#9cf; background:#1a2a40; pointer-events:none;
   }
@@ -3020,6 +3099,12 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     <div class="chatpin" id="chat_pin"><div class="plab">PINNED</div><div id="chat_pin_body"></div></div>
     <div id="chat_thread"><div class="chatempty">Send a message below - delivered texts show here. CJ replies appear on the right.</div></div>
   </div>
+
+  <div class="sect">CJ&apos;s texts (in-game friends)</div>
+  <div class="cjtexts" id="cjtexts_box">
+    <h4>FRIEND THREADS</h4>
+    <div id="cjtexts_body"><div class="emptyv">No in-game friend texts yet — in GTA: K → CONTACTS → Text</div></div>
+  </div>
   <div class="sect">Live view</div>
   <a class="spectate-link" href="/spectate">LIVE SPECTATE - snapshot view</a>
   <div class="chips">
@@ -3142,6 +3227,35 @@ function setMode(m) {
     ? 'Host: moderation, broadcast, poll, request queue.'
     : 'Viewer: chat, react, vote, request. Toggle Host if you run the game.';
 }
+
+function paintCjTexts(payload) {
+  var body = document.getElementById('cjtexts_body');
+  if (!body) return;
+  payload = payload || {};
+  var threads = payload.threads || [];
+  var last = payload.last || null;
+  if ((!threads || !threads.length) && !(last && (last.out || last.in))) {
+    body.innerHTML = '<div class="emptyv">No in-game friend texts yet — in GTA: K → CONTACTS → Text</div>';
+    return;
+  }
+  var h = '';
+  if (last && (last.out || last.in)) {
+    h += '<div class="thread"><div class="who">Latest · ' + escapeHtml(last.contact || 'Friend') + '</div>';
+    if (last.out) h += '<div class="line out">CJ: ' + escapeHtml(last.out) + '</div>';
+    if (last.in) h += '<div class="line in">' + escapeHtml(last.contact || 'Friend') + ': ' + escapeHtml(last.in) + '</div>';
+    h += '</div>';
+  }
+  for (var i = 0; i < threads.length; i++) {
+    var t = threads[i] || {};
+    if (last && last.contact && t.contact === last.contact && t.out === last.out) continue;
+    h += '<div class="thread"><div class="who">' + escapeHtml(t.contact || '') + '</div>';
+    if (t.out) h += '<div class="line out">CJ: ' + escapeHtml(t.out) + '</div>';
+    if (t.in) h += '<div class="line in">' + escapeHtml(t.contact || '') + ': ' + escapeHtml(t.in) + '</div>';
+    h += '</div>';
+  }
+  body.innerHTML = h || '<div class="emptyv">No in-game friend texts yet</div>';
+}
+
 function paintViewers(list) {
   list = list || [];
   var nEl = document.getElementById('viewer_count');
@@ -4204,6 +4318,7 @@ function paint(data) {
   paintViewers(data.viewers || []);
   paintPoll(data.poll || null);
   paintRequests(data.requests || []);
+  paintCjTexts(data.cj_texts || null);
   LAST_PLACES = data.places || [];
   renderChat(data.inbox || [], data.pinned || null);
   updateChatBadge(data.inbox || []);
@@ -5006,6 +5121,7 @@ def api_payload():
         "poll": poll_payload(),
         "requests": pending_requests(),
         "request_kinds": list(ALLOWED_REQUEST_KINDS),
+        "cj_texts": load_cj_friend_texts(),
     }
 
 

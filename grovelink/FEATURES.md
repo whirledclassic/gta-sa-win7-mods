@@ -1,6 +1,6 @@
 # GroveLink — current features
 
-Pack version: see root **`VERSION`** (`2.4.0`; includes **2.3.0** comments/streak + **2.2.0** reactions/recap + **2.1.0** nicknames/watching/Moments + host/viewer interactive). Crash-safer CLEO (no `hold_cellphone`, no custom GXT `033E`). Bridge is **stdlib-only** (Win7 Python 2.7 / 3.4–3.8).
+Pack version: see root **`VERSION`** (`2.5.0`; includes **2.4.0** host/viewer + **2.3.0** comments/streak + **2.2.0** reactions/recap + **2.1.0** nicknames/watching/Moments + in-game contacts/calls/texts). Crash-safer CLEO (no `hold_cellphone`, no custom GXT `033E`). Bridge is **stdlib-only** (Win7 Python 2.7 / 3.4–3.8).
 
 ## Install / update / verify / test
 
@@ -29,7 +29,7 @@ Pack version: see root **`VERSION`** (`2.4.0`; includes **2.3.0** comments/strea
 | **NEWS toast** | If `NEWS.new=1` (after NEWS menu or web Breaking News): **NEWS FILED** once, then clears flag |
 | **REQUEST toast** | If `REQUEST.new=1`: shows `REQUEST.text` once (viewer ask), clears flag |
 | **POLL toast** | If `POLL.new=1`: **LIVE POLL STARTED** once, clears flag |
-| **CONTACTS** | Cycles Sweet / Smoke / Ryder / Cesar / **Catalina** flavor lines (static text; advances each select) |
+| **CONTACTS** | Scrollable list (Sweet / Smoke / Ryder / Cesar / Catalina / **OG Loc**). **Call** = dialogue-only sequence (no spawn). **Text** = canned lines + per-contact auto-reply → `MSG` / `MSG_*` in link.ini |
 | **STATUS** | **LIVE N  PHONE PAGE ON PC** / **NO BRIDGE** + shot count; while `bridge=1` CLEO also writes safe **HUD** ints/strings (`wanted`, `money`, `zone`, `hour`, `spectate`) for the phone page |
 | **HELP** | Camera / REPLY / NEWS / SPECTATE; Moments+Spectate phone URL; START GROVELINK; **UPDATE_GROVELINK** if outdated |
 | **CLOSE** | Put phone away |
@@ -96,6 +96,18 @@ Pack version: see root **`VERSION`** (`2.4.0`; includes **2.3.0** comments/strea
 | **Endpoints** | `/`, `/api`, `/api/chat`, `/api/spectate`, `/api/poll`, `/api/requests`, `/api/viewers`, `/spectate`, `/live`, `/recap`, `/health`, `/send`, `/broadcast`, `/request`, `/poll`, `/vote`, `/react`, `/pin`, `/caption`, `/comment`, `/favorite`, `/news`, `/news/<id>`, `/delete`, `/clear`, `/photo/…`, `/qr`, `/export.zip`, `/manifest.webmanifest` |
 | **Out of scope** | Full taxi/homie spawn/call systems (see [RESEARCH.md](RESEARCH.md)) — conflicts with other CLEO packs |
 
+
+
+## In-game contacts / calls / texts (2.5.0)
+
+| Feature | Detail |
+|--------|--------|
+| **Contacts list** | K → CONTACTS → Up/Down browse; Enter → Call / Text / Back |
+| **Call** | Ring + Connected + 2 `0ACD` voice-style lines + hang up. **No ped spawn** |
+| **Text** | Canned: Where you at? / Need backup / All good? / Meet at Grove → friend auto-reply |
+| **Storage** | `link.ini` `[MSG]` (`new/contact/out/in/last_*`) + `[MSG_SWEET]` … `[MSG_OGLOC]` |
+| **Web** | `/api` `cj_texts` + **CJ's texts** panel on phone page |
+| **Web chat** | Viewer↔CJ (`/send` / OUTBOX) from 2.4 still works separately |
 
 ## Host / viewer interactive (2.4.0)
 

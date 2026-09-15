@@ -14,6 +14,7 @@ help footer + empty-action disable + VERIFY VERSION + CHANGELOG + port-busy + RE
 2.2.0: chat reactions+pin; spectate cinema; /recap; bridge uptime; CLEO 6th REPLY; docs.
 2.3.0: photo comments; mute; spectate DL; density; streak; Herald depth; UI polish; docs.
 2.4.0: host/viewer modes; broadcast; request queue; polls/votes; rate limit; /live; docs.
+2.5.0: scrollable contacts; dialogue calls; friend texts + auto-reply; cj_texts web; docs.
 
 Run from repo root or anywhere:
   python tests/smoke_bridge.py
@@ -193,6 +194,8 @@ def main():
             "[SPECTATE]\non=0\nframe=0\n"
             "[REQUEST]\nnew=0\nkind=\nfrom=\ntext=\n"
             "[POLL]\nnew=0\ncreate=0\nquestion=\noptions=\nsummary=\n"
+            "[MSG]\nnew=0\ncontact=\nout=\nin=\nlast_out=\nlast_in=\n"
+            "[MSG_SWEET]\nout=\nin=\n"
         )
     gl.STATE["link_ini"] = server.link_ini
 
@@ -1243,6 +1246,42 @@ def main():
 
 
 
+    # --- 2.5.0 friend texts / cj_texts ---
+    try:
+        # Simulate CLEO MSG.new write
+        with open(server.link_ini, "a") as f:
+            f.write("\n[MSG]\nnew=1\ncontact=Sweet\nout=Where you at?\nin=At the hood CJ\n")
+            f.write("\n[MSG_SWEET]\nout=\nin=\n")
+        ok = gl.process_friend_msg_flag(server.link_ini)
+        check("process_friend_msg_flag", ok is True, ok)
+        payload = gl.load_cj_friend_texts(server.link_ini)
+        check("cj_texts has threads", isinstance(payload, dict) and isinstance(payload.get("threads"), list), payload)
+        sweet_hit = any(t.get("contact") == "Sweet" and "hood" in (t.get("in") or "").lower() for t in (payload.get("threads") or []))
+        check("cj_texts Sweet reply", sweet_hit or (payload.get("last") or {}).get("contact") == "Sweet", payload)
+        code, raw = http_get(port, "/api")
+        api = json.loads(raw.decode("utf-8") if isinstance(raw, bytes) else raw)
+        check("/api cj_texts field", isinstance(api.get("cj_texts"), dict), api.get("cj_texts"))
+        code, raw = http_get(port, "/")
+        html = raw.decode("utf-8") if isinstance(raw, bytes) else raw
+        check("GET / CJ texts panel", 'id="cjtexts_box"' in html or "FRIEND THREADS" in html)
+    except Exception as exc:
+        check("2.5.0 cj_texts suite", False, "%s\n%s" % (exc, traceback.format_exc()[:500]))
+
+    try:
+        with open(os.path.join(REPO, "CHANGELOG.md"), "r") as f:
+            cl = f.read()
+        check("CHANGELOG.md has 2.5.0 features", "2.5.0" in cl and ("CONTACTS" in cl or "Call" in cl or "friend" in cl.lower()))
+        with open(os.path.join(REPO, "grovelink", "FEATURES.md"), "r") as f:
+            fe = f.read()
+        check("FEATURES 2.5 contacts/calls", "2.5.0" in fe and ("Call" in fe or "CONTACTS" in fe))
+        with open(os.path.join(REPO, "grovelink", "RESEARCH.md"), "r") as f:
+            rs = f.read()
+        check("RESEARCH notes no spawn calls", "dialogue" in rs.lower() and "spawn" in rs.lower())
+    except Exception as exc:
+        check("docs 2.5", False, exc)
+
+
+
     try:
         server.shutdown()
     except Exception:
@@ -1298,8 +1337,12 @@ def main():
         check("CLEO NEWS writes NEWS.zone", 'key "zone"' in news_sel or 'section "NEWS" key "zone"' in news_sel)
         check("CLEO NEWS uses 0843 or coord ladder", "0843" in news_sel or "Grove Street" in news_sel)
         check("CLEO CAMERA select omits NEWS.zone", 'section "NEWS" key "zone"' not in cam_sel and 'section "NEWS"' not in cam_sel)
-        check("CLEO CONTACTS Catalina flavor", "CATALINA" in full)
-        check("CLEO contacts cycle advances", "26@ = 4" in full and ":CONTACT4" in full)
+        check("CLEO CONTACTS Catalina flavor", "CATALINA" in full or "Catalina" in full)
+        check("CLEO contacts list mode", ":CONTACT_LIST" in full and "CONTACT: Sweet" in full)
+        check("CLEO call sequence dialogue", ":CALL_SEQ" in full and "Calling Sweet" in full)
+        check("CLEO call no spawn note", "no spawn" in full.lower() or "Dialogue-only" in full or "dialogue only" in full.lower())
+        check("CLEO friend text MSG", ":FRIEND_TEXT" in full and 'section "MSG"' in full)
+        check("CLEO OG Loc contact", "OG Loc" in full or "OG LOC" in full)
         check("CLEO SMS FROM REAL PHONE notify", "SMS FROM REAL PHONE" in full)
         check("CLEO NEWS FILED toast", "NEWS FILED" in full)
         check("CLEO REPLY writes OUTBOX", 'section "OUTBOX"' in full and 'key "new"' in full)
@@ -1395,7 +1438,8 @@ def main():
         check("README polish", False, exc)
 
 
-    check("VERSION is 2.4.0", pack_ver == "2.4.0", pack_ver)
+
+    check("VERSION is 2.5.0", pack_ver == "2.5.0", pack_ver)
 
     # Runtime: after clear, HTML still disables; after photo, actions enabled via setCountActions path
     # (API count already covered; spot-check helper exists in page source above)

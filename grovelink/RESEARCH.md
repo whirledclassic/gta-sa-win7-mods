@@ -1,4 +1,4 @@
-# GroveLink research → features (v2.4.0)
+# GroveLink research → features (v2.5.0)
 
 Short summary of companion-phone / gallery UX we studied and why we shipped these enhancements (not a full taxi/homie phone clone).
 
@@ -28,10 +28,11 @@ Short summary of companion-phone / gallery UX we studied and why we shipped thes
 | Reactions / pin / recap / cinema | **Chat reactions** + **pin**, `/recap`, spectate **cinema** (H), bridge **uptime** (2.2.0) |
 | Comments / mute / streak / density / Herald depth | **Photo comments**, mute alerts, spectate **Download**, density themes, **streak**, richer Herald (2.3.0) |
 | Watch party / second-screen social | **Host/Viewer modes**, broadcast, request queue, live polls, `/live` watch party, rate limit (2.4.0) |
+| In-game phone social | Scrollable **CONTACTS**, dialogue-only **Call**, friend **Text** + auto-reply, web **CJ's texts** (2.5.0) |
 
 ## Out of scope (vs Ultimate Interactive Phone)
 
-**Not implemented:** full taxi / homie spawn / call ped systems (viewer requests never spawn taxis/peds), map blips as a second GPS, or any opcode-heavy “real cellphone” that fights other CLEO packs.
+**Not implemented:** full taxi / homie **ped spawn** / call-a-ride systems (viewer requests never spawn taxis/peds). **2.5 Call is dialogue-only** — no actor spawn., map blips as a second GPS, or any opcode-heavy “real cellphone” that fights other CLEO packs.
 
 Reasons: crash-safer surface only (no `hold_cellphone`, no `033E`); Win7 stdlib bridge; Camera stays photo-only; NEWS stays separate; spectate is snapshots not video.
 
